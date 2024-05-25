@@ -11,6 +11,7 @@
 // local
 #include "atomic.hpp"
 #include "coroutine.hpp"
+#include "scheduler.hpp"
 #include "mutex.hpp"
 
 namespace hce {
@@ -49,6 +50,10 @@ struct condition_variable {
             inline std::unique_lock<hce::spinlock>& get_lock() { return lk_; }
             inline bool ready_impl() { return false; }
             inline void resume_impl(void* m) { }
+        
+            inline coroutine::destination acquire_destination() {
+                return scheduler::reschedule{ this_scheduler() };
+            }
 
         private:
             std::unique_lock<hce::spinlock> lk_(lf_);
@@ -119,6 +124,10 @@ struct condition_variable {
 
             inline void resume_impl(void* m) { res_ = *((bool*)m); }
             inline bool result_impl() { return res_; }
+        
+            inline coroutine::destination acquire_destination() {
+                return scheduler::reschedule{ this_scheduler() };
+            }
 
         private:
             std::unique_lock<spinlock> lk_(lf_);
@@ -157,6 +166,10 @@ struct condition_variable {
                 return res_ 
                     ? std::cv_status::timeout 
                     : std::cv_status::no_timeout;
+            }
+        
+            inline coroutine::destination acquire_destination() {
+                return scheduler::reschedule{ this_scheduler() };
             }
 
         private:
@@ -229,6 +242,10 @@ struct condition_variable {
                             auto sch = sch_.lock();
                             if(sch) { sch->cancel(std::move(id_)); }
                         }
+                    }
+                
+                    inline coroutine::destination acquire_destination() {
+                        return scheduler::reschedule{ this_scheduler() };
                     }
 
                 private:

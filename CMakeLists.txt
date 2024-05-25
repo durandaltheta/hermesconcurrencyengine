@@ -4,11 +4,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release) 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -O3 -Wall")
-set(HCE_INCLUDE_DIR ${CMAKE_CURRENT_LIST_DIR}/inc/)
-set(HCE_SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/src/)
+set(HCE_INCLUDE_DIR ${CMAKE_CURRENT_LIST_DIR}/inc)
+set(HCE_SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/src)
 
 project(libhce)
-
 
 # Define the minimum count of available threads for await tasks executed by 
 # `hce::blocking::call()` (more will be temporarily spawned as necessary).
@@ -22,6 +21,7 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/atomic.hpp
     ${HCE_INCLUDE_DIR}/circular_buffer.hpp
     ${HCE_INCLUDE_DIR}/coroutine.hpp
+    ${HCE_INCLUDE_DIR}/scheduler.hpp
     ${HCE_INCLUDE_DIR}/block.hpp
     ${HCE_INCLUDE_DIR}/sleep.hpp
     ${HCE_INCLUDE_DIR}/mutex.hpp
@@ -31,6 +31,7 @@ set(HCE_HEADER_FILES
 
 set(HCE_SOURCE_FILES
     ${HCE_SOURCE_DIR}/coroutine.cpp
+    ${HCE_SOURCE_DIR}/scheduler.cpp
     ${HCE_SOURCE_DIR}/block.cpp)
 
 # convert a list to a readable string
@@ -52,15 +53,17 @@ message(${PRETTY_HCE_HEADER_FILES})
 message("-- HCE LIBRARY SOURCES -- ")
 message(${PRETTY_HCE_SOURCE_FILES})
 
-add_library(mce STATIC 
+add_library(hce STATIC 
     ${HCE_SOURCE_FILES}
     ${HCE_HEADER_FILES})
+
+target_include_directories(hce PUBLIC ${HCE_INCLUDE_DIR})
 
 message("-- HCE LIBRARY COMPILE DEFINES -- ")
 message("-DHCEMINBLOCKPROCS=${HCEMINBLOCKPROCS}")
 
 target_compile_definitions(
-    mce
+    hce
     PRIVATE 
     -DHCEMAXPROCS=${HCEMAXPROCS}
     -DHCEMINBLOCKPROCS=${HCEMINBLOCKPROCS})

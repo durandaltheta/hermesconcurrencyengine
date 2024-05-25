@@ -56,6 +56,10 @@ private:
         inline std::unique_lock<spinlock>& get_lock() { return lk_; }
         inline bool ready_impl() { return parent_->lock_(this); }
         inline void resume_impl(void* m) { }
+    
+        inline coroutine::destination acquire_destination() {
+            return scheduler::reschedule{ this_scheduler() };
+        }
 
         hce::mutex* parent_;
         std::unique_lock<spinlock> lk_(parent_->slk_);

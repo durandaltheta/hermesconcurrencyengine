@@ -12,6 +12,7 @@
 #include "atomic.hpp"
 #include "circular_buffer.hpp"
 #include "coroutine.hpp"
+#include "scheduler.hpp"
 
 namespace hce {
 
@@ -251,7 +252,8 @@ struct channel {
         };
 
         inline hce::awaitable<bool> send_(void* s, bool is_rvalue) {
-            struct send_impl : public hce::awaitable<bool>::implementation {
+            struct send_impl : protected hce::awaitable<bool>::implementation {
+            protected:
                 inline std::unique_lock<LOCK>& get_lock() { return lk ; }
 
                 inline bool ready() { return ready; }
@@ -265,6 +267,10 @@ struct channel {
                 }
 
                 inline bool result() { return success; }
+            
+                inline coroutine::destination acquire_destination() {
+                    return scheduler::reschedule{ this_scheduler() };
+                }
 
                 bool ready;
                 bool success;
@@ -294,7 +300,8 @@ struct channel {
 
         /// stackless `co_await`able recv operation
         inline hce::awaitable<bool> recv_(void* r) {
-            struct recv_impl : public hce::awaitable<bool>::implementation {
+            struct recv_impl : protected hce::awaitable<bool>::implementation {
+            protected:
                 inline std::unique_lock<LOCK>& get_lock() { return lk ; }
                 inline bool ready() { return ready; }
 
@@ -307,6 +314,10 @@ struct channel {
                 }
 
                 inline bool result() { return success; }
+            
+                inline coroutine::destination acquire_destination() {
+                    return scheduler::reschedule{ this_scheduler() };
+                }
 
                 bool ready;
                 bool success;
@@ -441,7 +452,8 @@ struct channel {
         };
 
         inline hce::awaitable<bool> send_(void* s, bool is_rvalue) {
-            struct send_impl : public hce::awaitable<bool>::implementation {
+            struct send_impl : protected hce::awaitable<bool>::implementation {
+            protected:
                 inline std::unique_lock<LOCK>& get_lock() { return lk ; }
                 inline bool ready() { return ready; }
 
@@ -454,6 +466,10 @@ struct channel {
                 }
 
                 inline bool result() { return success; }
+            
+                inline coroutine::destination acquire_destination() {
+                    return scheduler::reschedule{ this_scheduler() };
+                }
 
                 bool ready;
                 bool success;
@@ -485,7 +501,8 @@ struct channel {
 
         /// stackless `co_await`able recv operation
         inline hce::awaitable<bool> recv_(void* r) {
-            struct recv_impl : public hce::awaitable<bool>::implementation {
+            struct recv_impl : protected hce::awaitable<bool>::implementation {
+            protected:
                 inline std::unique_lock<LOCK>& get_lock() { return lk ; }
                 inline bool ready() { return ready; }
 
@@ -500,6 +517,10 @@ struct channel {
                 }
 
                 inline bool result() { return success; }
+            
+                inline coroutine::destination acquire_destination() {
+                    return scheduler::reschedule{ this_scheduler() };
+                }
 
                 bool ready;
                 bool success;

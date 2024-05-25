@@ -12,6 +12,7 @@ namespace detail {
 template <typename T>
 using unqualified = typename std::decay<T>::type;
 
+template <typename F, typename... Ts>
 using function_return_type = typename std::invoke_result<unqualified<F>,Ts...>::type;
 
 template<typename T, typename _ = void>

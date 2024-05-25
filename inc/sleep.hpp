@@ -49,7 +49,12 @@ inline hce::awaitable<bool> sleep(std::chrono::steady_clock::duration dur) {
 
         inline void resume_impl(void* m) { result_ = (bool)m; }
         inline bool result_impl() { return result_; }
+    
+        inline coroutine::destination acquire_destination() {
+            return scheduler::reschedule{ this_scheduler() };
+        }
 
+    private:
         bool result_ = false;
         hce::spinlock slk_;
         std::unique_lock<spinlock> lk_(slk_);
