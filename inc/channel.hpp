@@ -252,7 +252,7 @@ struct channel {
         };
 
         inline hce::awaitable<bool> send_(void* s, bool is_rvalue) {
-            struct send_impl : protected hce::awaitable<bool>::implementation {
+            struct send_impl : public hce::awaitable<bool>::implementation {
             protected:
                 inline std::unique_lock<LOCK>& get_lock() { return lk ; }
 
@@ -268,8 +268,8 @@ struct channel {
 
                 inline bool result() { return success; }
             
-                inline coroutine::destination acquire_destination() {
-                    return scheduler::reschedule{ this_scheduler() };
+                inline base_coroutine::destination acquire_destination() {
+                    return scheduler::reschedule{ scheduler::local() };
                 }
 
                 bool ready;
@@ -294,13 +294,13 @@ struct channel {
             } else {
                 auto ai = new send_impl(false, true, std::move(lk), { s, is_rvalue});
                 parked_send_.push_back(ai);
-                return { std::unique_ptr<awaitable<bool>::implementation>(ai) };
+                return hce::awaitable<bool>(ai);
             }
         }
 
         /// stackless `co_await`able recv operation
         inline hce::awaitable<bool> recv_(void* r) {
-            struct recv_impl : protected hce::awaitable<bool>::implementation {
+            struct recv_impl : public hce::awaitable<bool>::implementation {
             protected:
                 inline std::unique_lock<LOCK>& get_lock() { return lk ; }
                 inline bool ready() { return ready; }
@@ -315,8 +315,8 @@ struct channel {
 
                 inline bool result() { return success; }
             
-                inline coroutine::destination acquire_destination() {
-                    return scheduler::reschedule{ this_scheduler() };
+                inline base_coroutine::destination acquire_destination() {
+                    return scheduler::reschedule{ scheduler::local() };
                 }
 
                 bool ready;
@@ -337,7 +337,7 @@ struct channel {
             } else {
                 auto ai = new recv_impl(false, true, std::move(lk), r);
                 parked_send_.push_back(ai);
-                return { std::unique_ptr<awaitable<bool>::implementation>(ai) };
+                return hce::awaitable<bool>(ai);
             }
         }
         
@@ -452,7 +452,7 @@ struct channel {
         };
 
         inline hce::awaitable<bool> send_(void* s, bool is_rvalue) {
-            struct send_impl : protected hce::awaitable<bool>::implementation {
+            struct send_impl : public hce::awaitable<bool>::implementation {
             protected:
                 inline std::unique_lock<LOCK>& get_lock() { return lk ; }
                 inline bool ready() { return ready; }
@@ -467,8 +467,8 @@ struct channel {
 
                 inline bool result() { return success; }
             
-                inline coroutine::destination acquire_destination() {
-                    return scheduler::reschedule{ this_scheduler() };
+                inline base_coroutine::destination acquire_destination() {
+                    return scheduler::reschedule{ scheduler::local() };
                 }
 
                 bool ready;
@@ -484,7 +484,7 @@ struct channel {
             } else if(buf_.full()) {
                 auto ai = new send_impl(false, true, std::move(lk), { s, is_rvalue});
                 parked_send_.push_back();
-                return { std::unique_ptr<awaitable<bool>::implementation>(ai) };
+                return hce::awaitable<bool>(ai);
             } else {
                 send_pair sp{s,is_rvalue};
                 sp.send((void*)&buf_);
@@ -501,7 +501,7 @@ struct channel {
 
         /// stackless `co_await`able recv operation
         inline hce::awaitable<bool> recv_(void* r) {
-            struct recv_impl : protected hce::awaitable<bool>::implementation {
+            struct recv_impl : public hce::awaitable<bool>::implementation {
             protected:
                 inline std::unique_lock<LOCK>& get_lock() { return lk ; }
                 inline bool ready() { return ready; }
@@ -518,8 +518,8 @@ struct channel {
 
                 inline bool result() { return success; }
             
-                inline coroutine::destination acquire_destination() {
-                    return scheduler::reschedule{ this_scheduler() };
+                inline base_coroutine::destination acquire_destination() {
+                    return scheduler::reschedule{ scheduler::local() };
                 }
 
                 bool ready;
@@ -535,7 +535,7 @@ struct channel {
             } else if(buf_.empty()) {
                 auto ai = new recv_impl(false, true, std::move(lk), r);
                 parked_send_.push_back(ai);
-                return { std::unique_ptr<awaitable<bool>::implementation>(ai) };
+                return hce::awaitable<bool>(ai);
             } else {
                 *((T*)r) = std::move(buf_.front());
                 buf_.pop();

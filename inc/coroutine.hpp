@@ -21,42 +21,135 @@
 
 namespace hce {
 
-// forward declarations
-struct coroutine;
+struct base_coroutine {
+    typedef std::function<void(base_coroutine&&)> destination;
 
-namespace detail {
+    /**
+     The base promise object for stackless coroutines, used primarily by the 
+     compiler when it constructs stackless coroutines.
+     */
+    struct promise_type {
+        virtual ~promise_type() { }
 
-// always points to the running coroutine
-coroutine*& tl_this_coroutine();
+        inline base_coroutine get_return_object() {
+            return { 
+                std::coroutine_handle<promise_type>::from_promise(*this) 
+            };
+        }
 
-}
+        inline std::suspend_always initial_suspend() { return {}; }
+        inline std::suspend_always final_suspend() noexcept { return {}; }
+        inline void unhandled_exception() { eptr = std::current_exception(); }
+        virtual const std::type_info& type_info() = 0;
 
-/// Returns true if executing in a coroutine, else false
-inline bool in_coroutine() {
-    return detail::tl_this_coroutine() ? true : false; 
-}
+        std::exception_ptr eptr = nullptr; // exception pointer
+    };
 
-/// return the currently running coroutine 
-inline coroutine& this_coroutine() {
-    return *(detail::tl_this_coroutine()); 
-}
+    base_coroutine() = default;
+    base_coroutine(const base_coroutine&) = delete;
+    base_coroutine(base_coroutine&& rhs) = default;
+
+    // construct the base_coroutine from a type erased handle
+    base_coroutine(std::coroutine_handle<> h) : handle_(std::move(h)) { }
+
+    base_coroutine& operator=(const base_coroutine&) = delete;
+    base_coroutine& operator=(base_coroutine&& rhs) = default;
+
+    virtual ~base_coroutine() { if(handle_) { handle_.destroy(); } }
+
+    /// return true if the handle is valid, else false
+    inline operator bool() const { return (bool)handle_; }
+
+    /// cease managing the current handle and return it
+    inline std::coroutine_handle<> release() noexcept {
+        auto hdl = handle_;
+        handle_ = std::coroutine_handle<>();
+        return hdl;
+    }
+
+    /// replace the coroutine's stored handle
+    inline void reset(std::coroutine_handle<> h) noexcept { 
+        if(handle_) { handle_.destroy(); }
+        handle_ = h; 
+    }
+
+    /// replace the coroutine's stored handle
+    inline void swap(base_coroutine& rhs) noexcept { 
+        auto tmp = handle_;
+        handle_ = rhs.handle_;
+        rhs.handle_ = tmp;
+    }
+
+    /// return true if the coroutine is done, else false
+    inline bool done() const { return handle_.done(); }
+
+    /// cast the base_coroutine to a descendant type
+    template <typename COROUTINE>
+    inline COROUTINE& to() {
+        return dynamic_cast<COROUTINE&>(*this);
+    }
+   
+    /// return true if we are in a coroutine, else false
+    static inline bool in() { 
+        return base_coroutine::tl_this_coroutine(); 
+    }
+
+    /// return the coroutine running on this thread
+    static inline base_coroutine& local() { 
+        return *(base_coroutine::tl_this_coroutine()); 
+    }
+
+    /// resume the coroutine 
+    inline void resume() {
+        auto& tl_co = base_coroutine::tl_this_coroutine();
+
+        // store parent coroutine pointer
+        auto parent_co = tl_co;
+
+        // set current coroutine ptr 
+        tl_co = this; 
+        
+        // continue coroutine execution
+        try {
+            handle_.resume();
+
+            // acquire the exception pointer
+            auto eptr = std::coroutine_handle<promise_type>::from_address(
+                handle_.address()).promise().eptr;
+
+            // rethrow any exceptions from the coroutine
+            if(eptr) { std::rethrow_exception(eptr); }
+        } catch(...) {
+            // restore parent coroutine ptr
+            tl_co = parent_co;
+            std::rethrow_exception(std::current_exception());
+        }
+    }
+
+protected:
+    // always points to the coroutine running on the scheduler on this thread
+    static base_coroutine*& tl_this_coroutine();
+
+    // the coroutine's managed handle
+    std::coroutine_handle<> handle_;
+};
 
 /** 
  @brief stackless management coroutine object
 
- User stackless coroutine implementations must return this object.
- */
-struct coroutine {
-    struct promise_type;
-    typedef std::coroutine_handle<promise_type> handle_type;
-        
-    typedef std::function<void(std::coroutine_handle<>&&)> destination;
+ User stackless coroutine implementations must return this object. 
 
-    /**
-     The promise object for stackless coroutines, used primarily by the compiler 
-     when it constructs stackless coroutines.
-     */
-    struct promise_type {
+ `hce::coroutine` act like `std::unique_ptr`s for `std::coroutine_handle<>`s.
+ If an `hce::coroutine` owns a valid handle when it goes out of scope it will 
+ call the handle's `destroy()` operation.
+ */
+template <typename T>
+struct coroutine : public base_coroutine {
+    struct promise_type : public base_coroutine::promise_type {
+        /**
+         Object responsible for handling cleanup prior to the promise going out 
+         of scope.
+         */
         struct cleanup {
             typedef std::function<void(promise_type*)> handler;
 
@@ -72,113 +165,112 @@ struct coroutine {
             std::deque<handler> handlers_; 
         };
 
-        ~promise_type() { 
-            // ensure cleanup handlers execute before promise_type is destroyed
-            cleanup_.reset(); 
+        /// ensure cleanup handlers are run before promise_type destructs
+        virtual ~promise_type(){ if(cleanup_) { delete cleanup_; } }
+
+        inline const std::type_info& type_info() { 
+            return typeid(coroutine<T>::promise_type); 
         }
 
-        inline coroutine get_return_object() {
-            return { handle_type::from_promise(*this) };
+        /**
+         @brief store the result of `co_return` 
+
+         Use a new template type to prevent template type shadowing and retain 
+         universal reference semantics.
+         */ 
+        template <typename T2>
+        inline void return_value(T2&& t) {
+            result = std::forward<T2>(t);
         }
 
-        inline std::suspend_always initial_suspend() { return {}; }
-        inline std::suspend_always final_suspend() noexcept { return {}; }
-        inline void return_void() {}
-
-        // store the arbitrary result of `co_return`
-        template <typename T>
-        inline void return_value(T&& t) {
-            result = std::forward<T>(t);
+        /// install a coroutine<T>::promise_type::cleanup::handler
+        inline void install(cleanup::handler hdl) {
+            if(!cleanup_) { cleanup_ = new cleanup(this); }
+            cleanup_->install(std::move(hdl));
         }
 
-        inline void unhandled_exception() { eptr = std::current_exception(); }
-       
-        // install a cleanup handler to be executed when the coroutine promise 
-        // is destroyed (when the handle is destroyed)
-        inline void install(cleanup::handler h) {
-            if(!cleanup_) { 
-                cleanup_ = std::unique_ptr<cleanup>(new cleanup(this));
-            }
+        /// the result of the coroutine<T>
+        T result; 
 
-            cleanup_->install(std::move(h));
-        }
-
-        std::exception_ptr eptr = nullptr; // exception pointer
-        std::any result; // potential `co_return`ed result  
-
-    private:
-        std::unique_ptr<cleanup> cleanup_;
+    private: 
+        cleanup* cleanup_ = nullptr;
     };
-    
-    coroutine() = default;
-    coroutine(const coroutine&) = delete;
-    coroutine(coroutine&& rhs) = default;
 
-    // construct the coroutine from a type erased handle
-    coroutine(std::coroutine_handle<> h) : handle_(std::move(h)) { }
-
-    virtual ~coroutine() { if(handle_) { handle_.destroy(); } }
-
-    coroutine& operator=(const coroutine&) = delete;
-    coroutine& operator=(coroutine&& rhs) = default;
-
-    /// return true if the handle is valid, else false
-    inline operator bool() { return (bool)handle_; }
-
-    /// return true if the coroutine is done, else false
-    inline bool done() { return handle_.done(); }
-
-    /**
-     This reference can be moved if necessary, allowing control of the handle 
-     to transfer to a new owning coroutine.
-
-     @return a reference to the coroutine's handle
-     */
-    inline std::coroutine_handle<>& handle() { return handle_; }
+    typedef std::coroutine_handle<promise_type> handle_type;
 
     /// return the promise associated with this coroutine's handle
-    inline promise_type& promise() {
+    inline promise_type& promise() const {
         return handle_type::from_address(handle_.address()).promise();
     }
+    
+    coroutine() = default;
+    coroutine(const coroutine<T>&) = delete;
+    coroutine(coroutine<T>&& rhs) = default;
 
-    /*
-     Execute until thunk completes or yield() is called 
+    // construct the coroutine from a type erased handle
+    coroutine(std::coroutine_handle<> h) : base_coroutine(std::move(h)) { }
 
-     Execute until thunk completes or yield() is called. If coroutine handle is 
-     complete resume() returns immediately.
-    */
-    inline void resume() {
-        if(!done()) {
-            auto& tl_co = detail::tl_this_coroutine();
+    coroutine<T>& operator=(const coroutine<T>&) = delete;
+    coroutine<T>& operator=(coroutine<T>&& rhs) = default;
+};
 
-            // store parent coroutine pointer
-            auto parent_co = tl_co;
+template <>
+struct coroutine<void> : public base_coroutine {
+    struct promise_type : public base_coroutine::promise_type {
+        /**
+         Object responsible for handling cleanup prior to the promise going out 
+         of scope.
+         */
+        struct cleanup {
+            typedef std::function<void(promise_type*)> handler;
 
-            // set current coroutine ptr 
-            tl_co = this; 
-            
-            // continue coroutine execution
-            try {
-                handle_.resume();
+            cleanup(promise_type* pt) : promise_(pt) {}
+            ~cleanup() { for(auto& h : handlers_) { h(promise_); } }
 
-                // acquire the exception pointer
-                auto eptr = promise().eptr;
-
-                // rethrow any exceptions from the coroutine
-                if(eptr) { std::rethrow_exception(eptr); }
-            } catch(...) {
-                // restore parent coroutine ptr
-                tl_co = parent_co;
-                std::rethrow_exception(std::current_exception());
+            inline void install(handler&& h) { 
+                handlers_.push_back(std::move(h)); 
             }
 
-            // restore parent coroutine ptr
-            tl_co = parent_co;
+        private:    
+            promise_type* promise_;
+            std::deque<handler> handlers_; 
         };
-    }
 
-private:
-    std::coroutine_handle<> handle_;
+        /// ensure cleanup handlers are run before promise_type destructs
+        virtual ~promise_type(){ if(cleanup_) { delete cleanup_; } }
+
+        inline const std::type_info& type_info() { 
+            return typeid(coroutine<void>::promise_type); 
+        }
+
+        inline void return_void() {}
+
+        /// install a coroutine<T>::promise_type::cleanup::handler
+        inline void install(cleanup::handler hdl) {
+            if(!cleanup_) { cleanup_ = new cleanup(this); }
+            cleanup_->install(std::move(hdl));
+        }
+
+    private: 
+        cleanup* cleanup_ = nullptr;
+    };
+
+    typedef std::coroutine_handle<promise_type> handle_type;
+
+    /// return the promise associated with this coroutine's handle
+    inline promise_type& promise() const {
+        return handle_type::from_address(handle_.address()).promise();
+    }
+    
+    coroutine() = default;
+    coroutine(const coroutine<void>&) = delete;
+    coroutine(coroutine<void>&& rhs) = default;
+
+    // construct the coroutine from a type erased handle
+    coroutine(std::coroutine_handle<> h) : base_coroutine(std::move(h)) { }
+
+    coroutine<void>& operator=(const coroutine<void>&) = delete;
+    coroutine<void>& operator=(coroutine<void>&& rhs) = default;
 };
 
 /// thread_local block/unblock functionality
@@ -216,7 +308,7 @@ private:
 inline void coroutine_did_not_co_await(void* awt) {
     std::stringstream ss;
     ss << "coroutine[0x" 
-       << (void*)&this_coroutine() 
+       << (void*)&(base_coroutine::local())
        << "] did not call co_await on an awaitable[0x"
        << awt 
        << "]";
@@ -224,7 +316,7 @@ inline void coroutine_did_not_co_await(void* awt) {
     std::terminate();
 }
 
-// awaitables inherit shared functionality defined
+/// awaitables inherit shared functionality defined here
 template <typename LOCK>
 struct base_awaitable {
     struct implementation {
@@ -299,9 +391,11 @@ struct base_awaitable {
         virtual void resume_impl(void* m) = 0;
 
         /**
-         @brief method to acquire a callback to deal with the handle when resumed
+         @brief method to acquire a callback to deal with the handle when resumed 
+
+         This method is not called with non-coroutine operations.
          */
-        virtual coroutine::destination acquire_destination() = 0;
+        virtual base_coroutine::destination acquire_destination() = 0;
 
     private:
         /// called by awaitable's await_suspend()
@@ -311,7 +405,7 @@ struct base_awaitable {
             if(h) {
                 handle_ = h; 
                 destination_ = acquire_destination();
-                this_coroutine().handle() = std::coroutine_handle<>();
+                base_coroutine::local().reset(std::coroutine_handle<>());
                 lk.unlock();
             } else {
                 atp_ = this_thread::get(); 
@@ -332,14 +426,14 @@ struct base_awaitable {
             } else { 
                 // unblock the suspended coroutine
                 lk.unlock();
-                destination_(std::move(handle_));
+                destination_(coroutine(std::move(handle_)));
             }
         }
 
         bool resumed_ = false;
         this_thread* atp_ = nullptr;
         std::coroutine_handle<> handle_;
-        coroutine::destination destination_;
+        base_coroutine::destination destination_;
 
         friend struct base_awaitable<LOCK>;
     };
@@ -352,11 +446,15 @@ struct base_awaitable {
     base_awaitable<LOCK>& operator=(base_awaitable<LOCK>&&) = default;
 
     /**
-     @brief construct a base_awaitable with some base_awaitable::implementation
+     @brief construct a base_awaitable with some base_awaitable::implementation 
+
+     base_awaitables act like an `std::unique_ptr` when they are created with a 
+     pointer to an implementation, they will delete their implementation when 
+     they go out of scope.
      */
     template <typename IMPLEMENTATION>
-    base_awaitable(std::unique_ptr<IMPLEMENTATION> i) : 
-        impl_(static_cast<base_awaitable<LOCK>::implementation*>(i.release()))
+    base_awaitable(IMPLEMENTATION* i) : 
+        impl_(static_cast<base_awaitable<LOCK>::implementation*>(i))
     { }
     
     virtual inline ~base_awaitable() {
@@ -393,7 +491,7 @@ struct base_awaitable {
 private:
     inline void finalize_() {
         if(!awaited_) {
-            if(in_coroutine()) { 
+            if(base_coroutine::in()) { 
                 // coroutine failed to `co_await` the awaitable
                 coroutine_did_not_co_await(this); 
             } else if(!await_ready()) { 
@@ -437,7 +535,7 @@ private:
 template <typename T, typename LOCK=spinlock>
 struct awaitable : public base_awaitable<LOCK> {
     // the necessary operations required by an instance of awaitable<T>
-    struct implementation : protected base_awaitable<LOCK>::implementation {
+    struct implementation : public base_awaitable<LOCK>::implementation {
         // ensure destructor is virtual to properly deconstruct
         virtual inline ~implementation() { }
 
@@ -452,9 +550,8 @@ struct awaitable : public base_awaitable<LOCK> {
 
     typedef T value_type;
 
-    awaitable(std::unique_ptr<implementation> i) : 
-        base_awaitable<LOCK>(std::move(i)) 
-    { }
+    template <typename IMPLEMENTATION>
+    awaitable(IMPLEMENTATION* i) : base_awaitable<LOCK>(i) { }
 
     virtual ~awaitable(){ }
 
@@ -495,14 +592,14 @@ struct awaitable : public base_awaitable<LOCK> {
  */
 template <typename LOCK>
 struct awaitable<void,LOCK> : public base_awaitable<LOCK> {
-    struct implementation : protected base_awaitable<LOCK>::implementation {
+    struct implementation : public base_awaitable<LOCK>::implementation {
         virtual inline ~implementation() { }
     };
 
     typedef void value_type;
 
-    awaitable(std::unique_ptr<implementation> i) : 
-        base_awaitable<LOCK>(std::move(i)) { }
+    template <typename IMPLEMENTATION>
+    awaitable(IMPLEMENTATION* i) : base_awaitable<LOCK>(i) { }
 
     // construct with an an allocated implementation
     template <typename IMPLEMENTATION, typename... As>
@@ -520,7 +617,7 @@ struct awaitable<void,LOCK> : public base_awaitable<LOCK> {
 
 struct base_yield {
     ~base_yield() {
-        if(in_coroutine() && !awaited_){ 
+        if(base_coroutine::in() && !awaited_){ 
             coroutine_did_not_co_await(this); 
         }
     }
@@ -530,9 +627,8 @@ struct base_yield {
         return false; 
     }
 
-    inline void await_suspend(std::coroutine_handle<> h) {
-        this_coroutine().handle() = std::move(h);
-    }
+    // don't need to replace the handle, it's not moving
+    inline void await_suspend(std::coroutine_handle<> h) { }
 
 private:
     bool awaited_ = false;
@@ -557,7 +653,7 @@ struct yield : public base_yield {
     inline T await_resume() { return std::move(t); }
 
     inline operator T() {
-        if(in_coroutine()) { coroutine_did_not_co_await(this); }
+        if(base_coroutine::in()) { coroutine_did_not_co_await(this); }
         return await_resume(); 
     }
 

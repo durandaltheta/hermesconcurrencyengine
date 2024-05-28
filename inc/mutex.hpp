@@ -57,8 +57,8 @@ private:
         inline bool ready_impl() { return parent_->lock_(this); }
         inline void resume_impl(void* m) { }
     
-        inline coroutine::destination acquire_destination() {
-            return scheduler::reschedule{ this_scheduler() };
+        inline base_coroutine::destination acquire_destination() {
+            return scheduler::reschedule{ scheduler::local() };
         }
 
         hce::mutex* parent_;
@@ -135,7 +135,7 @@ struct unique_lock {
     inline operator bool() { return owns_lock(); }
 
 private:
-    struct acquire : protected hce::awaitable<unique_lock>::implementation {
+    struct acquire : public hce::awaitable<unique_lock>::implementation {
         acquire(hce::mutex& mtx) : mtx_(&mtx) { }
 
     protected:
