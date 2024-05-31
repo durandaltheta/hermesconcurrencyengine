@@ -107,18 +107,20 @@ struct base_coroutine {
     inline bool done() const { return handle_.done(); }
 
     /**
-     @brief cast the base_coroutine to a descendant type 
+     @brief cast the base_coroutine's handle to the descendant type's and 
+     return the promise.
 
      Will need to call this on a base_coroutine to get the actual promise. When 
      expecting coroutine<T>:
      ```
-     base_coroutine my_co;
-     coroutine<T>::promise& my_promise = my_co.to<coroutine<T>>().promise();
+     hce::base_coroutine my_co = hce::coroutine<T>();
+     hce::coroutine<T>::promise_type& my_promise = my_co.to_promise<hce::coroutine<T>>();
      ```
      */
     template <typename COROUTINE>
-    inline COROUTINE& to() {
-        return dynamic_cast<COROUTINE&>(*this);
+    inline typename COROUTINE::promise_type& to_promise() const {
+        return std::coroutine_handle<typename COROUTINE::promise_type>::from_address(
+                handle_.address()).promise();
     }
    
     /// return true if we are in a coroutine, else false

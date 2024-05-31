@@ -56,3 +56,27 @@ TEST(coroutine, return_value) {
         EXPECT_NE(&s, &co.promise().result);
     }
 }
+
+TEST(coroutine, return_value_erased) {
+    {
+        int i = 3;
+        hce::base_coroutine co = test::coroutine::co(&i);
+        EXPECT_TRUE(co);
+        EXPECT_FALSE(co.done());
+        co.resume();
+        EXPECT_TRUE(co.done());
+        EXPECT_EQ(3, co.to_promise<hce::coroutine<int>>().result);
+        EXPECT_NE(&i, &co.to_promise<hce::coroutine<int>>().result);
+    }
+
+    {
+        std::string s = "3";
+        hce::base_coroutine co = test::coroutine::co(&s);
+        EXPECT_TRUE(co);
+        EXPECT_FALSE(co.done());
+        co.resume();
+        EXPECT_TRUE(co.done());
+        EXPECT_EQ("3", co.to_promise<hce::coroutine<std::string>>().result);
+        EXPECT_NE(&s, &co.to_promise<hce::coroutine<std::string>>().result);
+    }
+}
