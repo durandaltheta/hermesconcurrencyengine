@@ -81,7 +81,10 @@ struct base_coroutine {
     }
 
     /// replaces the managed handle
-    inline void reset() { handle_ = std::coroutine_handle<>(); }
+    inline void reset() { 
+        if(handle_) { handle_.destroy(); }
+        handle_ = std::coroutine_handle<>(); 
+    }
 
     /// replaces the managed handle
     inline void reset(std::coroutine_handle<> h) { 
