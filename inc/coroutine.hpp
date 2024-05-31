@@ -53,39 +53,40 @@ struct base_coroutine {
         std::exception_ptr eptr = nullptr; // exception pointer
     };
 
-    base_coroutine() = default;
+    base_coroutine() { }
     base_coroutine(const base_coroutine&) = delete;
-    base_coroutine(base_coroutine&& rhs) = default;
+
+    base_coroutine(base_coroutine&& rhs) : handle_(std::move(rhs.handle_)) { }
 
     // construct the base_coroutine from a type erased handle
-    base_coroutine(std::coroutine_handle<> h) : handle_(std::move(h)) { }
+    base_coroutine(std::coroutine_handle<> h) : handle_(h) { }
 
-    base_coroutine& operator=(const base_coroutine&) = delete;
-    base_coroutine& operator=(base_coroutine&& rhs) = default;
+    inline base_coroutine& operator=(const base_coroutine&) = delete;
 
-    virtual ~base_coroutine() { if(handle_) { handle_.destroy(); } }
+    inline base_coroutine& operator=(base_coroutine&& rhs) { 
+        handle_ = std::move(rhs.handle_);
+        return *this;
+    }
+
+    virtual ~base_coroutine() { }
 
     /// return true if the handle is valid, else false
     inline operator bool() const { return (bool)handle_; }
 
-    /// cease managing the current handle and return it
-    inline std::coroutine_handle<> release() noexcept {
-        auto hdl = handle_;
+    /// returns a the managed handle and releases the ownership
+    inline std::coroutine_handle<> release() {
+        auto h = handle_;
         handle_ = std::coroutine_handle<>();
-        return hdl;
+        return h;
     }
 
-    /// replace the coroutine's stored handle
-    inline void reset(std::coroutine_handle<> h) noexcept { 
+    /// replaces the managed handle
+    inline void reset() { handle_ = std::coroutine_handle<>(); }
+
+    /// replaces the managed handle
+    inline void reset(std::coroutine_handle<> h) { 
         if(handle_) { handle_.destroy(); }
         handle_ = h; 
-    }
-
-    /// swap coroutines 
-    inline void swap(base_coroutine& rhs) noexcept { 
-        auto handle = handle_;
-        handle_ = rhs.handle_;
-        rhs.handle_ = handle;
     }
 
     /// return true if the coroutine is done, else false
@@ -143,9 +144,6 @@ struct base_coroutine {
         }
     }
 
-    /// convert the base_coroutine to the underlying handle by move
-    inline operator std::coroutine_handle<>() { return std::move(handle_); }
-
 protected:
     // always points to the coroutine running on the scheduler on this thread
     static base_coroutine*& tl_this_coroutine();
@@ -173,7 +171,7 @@ struct coroutine : public base_coroutine {
         struct cleanup {
             typedef std::function<void(promise_type*)> handler;
 
-            cleanup(promise_type* pt) : promise_(pt) {}
+            cleanup(promise_type* promise) : promise_(promise) {}
             ~cleanup() { for(auto& h : handlers_) { h(promise_); } }
 
             inline void install(handler&& h) { 
@@ -195,12 +193,12 @@ struct coroutine : public base_coroutine {
         /**
          @brief store the result of `co_return` 
 
-         Use a new template type to prevent template type shadowing and retain 
-         universal reference semantics.
+         Use a new template type to prevent template type shadowing errors and 
+         retain universal reference semantics.
          */ 
-        template <typename T2>
-        inline void return_value(T2&& t) {
-            result = std::forward<T2>(t);
+        template <typename TSHADOW>
+        inline void return_value(TSHADOW&& t) {
+            result = std::forward<TSHADOW>(t);
         }
 
         /// install a coroutine<T>::promise_type::cleanup::handler
@@ -236,12 +234,12 @@ struct coroutine : public base_coroutine {
     // construct the coroutine from a type erased handle
     coroutine(std::coroutine_handle<> h) : base_coroutine(std::move(h)) { }
 
-    coroutine<T>& operator=(const coroutine<T>&) = delete;
-    coroutine<T>& operator=(coroutine<T>&& rhs) = default;
-    coroutine<T>& operator=(const base_coroutine&) = delete;
+    inline coroutine<T>& operator=(const coroutine<T>&) = delete;
+    inline coroutine<T>& operator=(coroutine<T>&& rhs) = default;
+    inline coroutine<T>& operator=(const base_coroutine&) = delete;
 
-    coroutine<T>& operator=(base_coroutine&& rhs) {
-        handle_ = coroutine<T>(std::move(rhs));
+    inline coroutine<T>& operator=(base_coroutine&& rhs) {
+        *this = coroutine<T>(std::move(rhs));
         return *this;
     }
 };
@@ -249,14 +247,10 @@ struct coroutine : public base_coroutine {
 template <>
 struct coroutine<void> : public base_coroutine {
     struct promise_type : public base_coroutine::promise_type {
-        /**
-         Object responsible for handling cleanup prior to the promise going out 
-         of scope.
-         */
         struct cleanup {
             typedef std::function<void(promise_type*)> handler;
 
-            cleanup(promise_type* pt) : promise_(pt) {}
+            cleanup(promise_type* promise) : promise_(promise) {}
             ~cleanup() { for(auto& h : handlers_) { h(promise_); } }
 
             inline void install(handler&& h) { 
@@ -307,12 +301,12 @@ struct coroutine<void> : public base_coroutine {
     // construct the coroutine from a type erased handle
     coroutine(std::coroutine_handle<> h) : base_coroutine(std::move(h)) { }
 
-    coroutine<void>& operator=(const coroutine<void>&) = delete;
-    coroutine<void>& operator=(coroutine<void>&& rhs) = default;
-    coroutine<void>& operator=(const base_coroutine&) = delete;
+    inline coroutine<void>& operator=(const coroutine<void>&) = delete;
+    inline coroutine<void>& operator=(coroutine<void>&& rhs) = default;
+    inline coroutine<void>& operator=(const base_coroutine&) = delete;
 
-    coroutine<void>& operator=(base_coroutine&& rhs) {
-        handle_ = coroutine<void>(std::move(rhs));
+    inline coroutine<void>& operator=(base_coroutine&& rhs) {
+        *this = coroutine<void>(std::move(rhs));
         return *this;
     }
 };
@@ -506,8 +500,8 @@ struct base_awaitable {
     base_awaitable() = delete;
     base_awaitable(const base_awaitable<LOCK>&) = delete;
     base_awaitable(base_awaitable<LOCK>&&) = default;
-    base_awaitable<LOCK>& operator=(const base_awaitable<LOCK>&) = delete;
-    base_awaitable<LOCK>& operator=(base_awaitable<LOCK>&&) = default;
+    inline base_awaitable<LOCK>& operator=(const base_awaitable<LOCK>&) = delete;
+    inline base_awaitable<LOCK>& operator=(base_awaitable<LOCK>&&) = default;
 
     /**
      @brief construct a base_awaitable with some base_awaitable::implementation 
@@ -646,8 +640,8 @@ struct awaitable : public base_awaitable<LOCK> {
             dynamic_cast<awaitable<T,LOCK>::implementation*>(i)) 
     { }
     
-    awaitable& operator=(const awaitable<T,LOCK>& rhs) = delete;
-    awaitable& operator=(awaitable<T,LOCK>&& rhs) = default;
+    inline awaitable& operator=(const awaitable<T,LOCK>& rhs) = delete;
+    inline awaitable& operator=(awaitable<T,LOCK>&& rhs) = default;
 
     virtual ~awaitable(){ }
 
@@ -693,8 +687,8 @@ struct awaitable<void,LOCK> : public base_awaitable<LOCK> {
             dynamic_cast<awaitable<void,LOCK>::implementation*>(i)) 
     { }
     
-    awaitable& operator=(const awaitable<void,LOCK>& rhs) = delete;
-    awaitable& operator=(awaitable<void,LOCK>&& rhs) = default;
+    inline awaitable& operator=(const awaitable<void,LOCK>& rhs) = delete;
+    inline awaitable& operator=(awaitable<void,LOCK>&& rhs) = default;
 
     virtual inline ~awaitable() { }
     inline void await_resume(){ }
