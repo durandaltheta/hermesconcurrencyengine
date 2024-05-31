@@ -14,4 +14,5 @@ add_executable(hce_ut
     coroutine_ut.cpp
 )
 
+target_include_directories(hce_ut PUBLIC ${HCE_INCLUDE_DIR} PRIVATE ${LOG_SOURCE_DIR})
 target_link_libraries(hce_ut gtest gtest_main hce)

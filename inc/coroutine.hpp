@@ -54,9 +54,9 @@ struct base_coroutine {
     };
 
     base_coroutine() { }
-    base_coroutine(const base_coroutine&) = delete;
 
-    base_coroutine(base_coroutine&& rhs) : handle_(std::move(rhs.handle_)) { }
+    base_coroutine(const base_coroutine&) = delete;
+    base_coroutine(base_coroutine&& rhs) { swap(rhs); }
 
     // construct the base_coroutine from a type erased handle
     base_coroutine(std::coroutine_handle<> h) : handle_(h) { }
@@ -64,7 +64,7 @@ struct base_coroutine {
     inline base_coroutine& operator=(const base_coroutine&) = delete;
 
     inline base_coroutine& operator=(base_coroutine&& rhs) { 
-        handle_ = std::move(rhs.handle_);
+        swap(rhs);
         return *this;
     }
 
@@ -90,6 +90,17 @@ struct base_coroutine {
     inline void reset(std::coroutine_handle<> h) { 
         if(handle_) { handle_.destroy(); }
         handle_ = h; 
+    }
+
+    inline void swap(base_coroutine& rhs) noexcept { 
+        if(handle_) {
+            auto h = handle_;
+            handle_ = rhs.handle_;
+            rhs.handle_ = h;
+        } else {
+            handle_ = rhs.handle_;
+            rhs.handle_ = std::coroutine_handle<>();
+        }
     }
 
     /// return true if the coroutine is done, else false
@@ -229,10 +240,7 @@ struct coroutine : public base_coroutine {
     coroutine(coroutine<T>&& rhs) = default;
     
     coroutine(const base_coroutine&) = delete;
-
-    coroutine(base_coroutine&& rhs) : 
-        base_coroutine(std::move(rhs))
-    { }
+    coroutine(base_coroutine&& rhs) : base_coroutine(std::move(rhs)) { }
 
     // construct the coroutine from a type erased handle
     coroutine(std::coroutine_handle<> h) : base_coroutine(std::move(h)) { }

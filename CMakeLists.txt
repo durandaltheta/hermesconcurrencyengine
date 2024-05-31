@@ -66,7 +66,7 @@ add_library(hce STATIC
     ${HCE_SOURCE_FILES}
     ${HCE_HEADER_FILES})
 
-target_include_directories(hce PUBLIC ${HCE_INCLUDE_DIR} ${LOG_SOURCE_DIR})
+target_include_directories(hce PUBLIC ${HCE_INCLUDE_DIR} PRIVATE ${LOG_SOURCE_DIR})
 target_link_libraries(hce PRIVATE loguru::loguru)
 
 message("-- HCE LIBRARY COMPILE DEFINES -- ")
