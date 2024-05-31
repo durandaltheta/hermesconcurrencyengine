@@ -15,33 +15,22 @@ hce::scheduler*& hce::detail::tl_this_scheduler_redirect() {
     return tlts;
 }
 
-#ifndef HCEMINWAITPROC
-#define HCEMINWAITPROC 1
-#endif
-
 hce::scheduler& hce::scheduler::global() {
-    struct schedulizer {
-        schedulizer() : 
-            sch(hce::scheduler::make(HCEMINWAITPROC)),
-            sch_r(*sch),
+    struct scheduler_manager {
+        scheduler_manager() : 
+            sch(hce::scheduler::make()),
             thd([&]{ while(sch->run()) { } })
         { }
 
-        ~schedulizer() {
+        ~scheduler_manager() {
             sch->halt();
             thd.join();
         }
 
         std::shared_ptr<hce::scheduler> sch;
-        hce::scheduler& sch_r;
         std::thread thd;
     };
 
-    static schedulizer schzr;
-    return schzer.sch_r;
-}
-
-bool& hce::scheduler::worker::tl_is_wait() {
-    static bool tl_iw = false;
-    return tl_iw;
+    static scheduler_manager sch_mgr;
+    return *(sch_mgr.sch);
 }

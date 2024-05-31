@@ -44,7 +44,7 @@ inline hce::awaitable<bool> sleep(const std::chrono::steady_clock::duration& dur
         std::unique_lock<spinlock> lk_(slk_);
     };
 
-    return hce::awaitable<bool>::make<awt>(dur);
+    return hce::awaitable<bool>(new awt(dur));
 }
 
 inline hce::awaitable<bool> sleep(timer::unit u, size_t count) {

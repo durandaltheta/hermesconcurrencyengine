@@ -12,6 +12,7 @@
 #include <chrono>
 #include <string>
 #include <sstream>
+#include <optional>
 
 // local 
 #include "utility.hpp"
@@ -186,13 +187,13 @@ struct timer {
 
 private:
     inline void finalize_(std::function<void()> t, std::function<void()> c) {
-        timeout = std::move(t);
-        cancel = std::move(c);
+        timeout_ = std::move(t);
+        cancel_ = std::move(c);
     }
 
     inline void finalize_(std::function<void()> t) {
-        timeout = std::move(t);
-        cancel = []{};
+        timeout_ = std::move(t);
+        cancel_ = []{};
     }
 
     const std::chrono::steady_clock::time_point time_point_;
@@ -228,13 +229,13 @@ struct scheduler {
             estr([]() -> std::string {
                 std::stringstream ss;
                 ss << "coroutine[0x" 
-                   << (void*)&this_coroutine() 
+                   << (void*)&(base_coroutine::local())
                    << "] called scheduler::run()";
                 return ss.str();
             }()) 
         { }
 
-        const char* what() const noexcept { return estr.c_str(); }
+        inline const char* what() const noexcept { return estr.c_str(); }
 
     private:
         const std::string estr;
@@ -317,12 +318,12 @@ struct scheduler {
      */
     inline bool run(scheduler* redirect = nullptr) {
         // error out immediately if called improperly
-        if(in_coroutine()) { throw coroutine_called_run(); }
+        if(base_coroutine::in()) { throw coroutine_called_run(); }
 
         // stack variables 
 
         // the currently running coroutine
-        coroutine co;
+        base_coroutine co;
 
         // list of ready timers
         std::list<timer*> timers;
@@ -338,11 +339,12 @@ struct scheduler {
         
         // temporarily reassign thread_local this_scheduler state to this scheduler
         tl_cs = this; 
-        tl_cs_re = redirect ? redirect : this;
+        tl_cs_re = redirect ? redirect : this; 
+        redirect_ = tl_cs_re;
 
         // construct a new coroutine queue
-        std::unique_ptr<std::deque<coroutine>> coroutine_queue(
-                new std::deque<coroutine>);
+        std::unique_ptr<std::deque<std::coroutine_handle<>>> coroutine_queue(
+                new std::deque<std::coroutine_handle<>>);
 
         // push any remaining coroutines back into the main queue
         auto requeue_coroutines = [&] {
@@ -381,10 +383,9 @@ struct scheduler {
 
                         while(it!=end) {
                             // check if a timer is ready to timeout
-                            if((*it)->time_point <= now) {
+                            if((*it)->time_point() <= now) {
                                 timers.push_back(*it);
                                 it = timers_.erase(it);
-                                delete t;
                             } else {
                                 // no remaining ready timers, exit loop
                                 break;
@@ -568,7 +569,7 @@ struct scheduler {
             tasks_available_notify_();
 
             // handle case where halt() is called from another std::thread
-            if(!in_coroutine()) {
+            if(!base_coroutine::in()) {
                 while(!halt_complete_){ halt_complete_cv_.wait(lk); }
             }
         }
@@ -612,12 +613,7 @@ struct scheduler {
     template <typename T>
     awaitable<std::optional<T>> await(coroutine<T> co) {
         struct awt : public awaitable<std::optional<T>>::implementation {
-            awt(std::unique_lock<spinlock> lk) : 
-                ready_(false),
-                lk_(std::move(lk))
-            { }
-
-            awt(bool ready) : ready_(ready) {}
+            awt(bool ready) : ready_(ready), lk_(slk_) {}
 
         protected:
             inline std::unique_lock<spinlock>& get_lock() { return lk_; }
@@ -630,9 +626,7 @@ struct scheduler {
                 }
             }
 
-            inline std::optional<T> return_impl() { 
-                return std::move(t_); 
-            }
+            inline std::optional<T> return_impl() { return std::move(t_); }
         
             inline base_coroutine::destination acquire_destination() {
                 return reschedule{ scheduler::local() };
@@ -640,6 +634,7 @@ struct scheduler {
 
         private:
             bool ready_;
+            spinlock slk_;
             std::unique_lock<spinlock> lk_;
             std::optional<T> t_;
             bool completed_ = false;
@@ -648,7 +643,7 @@ struct scheduler {
         std::unique_lock<spinlock> lk(lk_);
 
         if(state_ != halted) {
-            auto a = new awt(std::move(lk));
+            auto a = new awt(false);
 
             co.promise().install([a](coroutine<T>::promise_type* p) mutable {
                 // pass the coroutine result to the awaitable
@@ -656,12 +651,13 @@ struct scheduler {
             });
 
             schedule_(std::move(co));
+            lk.unlock();
 
             /// returned awaitable resumes when the coroutine handle is destroyed
             return awaitable<std::optional<T>>(a);
         } else {
             // awaitable returns immediately
-            return awaitable<std::optional<T>>::make<awt>(true);
+            return awaitable<std::optional<T>>(new awt(true));
         }
     }
 
@@ -676,12 +672,7 @@ struct scheduler {
      */
     inline awaitable<bool> await(coroutine<void> co) {
         struct awt : public awaitable<bool>::implementation {
-            awt(std::unique_lock<spinlock> lk) : 
-                ready_(false),
-                lk_(std::move(lk))
-            { }
-
-            awt(bool ready) : ready_(ready) { }
+            awt(bool ready) : ready_(ready), lk_(slk_) { }
 
         protected:
             inline std::unique_lock<spinlock>& get_lock() { return lk_; }
@@ -690,11 +681,12 @@ struct scheduler {
             inline bool result_impl() { return completed_; }
         
             inline base_coroutine::destination acquire_destination() {
-                return reschedule{ this_scheduler() };
+                return reschedule{ scheduler::local() };
             }
 
         private:
             bool ready_;
+            spinlock slk_;
             std::unique_lock<spinlock> lk_;
             bool completed_ = false;
         };
@@ -702,19 +694,21 @@ struct scheduler {
         std::unique_lock<spinlock> lk(lk_);
 
         if(state_ != halted) {
-            auto a = new awt(std::move(lk));
+            auto a = new awt(false);
 
-            co.promise().install([a](coroutine::promise_type* pt) mutable {
+            co.promise().install([a](coroutine<void>::promise_type* pt) mutable {
+                // resume the blocked awaitable
                 a->resume((void*)1);
             });
 
             schedule_(std::move(co));
+            lk.unlock();
 
             /// returned awaitable resumes when the coroutine handle is destroyed
             return awaitable<bool>(a);
         } else {
             // awaitable returns immediately
-            return awaitable<bool>::make<awt>(true);
+            return awaitable<bool>(new awt(true));
         }
     }
 
@@ -736,12 +730,12 @@ struct scheduler {
 
             // need to notify the caller of run() if our new timeout is sooner 
             // than the previous soonest
-            auto do_notify = t->time_point() < timers_.front().time_point();
+            auto do_notify = t->time_point() < timers_.front()->time_point();
 
             // re-sort based on timer::operator<
-            timers_.sort([](timer*& lt, timer*& rh) { return *lt < *rh; };
+            timers_.sort([](timer*& lt, timer*& rh) { return *lt < *rh; });
 
-            if(do_notify) { tasks_available_notify_() };
+            if(do_notify) { tasks_available_notify_(); }
         }
 
         return id;
@@ -781,6 +775,34 @@ struct scheduler {
         return scheduled_ + coroutine_queue_->size();
     }
 
+    /// set the redirect pointer and block till complete
+    inline awaitable<bool> redirect(scheduler* redir) {
+        struct awt : public awaitable<bool>::implementation { 
+            awt(std::unique_lock<spinlock>&& lk) : lk_(std::move(lk)) { }
+
+        protected:
+            inline std::unique_lock<spinlock>& get_lock() { return lk_; }
+            inline bool ready_impl() { return true; }
+            inline void resume_impl(void* m) { } 
+            inline bool result_impl() { return true; }
+        
+            inline base_coroutine::destination acquire_destination() {
+                return reschedule{ scheduler::local() };
+            }
+
+        private:
+            std::unique_lock<spinlock> lk_;
+        };
+
+        std::unique_lock<spinlock> lk(lk_);
+
+        if(redirect_ == redir) {
+            return awaitable<bool>(new awt(std::move(lk)));
+        } else {
+            return await(scheduler::redirect_co(redir));
+        }
+    }
+
     /// return a copy of this scheduler's shared pointer by conversion
     inline operator std::shared_ptr<scheduler>() { return self_wptr_.lock(); }
 
@@ -811,7 +833,7 @@ private:
     // safely clear all our queues
     void clear_queues_() {
         while(coroutine_queue_->size()) {
-            delete coroutine_queue_->front();
+            coroutine_queue_->front().destroy();
             coroutine_queue_->pop_front();
         }
 
@@ -888,6 +910,11 @@ private:
         schedule_coroutine_(std::move(c));
     }
 
+    static inline coroutine<void> redirect_co(scheduler* redir) {
+        detail::tl_this_scheduler_redirect() = redir;
+        co_return;
+    }
+
     // synchronization primative
     hce::spinlock lk_;
 
@@ -922,6 +949,8 @@ private:
     // list holding scheduled timers. This will be regularly resorted from 
     // soonest to latest timeout.
     std::list<timer*> timers_;
+
+    scheduler* redirect_ = this;
 };
 
 /**

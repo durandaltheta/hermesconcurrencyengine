@@ -281,7 +281,7 @@ struct channel {
             std::unique_lock<LOCK> lk(lk_);
 
             if(closed_flag_) {
-                return hce::awaitable<bool>::make<send_impl>(true, false);
+                return hce::awaitable<bool>(new send_impl(true, false));
             }
 
             if(parked_recv_.size()) {
@@ -290,7 +290,7 @@ struct channel {
                 parked_recv_.pop_front();
 
                 // return an awaitable which immediately returns true
-                return hce::awaitable<bool>::make<send_impl>(true, true);
+                return hce::awaitable<bool>(new send_impl(true, true));
             } else {
                 auto ai = new send_impl(false, true, std::move(lk), { s, is_rvalue});
                 parked_send_.push_back(ai);
@@ -328,12 +328,12 @@ struct channel {
             std::unique_lock<LOCK> lk(lk_);
 
             if(closed_flag_) { 
-                return hce::awaitable<bool>::make<recv_impl>(true, false);
+                return hce::awaitable<bool>(new recv_impl(true, false));
             } else if(parked_send_.size()) {
                 parked_send_.front()->resume(r);
 
                 // return an awaitable which immediately returns true
-                return hce::awaitable<bool>::make<recv_impl>(true, true);
+                return hce::awaitable<bool>(new recv_impl(true, true));
             } else {
                 auto ai = new recv_impl(false, true, std::move(lk), r);
                 parked_send_.push_back(ai);
@@ -480,7 +480,7 @@ struct channel {
             std::unique_lock<LOCK> lk(lk_);
 
             if(closed_flag_) {
-                return hce::awaitable<bool>::make<send_impl>(true, false);
+                return hce::awaitable<bool>(new send_impl(true, false));
             } else if(buf_.full()) {
                 auto ai = new send_impl(false, true, std::move(lk), { s, is_rvalue});
                 parked_send_.push_back();
@@ -495,7 +495,7 @@ struct channel {
                 }
 
                 // return an awaitable which immediately returns true
-                return hce::awaitable<bool>::make<send_impl>(true, true);
+                return hce::awaitable<bool>(new send_impl>(true, true));
             }
         }
 
@@ -531,7 +531,7 @@ struct channel {
             std::unique_lock<LOCK> lk(lk_);
 
             if(closed_flag_) {
-                return hce::awaitable<bool>::make<recv_impl>(true, false);
+                return hce::awaitable<bool>(new recv_impl>(true, false));
             } else if(buf_.empty()) {
                 auto ai = new recv_impl(false, true, std::move(lk), r);
                 parked_send_.push_back(ai);
@@ -546,7 +546,7 @@ struct channel {
                 }
 
                 // return an awaitable which immediately returns true
-                return hce::awaitable<bool>::make<recv_impl>(true, true);
+                return hce::awaitable<bool>(new recv_impl>(true, true));
             }
         }
         

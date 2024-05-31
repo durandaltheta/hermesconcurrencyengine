@@ -20,17 +20,24 @@ namespace hce {
 /**
  @brief a united coroutine and non-coroutine condition_variable
  */
-struct condition_variable {
-    inline awaitable<bool> wait(hce::unique_lock& lk) {
+struct condition_variable_any {
+    condition_variable_any() = default;
+    condition_variable_any(const condition_variable_any&) = delete;
+    condition_variable_any(condition_variable_any&&) = delete;
+    condition_variable_any& operator=(const condition_variable_any&) = delete;
+    condition_variable_any& operator=(condition_variable_any&&) = delete;
+
+    template <typename Lock>
+    awaitable<bool> wait(hce::unique_lock<Lock>& lk) {
         // a simple awaitable to block this coroutine
         struct awt : protected hce::awaitable<void>::implementation,
                      public resumable {
             // inherit the std::unique_lock from the coroutine
             awt(std::unique_lock<spinlock>&& lk) : lk_(std::move(lk) { }
 
-            static inline hce::coroutine op(
+            static inline hce::coroutine<void> op(
                     hce::condition_variable& cv,
-                    hce::mutex& user_lk) {
+                    hce::unique_lock<Lock>& user_lk) {
 
                 // acquire the condition_variable lock and interleave locks
                 std::unique_lock<hce::spinlock> lk(cv.lk_);
@@ -60,48 +67,49 @@ struct condition_variable {
             std::unique_lock<hce::spinlock> lk_(lf_);
         };
 
-        return scheduler::get().await(awt::op(this, &user_lk));
+        return hce::await(awt::op(this, &user_lk));
     }
 
-    template <class Pred>
-    awaitable<bool> wait(hce::unique_lock& lk, Pred p) {
+    template <typename Lock, class Pred>
+    awaitable<bool> wait(hce::unique_lock<Lock>& lk, Pred p) {
         struct awt {
-            static inline hce::coroutine op(
+            static inline hce::coroutine<void> op(
                     hce::condition_variable& cv,
-                    hce::unique_lock& lk,
+                    hce::unique_lock<Lock>& lk,
                     const std::chrono::steady_clock::duration& d,
                     Pred p) {
                 while(!p()) { co_await cv->wait(lk, dur); }
             }
         };
 
-        return scheduler::get().await(awt::op(*this, lk, dur, std::move(p)));
+        return hce::await(awt::op(*this, lk, dur, std::move(p)));
     }
 
-    inline awaitable<std::optional<std::cv_status>> wait_for(
-            hce::unique_lock& lk, 
+    template <typename Lock>
+    awaitable<std::optional<std::cv_status>> wait_for(
+            hce::unique_lock<Lock>& lk, 
             const std::chrono::steady_clock::duration d) {
         return wait_until(lk, timer::now() + d);
     }
     
-    template <class Pred>
+    template <typename Lock, class Pred>
     awaitable<bool> wait_for(
-            hce::unique_lock& lk, 
+            hce::unique_lock<Lock>& lk, 
             const std::chrono::steady_clock::duration d,
             Pred p) {
         struct awt : protected awaitable<bool>::implementation,
                      public resumable {
             awt(hce::condition_variable& cv,
-                hce::unique_lock& user_lk,
+                hce::unique_lock<Lock>& user_lk,
                 const std::chrono::steady_clock::duration d,
                 Pred&& p) :
                 lk_(cv.lk_),
                 co_(awt::op(cv, user_lk, d, std::move(p), cv, this))
             { }
 
-            static inline coroutine op(
+            static inline coroutine<void> op(
                     hce::condition_variable& cv,
-                    hce::unique_lock& lk,
+                    hce::unique_lock<Lock>& lk,
                     const std::chrono::steady_clock::duration& d,
                     Pred p,
                     awt* a) {
@@ -134,24 +142,24 @@ struct condition_variable {
 
         private:
             std::unique_lock<spinlock> lk_(lf_);
-            hce::coroutine co_;
+            hce::coroutine<void> co_;
             bool res_ = false;
         };
 
-        return awaitable<bool>::make<awt>(*this, lk, dur, std::move(p));
+        return awaitable<bool>(new awt(*this, lk, dur, std::move(p)));
     }
 
-    template <class Rep, class Period>
+    template <typename Lock>
     awaitable<std::optional<std::cv_status>> wait_until(
-        hce::unique_lock& lk, 
+        hce::unique_lock<Lock>& lk, 
         const std::chrono::steady_clock::time_point tp) {
 
         struct awt : protected awaitable<std::cv_status>::implementation {
             awt(std::unique_lock<hce::spinlock>&& lk) : lk_(std::move(lk)) { }
 
-            static inline coroutine op(
+            static inline hce::coroutine<std::cv_status> op(
                     hce::condition_variable* cv,
-                    hce::unique_lock& user_lk,
+                    hce::unique_lock<Lock>& user_lk,
                     std::chrono::steady_clock::time_point tp) {
                 // object called by notify() methods
                 struct canceller : public resumable {
@@ -247,8 +255,7 @@ struct condition_variable {
         };
 
         // await a coroutine which executes the operation logic
-        return await<std::cv_status>(
-                awt::op(this, user_lk, timer::now() + dur, a));
+        return hce::await(awt::op(this, user_lk, timer::now() + dur, a));
     }
     
     inline void notify_one() {
@@ -284,6 +291,52 @@ private:
 
     spinlock slk_;
     std::deque<resumable*> blocked_queue_;
+};
+
+/**
+ @brief condition_variable variant which only accepts `hce::unique_lock<hce::mutex>`
+ */
+struct condition_variable {
+    condition_variable() = default;
+    condition_variable(const condition_variable&) = delete;
+    condition_variable(condition_variable&&) = delete;
+    condition_variable& operator=(const condition_variable&) = delete;
+    condition_variable& operator=(condition_variable&&) = delete;
+    
+    inline awaitable<bool> wait(hce::unique_lock<hce::mutex>& lk) {
+        return cv_.wait(lk);
+    }
+
+    template <class Pred>
+    awaitable<bool> wait(hce::unique_lock<hce::mutex>& lk, Pred&& p) {
+        return cv_.wait(lk, p);
+    }
+
+    inline awaitable<std::optional<std::cv_status>> wait_for(
+            hce::unique_lock<hce::mutex>& lk, 
+            const std::chrono::steady_clock::duration& d) {
+        return cv_.wait_for(lk, d);
+    }
+    
+    template <class Pred>
+    awaitable<bool> wait_for(
+            hce::unique_lock<hce::mutex>& lk, 
+            const std::chrono::steady_clock::duration& d,
+            Pred p) {
+        return cv_.wait_for(lk, d, p);
+    }
+
+    inline awaitable<std::optional<std::cv_status>> wait_until(
+            hce::unique_lock<hce::mutex>& lk, 
+            const std::chrono::steady_clock::time_point& tp) {
+        return cv_.wait_until(lk, tp);
+    }
+    
+    inline void notify_one() { cv_.notify_one(); }
+    inline void notify_all() { cv_.notify_all(); }
+
+private:
+    hce::condition_variable_any cv_;
 };
 
 }

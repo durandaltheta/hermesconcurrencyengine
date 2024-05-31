@@ -14,15 +14,20 @@
 #include <functional>
 #include <string>
 #include <sstream>
-#include <iostream>
 
 // local 
 #include "atomic.hpp"
 
 namespace hce {
 
+/** 
+ @brief interface coroutine type 
+
+ An actual coroutine must be an implementation of coroutine<T> in order to 
+ have a valid promise_type.
+ */
 struct base_coroutine {
-    typedef std::function<void(base_coroutine&&)> destination;
+    typedef std::function<void(std::coroutine_handle<>)> destination;
 
     /**
      The base promise object for stackless coroutines, used primarily by the 
@@ -40,6 +45,8 @@ struct base_coroutine {
         inline std::suspend_always initial_suspend() { return {}; }
         inline std::suspend_always final_suspend() noexcept { return {}; }
         inline void unhandled_exception() { eptr = std::current_exception(); }
+
+        /// return actual coroutine<T>::promise_type type
         virtual const std::type_info& type_info() = 0;
 
         std::exception_ptr eptr = nullptr; // exception pointer
@@ -73,17 +80,26 @@ struct base_coroutine {
         handle_ = h; 
     }
 
-    /// replace the coroutine's stored handle
+    /// swap coroutines 
     inline void swap(base_coroutine& rhs) noexcept { 
-        auto tmp = handle_;
+        auto handle = handle_;
         handle_ = rhs.handle_;
-        rhs.handle_ = tmp;
+        rhs.handle_ = handle;
     }
 
     /// return true if the coroutine is done, else false
     inline bool done() const { return handle_.done(); }
 
-    /// cast the base_coroutine to a descendant type
+    /**
+     @brief cast the base_coroutine to a descendant type 
+
+     Will need to call this on a base_coroutine to get the actual promise. When 
+     expecting coroutine<T>:
+     ```
+     base_coroutine my_co;
+     coroutine<T>::promise& my_promise = my_co.to<coroutine<T>>().promise();
+     ```
+     */
     template <typename COROUTINE>
     inline COROUTINE& to() {
         return dynamic_cast<COROUTINE&>(*this);
@@ -125,6 +141,9 @@ struct base_coroutine {
             std::rethrow_exception(std::current_exception());
         }
     }
+
+    /// convert the base_coroutine to the underlying handle by move
+    inline operator std::coroutine_handle<>() { return std::move(handle_); }
 
 protected:
     // always points to the coroutine running on the scheduler on this thread
@@ -206,12 +225,24 @@ struct coroutine : public base_coroutine {
     coroutine() = default;
     coroutine(const coroutine<T>&) = delete;
     coroutine(coroutine<T>&& rhs) = default;
+    
+    coroutine(const base_coroutine&) = delete;
+
+    coroutine(base_coroutine&& rhs) : 
+        base_coroutine(std::move(rhs))
+    { }
 
     // construct the coroutine from a type erased handle
     coroutine(std::coroutine_handle<> h) : base_coroutine(std::move(h)) { }
 
     coroutine<T>& operator=(const coroutine<T>&) = delete;
     coroutine<T>& operator=(coroutine<T>&& rhs) = default;
+    coroutine<T>& operator=(const base_coroutine&) = delete;
+
+    coroutine<T>& operator=(base_coroutine&& rhs) {
+        handle_ = coroutine<T>(std::move(rhs));
+        return *this;
+    }
 };
 
 template <>
@@ -265,12 +296,24 @@ struct coroutine<void> : public base_coroutine {
     coroutine() = default;
     coroutine(const coroutine<void>&) = delete;
     coroutine(coroutine<void>&& rhs) = default;
+    
+    coroutine(const base_coroutine&) = delete;
+
+    coroutine(base_coroutine&& rhs) : 
+        base_coroutine(std::move(rhs))
+    { }
 
     // construct the coroutine from a type erased handle
     coroutine(std::coroutine_handle<> h) : base_coroutine(std::move(h)) { }
 
     coroutine<void>& operator=(const coroutine<void>&) = delete;
     coroutine<void>& operator=(coroutine<void>&& rhs) = default;
+    coroutine<void>& operator=(const base_coroutine&) = delete;
+
+    coroutine<void>& operator=(base_coroutine&& rhs) {
+        handle_ = coroutine<void>(std::move(rhs));
+        return *this;
+    }
 };
 
 /// thread_local block/unblock functionality
@@ -305,40 +348,29 @@ private:
     std::condition_variable_any cv;
 };
 
-inline void coroutine_did_not_co_await(void* awt) {
-    std::stringstream ss;
-    ss << "coroutine[0x" 
-       << (void*)&(base_coroutine::local())
-       << "] did not call co_await on an awaitable[0x"
-       << awt 
-       << "]";
-    std::cerr << ss.str() << std::endl;
-    std::terminate();
+namespace detail {
+
+void coroutine_did_not_co_await(void* awt);
+void awaitable_not_resumed(void* awt, void* hdl);
+
 }
 
-/// awaitables inherit shared functionality defined here
+/**
+ @brief awaitables inherit shared functionality defined here
+
+ base_awaitable objects cannot be used by themselves, they must be inheritted 
+ by another object (awaitable<T>) which implements the `await_resume()` method.
+ */
 template <typename LOCK>
 struct base_awaitable {
     struct implementation {
-        struct awaitable_not_resumed : public std::exception {
-            awaitable_not_resumed(implementation* addr) : 
-                estr([=]() -> std::string {
-                    std::stringstream ss;
-                    ss << "awaitable[0x" 
-                       << (void*)addr
-                       << "] was not resumed before being destroyed";
-                    return ss.str();
-                }()) 
-            { }
-
-            const char* what() const { return estr.c_str(); }
-
-        private:
-            const std::string estr;
-        };
-
         virtual ~implementation() { 
-            if(!resumed_) { throw awaitable_not_resumed(this); }
+            if(handle_) {
+                detail::awaitable_not_resumed(this, handle_.address());
+
+                // ensure handle memory is freed
+                handle_.destroy(); 
+            }
         }
 
         /**
@@ -352,18 +384,31 @@ struct base_awaitable {
          @param m arbitary memory passed to implementation::resume()
          */
         inline void resume(void* m) {
+            // acquire the reference to the lock, should be unlocked at this point
             std::unique_lock<LOCK>& lk = this->get_lock();
-            resume_(lk, m);
+
+            // re-acquire the lock 
+            lk.lock();
+            this->resume_impl(m);
+
+            if(atp_) { 
+                // unblock the suspended thread
+                atp_->unblock(lk); 
+            } else { 
+                // unblock the suspended coroutine
+                lk.unlock();
+                destination_(std::move(handle_));
+            }
         }
 
     protected:
         /**
-         Returns a locked LOCK used by the operation. This lock will be 
-         unlocked by the awaitable during suspend. This operation is called 
-         when the awaitable is constructed from the implementation.
+         Returns the LOCK used by the operation. 
 
-         It is held during calls to ready() and resume(), and unlocked when 
-         await_suspend() is called.
+         This object should be be locked by the time the implementation's 
+         construction is finished.
+
+         This lock will be unlocked by the awaitable during a suspend. 
          */
         virtual std::unique_lock<LOCK>& get_lock() = 0;
 
@@ -371,7 +416,7 @@ struct base_awaitable {
          @brief returns whether the operation can resume immediately or not 
 
          This operation is where any code which needs to execute before suspend 
-         should be called.
+         should be called. The lock will be held while calling this method.
          */
         virtual bool ready_impl() = 0;
 
@@ -380,7 +425,8 @@ struct base_awaitable {
 
          It is passed whatever arbitary memory is passed to resume(). The 
          implementation may use this memory to complete the operation, in 
-         whatever manner it sees fit.
+         whatever manner it sees fit. The lock will be held while calling this 
+         method.
 
          Implementations must be aware of the fact that `resume_impl()` will 
          be called with a `nullptr` by the implementation's destructor if 
@@ -393,13 +439,14 @@ struct base_awaitable {
         /**
          @brief method to acquire a callback to deal with the handle when resumed 
 
-         This method is not called with non-coroutine operations.
+         This method is not called when the awaitable is being used outside a
+         coroutine.
          */
         virtual base_coroutine::destination acquire_destination() = 0;
 
     private:
         /// called by awaitable's await_suspend()
-        inline void suspend(std::coroutine_handle<> h) {
+        inline void suspend_(std::coroutine_handle<> h) {
             std::unique_lock<LOCK>& lk = this->get_lock();
 
             if(h) {
@@ -413,24 +460,6 @@ struct base_awaitable {
             }
         }
 
-        inline void resume_(std::unique_lock<LOCK>& lk, void* m) {
-            resumed_ = true;
-
-            // acquire the lock 
-            lk.lock();
-            this->resume_impl(m);
-
-            if(atp_) { 
-                // unblock the suspended thread
-                atp_->unblock(lk); 
-            } else { 
-                // unblock the suspended coroutine
-                lk.unlock();
-                destination_(coroutine(std::move(handle_)));
-            }
-        }
-
-        bool resumed_ = false;
         this_thread* atp_ = nullptr;
         std::coroutine_handle<> handle_;
         base_coroutine::destination destination_;
@@ -438,7 +467,6 @@ struct base_awaitable {
         friend struct base_awaitable<LOCK>;
     };
 
-    // awaitable is a transient object, it must be used inline
     base_awaitable() = delete;
     base_awaitable(const base_awaitable<LOCK>&) = delete;
     base_awaitable(base_awaitable<LOCK>&&) = default;
@@ -484,16 +512,37 @@ struct base_awaitable {
      If the argument handle does not represent a coroutine (`handle == false`), 
      then the operation is on a system thread and will block the calling thread.
      */
-    inline void await_suspend(std::coroutine_handle<> h) { impl_->suspend(h); }
+    inline void await_suspend(std::coroutine_handle<> h) { impl_->suspend_(h); }
 
-    inline implementation& get_impl() { return *impl_; }
+    /// return true if the awaitable has an implementation
+    inline operator bool() { return impl_; }
+
+    /// return a reference to the implementation
+    inline implementation& impl() { return *impl_; }
+
+    /// destroy the implementation, preventing finalization on destructor
+    inline void reset() { if(impl_) { delete impl_; } }
+
+    /// swap base_awaitables
+    inline void swap(base_awaitable& rhs) noexcept { 
+        auto impl = impl_;
+        impl_ = rhs.impl_;
+        rhs.impl_ = impl;
+    }
+
+    /// release the implementation to the caller
+    inline implementation* release() { 
+        auto impl = impl_;
+        impl_ = nullptr;
+        return impl;
+    }
 
 private:
     inline void finalize_() {
         if(!awaited_) {
             if(base_coroutine::in()) { 
                 // coroutine failed to `co_await` the awaitable
-                coroutine_did_not_co_await(this); 
+                detail::coroutine_did_not_co_await(this); 
             } else if(!await_ready()) { 
                 // if we're here, this awaitable is operating without the 
                 // `co_await` keyword, and needs to operate as a regular system 
@@ -503,7 +552,7 @@ private:
         } 
     }
 
-    implementation* impl_;
+    implementation* impl_ = nullptr;
     bool awaited_ = false;
 };
 
@@ -550,28 +599,28 @@ struct awaitable : public base_awaitable<LOCK> {
 
     typedef T value_type;
 
+    awaitable() = delete;
+    awaitable(const awaitable<T,LOCK>& rhs) = delete;
+    awaitable(awaitable<T,LOCK>&& rhs) = default;
+
     template <typename IMPLEMENTATION>
-    awaitable(IMPLEMENTATION* i) : base_awaitable<LOCK>(i) { }
+    awaitable(IMPLEMENTATION* i) : 
+        base_awaitable<LOCK>(
+            // must be able to cast the implementation to the required parent type
+            dynamic_cast<awaitable<T,LOCK>::implementation*>(i)) 
+    { }
+    
+    awaitable& operator=(const awaitable<T,LOCK>& rhs) = delete;
+    awaitable& operator=(awaitable<T,LOCK>&& rhs) = default;
 
     virtual ~awaitable(){ }
-
-    // construct with an an allocated implementation
-    template <typename IMPLEMENTATION, typename... As>
-    static awaitable<bool> make(As&&... as) 
-    {
-        return {
-            std::unique_ptr<implementation>(
-                static_cast<implementation*>(
-                    new IMPLEMENTATION(std::forward<As>(as)...)))
-        };
-    }
 
     /**
      Return the final result of `awaitable<T>`
      */
     inline T await_resume(){ 
         return dynamic_cast<awaitable<T,LOCK>::implementation&>(
-            this->get_impl()).result_impl();
+            this->impl()).result_impl();
     }
 
     /**
@@ -598,18 +647,18 @@ struct awaitable<void,LOCK> : public base_awaitable<LOCK> {
 
     typedef void value_type;
 
-    template <typename IMPLEMENTATION>
-    awaitable(IMPLEMENTATION* i) : base_awaitable<LOCK>(i) { }
+    awaitable() = delete;
+    awaitable(const awaitable<void,LOCK>& rhs) = delete;
+    awaitable(awaitable<void,LOCK>&& rhs) = default;
 
-    // construct with an an allocated implementation
-    template <typename IMPLEMENTATION, typename... As>
-    static awaitable<void> make(As&&... as) {
-        return {
-            std::unique_ptr<implementation>(
-                static_cast<implementation*>(
-                    new IMPLEMENTATION(std::forward<As>(as)...)))
-        };
-    }
+    template <typename IMPLEMENTATION>
+    awaitable(IMPLEMENTATION* i) : 
+        base_awaitable<LOCK>(
+            dynamic_cast<awaitable<void,LOCK>::implementation*>(i)) 
+    { }
+    
+    awaitable& operator=(const awaitable<void,LOCK>& rhs) = delete;
+    awaitable& operator=(awaitable<void,LOCK>&& rhs) = default;
 
     virtual inline ~awaitable() { }
     inline void await_resume(){ }
@@ -618,7 +667,7 @@ struct awaitable<void,LOCK> : public base_awaitable<LOCK> {
 struct base_yield {
     ~base_yield() {
         if(base_coroutine::in() && !awaited_){ 
-            coroutine_did_not_co_await(this); 
+            detail::coroutine_did_not_co_await(this); 
         }
     }
 
@@ -653,7 +702,7 @@ struct yield : public base_yield {
     inline T await_resume() { return std::move(t); }
 
     inline operator T() {
-        if(base_coroutine::in()) { coroutine_did_not_co_await(this); }
+        if(base_coroutine::in()) { detail::coroutine_did_not_co_await(this); }
         return await_resume(); 
     }
 

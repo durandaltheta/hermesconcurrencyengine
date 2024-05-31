@@ -3,7 +3,12 @@
 #ifndef __HERMES_COROUTINE_ENGINE_CIRCULAR_BUFFER__
 #define __HERMES_COROUTINE_ENGINE_CIRCULAR_BUFFER__
 
-#include <vector>
+// c++
+#include <vector> 
+#include <exception> 
+
+// local
+#include "loguru.hpp"
 
 namespace hce {
 
@@ -13,20 +18,26 @@ namespace hce {
 template <typename T>
 struct circular_buffer {
     struct push_on_full : public std::exception {
-        const char* what() const { 
-            return "Cannot call push() when the buffer is full"; 
+        const char* what() const noexcept { 
+            const char* s = "cannot call push() when the buffer is full";
+            LOG_F(ERROR, s);
+            return s; 
         }
     };
 
     struct front_on_empty : public std::exception {
-        const char* what() const { 
-            return "Cannot call front() when the buffer is empty"; 
+        const char* what() const noexcept { 
+            const char* s = "cannot call front() when the buffer is empty"; 
+            LOG_F(ERROR, s);
+            return s;
         }
     };
 
     struct pop_on_empty : public std::exception {
-        const char* what() const { 
-            return "Cannot call pop() when the buffer is empty"; 
+        const char* what() const noexcept { 
+            const char* s = "cannot call pop() when the buffer is empty"; 
+            LOG_F(ERROR, s);
+            return s;
         }
     };
 
