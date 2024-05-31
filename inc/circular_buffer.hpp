@@ -101,7 +101,10 @@ struct circular_buffer {
     }
 
 private:
-    inline void increment(size_t& idx) { idx = idx+1 < capacity() ? idx+1 : 0; }
+    inline void increment(size_t& idx) { 
+        size_t test_idx = idx + 1;
+        idx = test_idx < capacity() ? test_idx : 0; 
+    }
 
     std::vector<T> buffer_; // the buffer
     size_t size_; // count of used buffer indexes
