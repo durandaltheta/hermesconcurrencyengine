@@ -240,21 +240,23 @@ struct coroutine : public base_coroutine {
     coroutine() = default;
     coroutine(const coroutine<T>&) = delete;
     coroutine(coroutine<T>&& rhs) = default;
-    
-    coroutine(const base_coroutine&) = delete;
-    coroutine(base_coroutine&& rhs) : base_coroutine(std::move(rhs)) { }
-
-    // construct the coroutine from a type erased handle
-    coroutine(std::coroutine_handle<> h) : base_coroutine(std::move(h)) { }
 
     inline coroutine<T>& operator=(const coroutine<T>&) = delete;
     inline coroutine<T>& operator=(coroutine<T>&& rhs) = default;
+   
+    // base coroutine conversions 
+    coroutine(const base_coroutine&) = delete;
+    coroutine(base_coroutine&& rhs) : base_coroutine(std::move(rhs)) { }
+
     inline coroutine<T>& operator=(const base_coroutine&) = delete;
 
     inline coroutine<T>& operator=(base_coroutine&& rhs) {
         *this = coroutine<T>(std::move(rhs));
         return *this;
     }
+
+    // construct the coroutine from a type erased handle
+    coroutine(std::coroutine_handle<> h) : base_coroutine(std::move(h)) { }
 };
 
 template <>
@@ -304,24 +306,23 @@ struct coroutine<void> : public base_coroutine {
     coroutine() = default;
     coroutine(const coroutine<void>&) = delete;
     coroutine(coroutine<void>&& rhs) = default;
-    
-    coroutine(const base_coroutine&) = delete;
-
-    coroutine(base_coroutine&& rhs) : 
-        base_coroutine(std::move(rhs))
-    { }
-
-    // construct the coroutine from a type erased handle
-    coroutine(std::coroutine_handle<> h) : base_coroutine(std::move(h)) { }
 
     inline coroutine<void>& operator=(const coroutine<void>&) = delete;
     inline coroutine<void>& operator=(coroutine<void>&& rhs) = default;
+   
+    // base coroutine conversions 
+    coroutine(const base_coroutine&) = delete;
+    coroutine(base_coroutine&& rhs) : base_coroutine(std::move(rhs)) { }
+
     inline coroutine<void>& operator=(const base_coroutine&) = delete;
 
     inline coroutine<void>& operator=(base_coroutine&& rhs) {
         *this = coroutine<void>(std::move(rhs));
         return *this;
     }
+
+    // construct the coroutine from a type erased handle
+    coroutine(std::coroutine_handle<> h) : base_coroutine(std::move(h)) { }
 };
 
 namespace detail {
