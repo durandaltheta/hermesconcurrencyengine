@@ -3,9 +3,6 @@
 #ifndef __HERMES_COROUTINE_ENGINE_BLOCK__
 #define __HERMES_COROUTINE_ENGINE_BLOCK__ 
 
-// c++
-#include <functional>
-
 // local
 #include "utility.hpp"
 #include "coroutine.hpp"
@@ -14,17 +11,6 @@
 namespace hce {
 namespace detail {
 namespace blocking {
-
-template <typename T>
-inline coroutine<T> op(std::function<T()> f) {
-    co_return f();
-}
-
-template <>
-inline coroutine<void> op(std::function<void()> f) {
-    f();
-    co_return;
-}
 
 struct blocker {
     // block workers implicitly start a scheduler on a new thread during 
@@ -93,9 +79,9 @@ struct blocker {
     block(Callable&& cb, As&&... as) {
         auto wkr = checkout_worker();
         return blocker::awaitable<T>(
-                wkr->sch->await(blocking::op(std::bind(
+                wkr->sch->await(hce::to_coroutine(
                     std::forward<Callable>(cb),
-                    std::forward<As>(as)...))),
+                    std::forward<As>(as)...)),
                 std::move(wkr));
 
     }

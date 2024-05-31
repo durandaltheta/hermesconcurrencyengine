@@ -14,6 +14,7 @@
 #include <functional>
 #include <string>
 #include <sstream>
+#include <functional>
 
 // local 
 #include "atomic.hpp"
@@ -316,6 +317,9 @@ struct coroutine<void> : public base_coroutine {
     }
 };
 
+namespace detail {
+namespace coroutine {
+
 /// thread_local block/unblock functionality
 struct this_thread {
     // get the this_thread object associated with the calling thread
@@ -348,11 +352,43 @@ private:
     std::condition_variable_any cv;
 };
 
-namespace detail {
+template <typename T>
+inline hce::coroutine<T> wrapper(std::function<T()> f) {
+    co_return f();
+}
+
+template <>
+inline hce::coroutine<void> wrapper(std::function<void()> f) {
+    f();
+    co_return;
+}
 
 void coroutine_did_not_co_await(void* awt);
 void awaitable_not_resumed(void* awt, void* hdl);
 
+}
+}
+
+/**
+ @brief wrap an arbitrary Callable and optional arguments as a coroutine<T>
+
+ A utility to wrap any Callable as a coroutine for execution. A Callable is an 
+ invokable object, including function pointers, Functors or lambda.
+
+ The resulting coroutine<T> will not have any special features, when resume()d
+ it will execute cb(as...) and `co_return` the result (if result is non-void). 
+
+ @param cb a Callable
+ @param as arguments to the Callable
+ @return a coroutine<T>
+ */
+template <typename Callable, typename... As>
+auto 
+to_coroutine(Callable&& cb, As&&... as) {
+    return detail::coroutine::wrapper(
+        std::bind(
+            std::forward<Callable>(cb),
+            std::forward<As>(as)...));
 }
 
 /**
@@ -366,7 +402,7 @@ struct base_awaitable {
     struct implementation {
         virtual ~implementation() { 
             if(handle_) {
-                detail::awaitable_not_resumed(this, handle_.address());
+                detail::coroutine::awaitable_not_resumed(this, handle_.address());
 
                 // ensure handle memory is freed
                 handle_.destroy(); 
@@ -455,12 +491,12 @@ struct base_awaitable {
                 base_coroutine::local().reset(std::coroutine_handle<>());
                 lk.unlock();
             } else {
-                atp_ = this_thread::get(); 
-                this_thread::block(lk);
+                atp_ = detail::coroutine::this_thread::get(); 
+                detail::coroutine::this_thread::block(lk);
             }
         }
 
-        this_thread* atp_ = nullptr;
+        detail::coroutine::this_thread* atp_ = nullptr;
         std::coroutine_handle<> handle_;
         base_coroutine::destination destination_;
 
@@ -542,7 +578,7 @@ private:
         if(!awaited_) {
             if(base_coroutine::in()) { 
                 // coroutine failed to `co_await` the awaitable
-                detail::coroutine_did_not_co_await(this); 
+                detail::coroutine::coroutine_did_not_co_await(this); 
             } else if(!await_ready()) { 
                 // if we're here, this awaitable is operating without the 
                 // `co_await` keyword, and needs to operate as a regular system 
@@ -667,7 +703,7 @@ struct awaitable<void,LOCK> : public base_awaitable<LOCK> {
 struct base_yield {
     ~base_yield() {
         if(base_coroutine::in() && !awaited_){ 
-            detail::coroutine_did_not_co_await(this); 
+            detail::coroutine::coroutine_did_not_co_await(this); 
         }
     }
 
@@ -702,7 +738,9 @@ struct yield : public base_yield {
     inline T await_resume() { return std::move(t); }
 
     inline operator T() {
-        if(base_coroutine::in()) { detail::coroutine_did_not_co_await(this); }
+        if(base_coroutine::in()) { 
+            detail::coroutine::coroutine_did_not_co_await(this); 
+        }
         return await_resume(); 
     }
 

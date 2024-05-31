@@ -15,12 +15,13 @@ hce::base_coroutine*& hce::base_coroutine::tl_this_coroutine() {
     return tltc;
 }
 
-hce::this_thread* hce::this_thread::get() {
-    thread_local hce::this_thread tlatt;
+hce::detail::coroutine::this_thread* 
+hce::detail::coroutine::this_thread::get() {
+    thread_local hce::detail::coroutine::this_thread tlatt;
     return &tlatt;
 }
 
-void hce::detail::coroutine_did_not_co_await(void* awt) {
+void hce::detail::coroutine::coroutine_did_not_co_await(void* awt) {
     std::stringstream ss;
     ss << "hce::base_coroutine[0x" 
        << (void*)&(base_coroutine::local())
@@ -30,7 +31,7 @@ void hce::detail::coroutine_did_not_co_await(void* awt) {
     LOG_F(ERROR, ss.str().c_str());
 }
 
-void hce::detail::awaitable_not_resumed(void* awt, void* hdl) {
+void hce::detail::coroutine::awaitable_not_resumed(void* awt, void* hdl) {
     std::stringstream ss;
     ss << "hce::base_awaitable[0x" 
        << awt
