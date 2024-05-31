@@ -8,7 +8,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -O3 -Wall")
 add_subdirectory(googletest)
 
 add_executable(hce_ut 
-    atomic_ut.cpp
+    atomic_ut.cpp 
+    circular_buffer_ut.cpp
 )
 
 target_link_libraries(hce_ut gtest gtest_main hce)

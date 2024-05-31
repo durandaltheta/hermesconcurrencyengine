@@ -65,7 +65,7 @@ add_library(hce STATIC
     ${HCE_SOURCE_FILES}
     ${HCE_HEADER_FILES})
 
-target_include_directories(hce PUBLIC ${HCE_INCLUDE_DIR})
+target_include_directories(hce PUBLIC ${HCE_INCLUDE_DIR} ${LOG_SOURCE_DIR})
 target_link_libraries(hce PRIVATE loguru::loguru)
 
 message("-- HCE LIBRARY COMPILE DEFINES -- ")
@@ -74,7 +74,7 @@ message("-DHCEMINBLOCKPROCS=${HCEMINBLOCKPROCS}")
 target_compile_definitions(
     hce
     PRIVATE 
-    -DHCEMAXPROCS=${HCEMAXPROCS}
     -DHCEMINBLOCKPROCS=${HCEMINBLOCKPROCS})
 
 add_subdirectory(loguru)
+add_subdirectory(tst EXCLUDE_FROM_ALL)
