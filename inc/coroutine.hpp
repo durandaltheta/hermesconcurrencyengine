@@ -68,7 +68,7 @@ struct base_coroutine {
         return *this;
     }
 
-    virtual ~base_coroutine() { }
+    virtual ~base_coroutine() { reset(); }
 
     /// return true if the handle is valid, else false
     inline operator bool() const { return (bool)handle_; }
