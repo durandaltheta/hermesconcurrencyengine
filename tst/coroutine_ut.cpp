@@ -30,6 +30,12 @@ template <typename T>
 inline hce::coroutine<T> co(T* t) {
     co_return *t;
 }
+
+template <typename T>
+inline hce::coroutine<T*> co_ptr(T* t) {
+    co_return t;
+}
+
 }
 }
 
@@ -68,6 +74,16 @@ TEST(coroutine, return_value_erased) {
         EXPECT_EQ(3, co.to_promise<hce::coroutine<int>>().result);
         EXPECT_NE(&i, &co.to_promise<hce::coroutine<int>>().result);
     }
+    {
+        int i = 3;
+        hce::base_coroutine co = test::coroutine::co_ptr(&i);
+        EXPECT_TRUE(co);
+        EXPECT_FALSE(co.done());
+        co.resume();
+        EXPECT_TRUE(co.done());
+        EXPECT_EQ(3, *(co.to_promise<hce::coroutine<int*>>().result));
+        EXPECT_EQ(&i, co.to_promise<hce::coroutine<int*>>().result);
+    }
 
     {
         std::string s = "3";
@@ -78,5 +94,16 @@ TEST(coroutine, return_value_erased) {
         EXPECT_TRUE(co.done());
         EXPECT_EQ("3", co.to_promise<hce::coroutine<std::string>>().result);
         EXPECT_NE(&s, &co.to_promise<hce::coroutine<std::string>>().result);
+    }
+
+    {
+        std::string s = "3";
+        hce::base_coroutine co = test::coroutine::co_ptr(&s);
+        EXPECT_TRUE(co);
+        EXPECT_FALSE(co.done());
+        co.resume();
+        EXPECT_TRUE(co.done());
+        EXPECT_EQ("3", *(co.to_promise<hce::coroutine<std::string*>>().result));
+        EXPECT_EQ(&s, co.to_promise<hce::coroutine<std::string*>>().result);
     }
 }
