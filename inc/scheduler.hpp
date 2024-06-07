@@ -352,9 +352,9 @@ struct scheduler {
         scheduler_is_halted(scheduler* s, const char* method_name) :
             estr([&]() -> std::string {
                 std::stringstream ss;
-                ss << "scheduler[0x" 
+                ss << "hce::scheduler[0x" 
                    << (void*)s
-                   << "] is halted, but operation["
+                   << "] is halted, but operation[hce::scheduler::"
                    << method_name
                    << "] was called";
                 return ss.str();
@@ -407,8 +407,9 @@ struct scheduler {
             /// register a lifecycle pointer to be destroyed at process exit
             inline void registration(std::unique_ptr<lifecycle> lptr) {
                 if(lptr) {
+                    LOG_F(1, "hce::scheduler::lifecycle::manager::registration:[0x%p]",lptr.get());
                     std::lock_guard<hce::spinlock> lk(lk_);
-                    if(!exiting_) { lptrs_.push_back(std::move(lptr)); }
+                    if(!exited_) { lptrs_.push_back(std::move(lptr)); }
                 }
             }
 
@@ -426,17 +427,25 @@ struct scheduler {
 
         private:
             manager(){ std::atexit(manager::atexit); }
+            ~manager() {
+                LOG_F(1, "hce::scheduler::lifecycle::manager::~manager()");
+                exited_ = true;
+            }
 
             static inline void atexit() { manager::instance().exit(); }
 
             inline void exit() {
+                LOG_F(1, "hce::scheduler::lifecycle::manager::exit()");
                 std::lock_guard<hce::spinlock> lk(lk_);
-                exiting_ = true;
-                lptrs_.clear();
+                if(!exited_) {
+                    exited_ = true;
+                    // exit called early, clear data
+                    lptrs_.clear();
+                }
             }
 
             hce::spinlock lk_;
-            bool exiting_ = false;
+            bool exited_ = false;
             std::deque<std::unique_ptr<lifecycle>> lptrs_;
         };
 
@@ -536,6 +545,7 @@ struct scheduler {
     };
 
     ~scheduler() {
+        LOG_F(1, "hce::scheduler::~scheduler()");
         // ensure all tasks are manually deleted
         clear_queues_();
     }
@@ -604,7 +614,9 @@ struct scheduler {
         scheduler* sp = new scheduler();
         std::shared_ptr<scheduler> s(sp);
         s->self_wptr_ = s;
+        LOG_F(1, "hce::scheduler::make::new scheduler[0x%p]",s.get());
         lc = std::unique_ptr<lifecycle>(new lifecycle(s));
+        LOG_F(1, "hce::scheduler::make::new lifecycle:[0x%p]",lc.get());
         return s;
     }
 
@@ -677,7 +689,11 @@ struct scheduler {
     void schedule(A&& a, As&&... as) {
         std::unique_lock<spinlock> lk(lk_);
 
-        if(state_ != halted) { throw scheduler_is_halted(this,"schedule()"); }
+        if(state_ == halted) { 
+            scheduler_is_halted e(this,"schedule()");
+            LOG_F(ERROR, e.what());
+            throw e; 
+        }
 
         schedule_(std::forward<A>(a), std::forward<As>(as)...);
     }
@@ -720,7 +736,11 @@ struct scheduler {
     awt<T> join(hce::co<T> co) {
         std::unique_lock<spinlock> lk(lk_);
 
-        if(state_ != halted) { throw scheduler_is_halted(this,"join()"); }
+        if(state_ == halted) { 
+            scheduler_is_halted e(this,"join()");
+            LOG_F(ERROR, e.what());
+            throw e; 
+        }
 
         auto awt = scheduler::joinable<T>(co);
         schedule_(std::move(co));
@@ -742,7 +762,12 @@ struct scheduler {
     inline awt<void> join(hce::co<void> co) {
         std::unique_lock<spinlock> lk(lk_);
 
-        if(state_ != halted) { throw scheduler_is_halted(this,"join()"); }
+        if(state_ == halted) { 
+            scheduler_is_halted e(this,"join()");
+            LOG_F(ERROR, e.what());
+            throw e; 
+        }
+
         auto awt = scheduler::joinable<void>(co);
         schedule_(std::move(co));
         lk.unlock();
@@ -766,7 +791,11 @@ struct scheduler {
         std::unique_lock<spinlock> lk(lk_);
 
         // ensure state is good and timer is allocated
-        if(state_ != halted) { throw scheduler_is_halted(this,"start"); }
+        if(state_ == halted) { 
+            scheduler_is_halted e(this,"start()");
+            LOG_F(ERROR, e.what());
+            throw e; 
+        }
 
         id = std::make_shared<bool>(false);
         t->set_id(id);

@@ -29,7 +29,7 @@ hce::scheduler& hce::scheduler::global() {
         { 
             std::thread([&]{ sch->install(); }).detach();
         }
-        
+       
         std::shared_ptr<hce::scheduler> sch;
     };
 
