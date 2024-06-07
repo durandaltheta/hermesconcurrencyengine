@@ -6,6 +6,7 @@
 #include <utility>
 #include <functional>
 #include <type_traits>
+#include <deque>
 
 namespace hce {
 namespace detail {

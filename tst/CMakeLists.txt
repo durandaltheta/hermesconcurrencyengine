@@ -9,9 +9,10 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -O3 -Wall")
 add_subdirectory(googletest)
 
 add_executable(hce_ut 
-    #atomic_ut.cpp 
-    #circular_buffer_ut.cpp
+    atomic_ut.cpp 
+    circular_buffer_ut.cpp
     coroutine_ut.cpp
+    scheduler_ut.cpp
 )
 
 target_include_directories(hce_ut PUBLIC ${HCE_INCLUDE_DIR} PRIVATE ${LOG_SOURCE_DIR})
