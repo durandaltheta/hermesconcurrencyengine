@@ -4,6 +4,7 @@
 #define __HERMES_COROUTINE_ENGINE_UTILITY__
 
 #include <utility>
+#include <functional>
 #include <type_traits>
 
 namespace hce {
@@ -40,6 +41,47 @@ struct is_container<
         > : public std::true_type {};
 
 }
+
+/// Callable accepting and returning no arguments
+typedef std::function<void()> thunk;
+
+/**
+ @brief call handlers on object destructor
+
+ It is worth pointing out that `T` can be a reference, like `int&`, or a pointer 
+ `int*`.
+ */
+template <typename T>
+struct cleanup {
+    typedef std::function<void(T)> handler;
+
+    /// construct T
+    template <typename... As>
+    cleanup(As&&... as) : t_(std::forward<As>(as)...) {}
+
+    /// destructor calls all handlers with T
+    ~cleanup() { for(auto& h : handlers_) { h(t_); } }
+
+    /// install handler taking no arguments
+    inline void install(thunk th) { 
+        handlers_.push_back(adaptor{ std::move(th) });
+    }
+
+    /// install handler taking T as an argument
+    inline void install(handler h) { 
+        handlers_.push_back(std::move(h)); 
+    }
+
+private:
+    struct adaptor {
+        inline void operator()(T) { t(); }
+        thunk t;
+    };
+
+    T t_;
+    std::deque<handler> handlers_; 
+};
+
 }
 
 #endif

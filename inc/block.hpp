@@ -3,125 +3,16 @@
 #ifndef __HERMES_COROUTINE_ENGINE_BLOCK__
 #define __HERMES_COROUTINE_ENGINE_BLOCK__ 
 
+// c++
+#include <condition_variable>
+#include <deque>
+
 // local
 #include "utility.hpp"
 #include "coroutine.hpp"
 #include "scheduler.hpp"
 
 namespace hce {
-namespace detail {
-namespace blocking {
-
-struct blocker {
-    // block workers implicitly start a scheduler on a new thread during 
-    // construction and shutdown said scheduler during destruction.
-    struct worker {
-        std::shared_ptr<hce::scheduler> sch;
-        std::thread thd;
-
-        // thread_local value defaults to false
-        static bool& tl_is_block();
-
-        worker() : 
-            // construct the child scheduler with no worker threads
-            sch(hce::scheduler::make()),
-            // spawn a worker thread with a running scheduler, redirecting 
-            // this_scheduler() to the parent scheduler
-            thd(std::thread([](scheduler* sch){ 
-                    // thread_local value is true when executing as a block
-                    // worker thread
-                    worker::tl_is_block() = true;
-                    while(sch->run()) { }; 
-                }, 
-                sch.get()))
-        { }
-
-        ~worker() {
-            if(sch) {
-                sch->halt();
-                thd.join();
-            }
-        }
-    };
-
-    template <typename T>
-    struct awaitable : public hce::awaitable<T> {
-        awaitable(awaitable&& rhs) = default;
-
-        awaitable(hce::awaitable<T>&& a, std::unique_ptr<worker>&& wkr) :
-            hce::awaitable<T>(std::move(a)),
-            wkr_(std::move(wkr)) 
-        { }
-
-        virtual ~awaitable() {
-            if(wkr_) { blocker::instance().checkin_worker(std::move(wkr_)); }
-        }
-        
-        awaitable& operator=(awaitable&& rhs) = default;
-
-    private:
-        std::unique_ptr<worker> wkr_;
-    };
-
-    blocker();
-
-    static blocker& instance();
-
-    inline size_t minimum() const { return min_worker_cnt_; }
-
-    inline size_t count() { 
-        std::unique_lock<spinlock> lk(lk_);
-        return worker_cnt_; 
-    }
-
-    template <typename T, typename Callable, typename... As>
-    awaitable<T>
-    block(Callable&& cb, As&&... as) {
-        auto wkr = checkout_worker();
-        return blocker::awaitable<T>(
-                wkr->sch->await(hce::to_coroutine(
-                    std::forward<Callable>(cb),
-                    std::forward<As>(as)...)),
-                std::move(wkr));
-
-    }
-
-    inline std::unique_ptr<worker> checkout_worker() {
-        std::unique_lock<spinlock> lk(lk_);
-        if(workers_.size()) {
-            auto w = std::move(workers_.front());
-            workers_.pop_front();
-            // return the first available worker
-            return w;
-        }
-
-        // as a fallback generate a new await worker thread
-        ++worker_cnt_;
-        return std::unique_ptr<worker>(new worker);
-    }
-
-    inline void checkin_worker(std::unique_ptr<worker>&& w) {
-        std::unique_lock<spinlock> lk(lk_);
-        if(workers_.size() < min_worker_cnt_) {
-            workers_.push_back(std::move(w));
-        } else { --worker_cnt_; }
-    }
-
-private:
-    spinlock lk_;
-
-    // minimum block() worker thread count
-    const size_t min_worker_cnt_; 
-
-    // current block() worker thread count
-    size_t worker_cnt_; 
-
-    // worker memory
-    std::deque<std::unique_ptr<worker>> workers_;
-};
-
-}
-}
 
 struct blocking {
     /**
@@ -138,7 +29,8 @@ struct blocking {
      reference, because the caller of wait() will be blocked while the Callable 
      is executed.
 
-     This operation will succeed even if the scheduler is halted.
+     This operation will always succeed, because schedulers managed by this 
+     mechanism are self managed and won't halt early.
 
      @param cb a function, Functor, or lambda 
      @param as arguments to cb
@@ -149,20 +41,134 @@ struct blocking {
     call(Callable&& cb, As&&... as) {
         typedef hce::detail::function_return_type<Callable,As...> RETURN_TYPE;
 
-        return detail::blocking::blocker::instance().block<RETURN_TYPE>(
+        return blocking::instance().block_<RETURN_TYPE>(
             std::forward<Callable>(cb),
             std::forward<As>(as)...);
     }
 
-    /// return the current count of wait() managed threads associated with this thread
+    /// return the current count of managed blocking threads
     static inline size_t count() {
-        return detail::blocking::blocker::instance().count();
+        return blocking::instance().count_();
     }
 
-    /// return the minimum count of wait() managed threads
+    /// return the minimum count of managed blocking threads
     static inline size_t minimum() {
-        return detail::blocking::blocker::instance().minimum();
+        return blocking::instance().minimum_();
     }
+
+private:
+    // block workers implicitly start a scheduler on a new thread during 
+    // construction and shutdown said scheduler during destruction.
+    struct worker {
+        worker() : sch_(hce::scheduler::make()) { 
+            std::thread([&]{ sch_->install(); }).detach();
+        }
+
+        // thread_local value defaults to false
+        static bool& tl_is_block();
+
+        // return the scheduler
+        inline hce::scheduler& scheduler() { return *sch_; }
+
+    private:
+        std::shared_ptr<hce::scheduler> sch_;
+    };
+
+    struct contractor {
+        contractor() : 
+            wkr_(blocking::instance().checkout_worker_()) 
+        { }
+
+        ~contractor() { 
+            if(wkr_){ blocking::instance().checkin_worker_(std::move(wkr_)); } 
+        }
+
+        // allow conversion to a thunk
+        inline void operator()(){}
+
+        // return the worker's scheduler
+        inline hce::scheduler& scheduler() { return wkr_->scheduler(); }
+
+    private:
+        std::unique_ptr<worker> wkr_;
+    };
+
+    blocking();
+
+    static blocking& instance();
+
+    inline size_t minimum_() const { return min_worker_cnt_; }
+
+    inline size_t count_() { 
+        std::unique_lock<spinlock> lk(lk_);
+        return worker_cnt_; 
+    }
+
+    template <typename T, typename Callable, typename... As>
+    hce::awt<T>
+    block_(Callable&& cb, As&&... as) {
+        if(!scheduler::in() || worker::tl_is_block()) {
+            /// call cb immediately and return the result
+            return hce::scheduler::joinable<T>(cb(std::forward<As>(as)...));
+        } else {
+            // a contractor checks out a worker thread on construction
+            contractor cr;
+            auto& sch = cr.scheduler();
+
+            // convert our Callable to a coroutine
+            hce::co<T> co = hce::to_coroutine(
+                std::forward<Callable>(cb),
+                std::forward<As>(as)...);
+
+            // install the contractor as a cleanup handler to check in the 
+            // worker when the coroutine goes out of scope
+            co.promise().install(std::move(cr));
+
+            // schedule the coroutine on the worker
+            return sch.join(std::move(co));
+        }
+    }
+
+    inline std::unique_ptr<worker> checkout_worker_() {
+        std::unique_ptr<worker> w;
+
+        std::unique_lock<spinlock> lk(lk_);
+        if(workers_.size()) {
+            // get the first available worker
+            w = std::move(workers_.front());
+            workers_.pop_front();
+            lk.unlock();
+        } else {
+            // as a fallback generate a new await worker thread
+            ++worker_cnt_;
+            w = std::unique_ptr<worker>(new worker);
+        }
+
+        if(scheduler::in()) {
+            // ensure the scheduler is redirected for to the calling thread 
+            w->scheduler().redirect(&(scheduler::local()));
+        }
+
+        return w;
+    }
+
+    inline void checkin_worker_(std::unique_ptr<worker>&& w) {
+        std::unique_lock<spinlock> lk(lk_);
+        if(workers_.size() < min_worker_cnt_) {
+            workers_.push_back(std::move(w));
+        } else { --worker_cnt_; }
+    }
+
+    spinlock lk_;
+
+    // minimum block() worker thread count
+    const size_t min_worker_cnt_; 
+
+    // current block() worker thread count
+    size_t worker_cnt_; 
+
+    // worker memory
+    std::deque<std::unique_ptr<worker>> workers_;
 };
 
 }

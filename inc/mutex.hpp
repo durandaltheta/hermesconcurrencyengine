@@ -13,6 +13,15 @@
 
 namespace hce {
 
+// a wrapper awaitable
+struct awt_lock : public hce::awt<void> {
+    awt_lock(hce::awt<bool>) : 
+        awt_(blocking::call([=]() mutable { ((Lock2*)lk)->lock(); })
+    { }
+
+    hce::awt<bool> awt_;
+};
+
 /**
  @brief a united coroutine and non-coroutine mutex 
  */
@@ -37,9 +46,9 @@ struct mutex {
         const std::string estr;
     };
 
-    /// lock the mutex
-    inline awaitable<void> lock() {
-        return awaitable<void>(new lock_awt>(this));
+    /// lock the mutex, returning true if the lock operation succeeded
+    inline awt<void> lock() {
+        return awt<void>(new lock_awt>(this));
     }
    
     /// return true if the mutex is successfully locked, else false
@@ -59,7 +68,7 @@ struct mutex {
         if(acquired_) {
             acquired_ = false;
             if(blocked_queue_.size()) {
-                blocked_queue_.front()->resume(nullptr);
+                blocked_queue_.front()->resume((void*)1);
                 blocked_queue_.pop_front();
             }
         }
@@ -67,23 +76,26 @@ struct mutex {
     }
 
 private:
-    struct lock_awt : protected awaitable<void>::implementation {
-        lock_awt(hce::mutex* parent) : parent_(parent) { }
+    struct acquire : 
+        public hce::scheduler::reschedule<
+            hce::awaitable::lockable<
+                hce::awt<void>::interface,
+                hce::spinlock>>
+    {
+        acquire(hce::mutex* parent) : 
+            hce::awaitable::lockable<
+                hce::awt<void>::interface,
+                hce::spinlock>(parent->slk_,false),
+            parent_(parent) 
+        { }
 
-    protected:
-        inline std::unique_lock<spinlock>& get_lock() { return lk_; }
-        inline bool ready_impl() { return parent_->lock_(this); }
-        inline void resume_impl(void* m) { }
-    
-        inline base_coroutine::destination acquire_destination() {
-            return scheduler::reschedule{ scheduler::local() };
-        }
+        inline bool on_ready() { return parent_->lock_(this); }
+        inline void on_resume(void* m) { }
 
         hce::mutex* parent_;
-        std::unique_lock<spinlock> lk_(parent_->slk_);
     };
 
-    inline bool lock_(lock_awt* lw) {
+    inline bool lock_(acquire* lw) {
         if(acquired_) {
             blocked_queue_.push_back(lw);
             return false;
@@ -95,9 +107,27 @@ private:
 
     hce::spinlock slk_;
     bool acquired_;
-    std::deque<lock_awt*> blocked_queue_;
-    friend struct lock_awt;
+    std::deque<acquire*> blocked_queue_;
+    friend struct acquire;
 };
+
+namespace detail {
+namespace unique_lock {
+
+/// safely lock any lockable type
+template <typename Lock>
+static inline hce::awt<void> lock_impl(void* lk) {
+    return blocking::call([=]() mutable { ((Lock*)lk)->lock(); }
+}
+
+/// more efficiently lock hce::mutex
+template <>
+static inline hce::awt<void> lock_impl<hce::mutex>(void* mtx) {
+    return ((hce::mutex*)mtx)->lock();
+}
+
+}
+}
 
 /**
  @brief a united coroutine and non-coroutine unique_lock 
@@ -126,17 +156,23 @@ struct unique_lock {
     /// construct a unique_lock which assumes it has acquired the mutex
     unique_lock(Lock& mtx, std::adopt_lock_t t) : acquired_(true) { }
 
-    /// construct a unique_lock which has acquired the mutex
-    static inline awaitable<unique_lock<Lock>> make(Lock& mtx) {
-        return awaitable<unique_lock<Lock>>(new acquire(mtx));
+    /**
+     @brief construct a unique_lock which has acquired the mutex
+     */
+    static inline awt<hce::unique_lock<Lock>> make(Lock& mtx) {
+        typedef hce::unique_lock<Lock> T;
+        auto co = acquire::op(&mtx);
+        auto awt = hce::scheduler::joinable<T>(co);
+        schedule(std::move(co)); 
+        return awt;
     }
 
     ~unique_lock() { if(acquired_) { unlock(); } }
 
     /// return an awaitable to lock the Lock
-    inline awaitable<void> lock() { 
+    inline awt<void> lock() { 
         acquired_ = true;
-        return lock_op_(mtx_); 
+        return detail::mutex::lock_impl<Lock>(mtx_); 
     }
 
     inline bool try_lock() { return mtx_->try_lock(); }
@@ -158,52 +194,16 @@ struct unique_lock {
     inline operator bool() { return owns_lock(); }
 
 private:
-    struct acquire : public hce::awaitable<unique_lock<Lock>>::implementation {
-        acquire(Lock& mtx) : mtx_(&mtx) { }
-
-    protected:
-        inline std::unique_lock<hce::spinlock>& get_lock() { return lk_; }
-
-        inline bool ready_impl() {
-            schedule(acquire::op(lock_op_, mtx_, this));
-            return false;
-        }
-
-        inline void resume_impl(void* m) { 
-            res_lk_ = unique_lock<Lock>(*mtx_, std::adopt_lock_t);
-        }
-
-        inline unique_lock result_impl() { return std::move(res_lk_); }
-
-    private:
-        static inline hce::coroutine<void> op(
-                hce::awaitable<void> (*lock_op)(Lock*), 
-                Lock* lk, 
-                acquire* a) {
-            co_await lock_op(lk);
+    struct acquire {
+        static inline hce::co<hce::unique_lock<Lock>> op(Lock* lk, acquire* a) {
+            // block until locked
+            co_await detail::mutex::lock_impl<Lock>(lk);
             a->resume(nullptr);
         }
-
-        hce::spinlock slk_;
-        std::unique_lock<spinlock> lk_(slk_);
-        Lock* mtx_;
-        hce::unique_lock<Lock> res_lk_;
     };
-
-    /// safely lock any lockable type
-    template <typename Lock2>
-    static inline awaitable<void> lock_op_impl(void* lk) {
-        return blocking::call([&]{ ((Lock2*)lk)->lock(); });
-    }
-
-    /// more efficiently lock hce::mutex
-    static inline awaitable<void> lock_op_impl<hce::mutex>(void* mtx) {
-        return ((hce::mutex*)mtx)->lock();
-    }
 
     Lock* mtx_;
     bool acquired_;
-    awaitable<void> (*lock_op_)(Lock*) = lock_op_impl<Lock>;
 };
 
 }

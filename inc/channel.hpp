@@ -18,7 +18,7 @@ namespace hce {
 
 /** 
 A communication object which can represent any object which implements 
-channel<T>::implementation interface.
+channel<T>::interface interface.
 */
 template <typename T>
 struct channel {
@@ -32,18 +32,25 @@ struct channel {
         success /// channel operation succeeded
     };
 
-    /// interface for a channel implementation
-    struct implementation {
-        virtual ~implementation(){}
+    /// interface for a channel implmentation
+    struct interface {
+        virtual ~implmentation(){}
 
         /// type_info of the implementation
         virtual const std::type_info& type_info() const = 0;
 
-        /// maximum capacity of stored value cache 
-        virtual size_t capacity() const = 0;
+        /**
+         @brief maximum capacity of stored value cache 
+
+        Typically:
+        >0 == cache of a specific maximum size
+        0 == cache of no size (direct point to point data transfer)
+        <0 == cache of unlimited size
+         */
+        virtual int capacity() const = 0;
 
         /// current size of the stored value cache
-        virtual size_t size() const = 0;
+        virtual int size() const = 0;
 
         /// return true if implementation is closed, else false
         virtual bool closed() const = 0;
@@ -51,14 +58,14 @@ struct channel {
         /// close the implementation, causing future sends/receives to fail
         virtual void close() = 0;
 
-        /// send a lvalue copy
-        virtual hce::awaitable<bool> send(const T& t) = 0;
+        /// send a lvalue copy, awaitable returning true on success, else false
+        virtual hce::awt<bool> send(const T& t) = 0;
 
-        /// send a rvalue copy
-        virtual hce::awaitable<bool> send(T&& t) = 0;
+        /// send a rvalue copy, awaitable returning true on success, else false
+        virtual hce::awt<bool> send(T&& t) = 0;
 
-        /// receive a value
-        virtual hce::awaitable<bool> recv(T& t) = 0;
+        /// receive a value, awaitable returning true on success, else false
+        virtual hce::awt<bool> recv(T& t) = 0;
 
         /// attempt to send a lvalue copy
         virtual hce::yield<result> try_send(const T& t) = 0;
@@ -75,12 +82,13 @@ struct channel {
 
      Specify a LOCK type of `hce::lockfree` to make the implementation lockfree 
      (only safe when all instances of the channel are used from the same system 
-     thread). Lockfree channels are the fastest way to communicate.
+     thread). Lockfree channels are a very fast way to communicate between two 
+     coroutines running on the same scheduler.
      */
     template <typename LOCK=hce::spinlock>
     inline channel<T>& construct() {
-        context = std::make_shared<implementation>(
-            static_cast<implementation*>(
+        context = std::make_shared<interface>(
+            static_cast<interface*>(
                 new unbuffered<LOCK>()));
 
         return *this;
@@ -90,9 +98,9 @@ struct channel {
      @brief construct a channel with an buffered implementation
      */
     template <typename LOCK=hce::spinlock>
-    inline channel<T>& construct(size_t sz) {
-        context = std::make_shared<implementation>(
-            static_cast<implementation*>(
+    inline channel<T>& construct(int sz) {
+        context = std::make_shared<interface>(
+            static_cast<interface*>(
                 new buffered<LOCK>(sz)))
 
         return *this;
@@ -101,13 +109,13 @@ struct channel {
     /**
      @brief construct a channel with a custom implementation
      */
-    inline channel<T>& construct(std::shared_ptr<implementation> i) {
+    inline channel<T>& construct(std::shared_ptr<interface> i) {
         context = std::move(i);
         return *this;
     }
 
     template <typename LOCK=hce::spinlock>
-    static inline channel make(size_t sz = 0) {
+    static inline channel make(int sz = 0) {
         return channel<T>().construct<LOCK>(sz);
     }
 
@@ -124,10 +132,10 @@ struct channel {
     }
 
     /// return the maximum buffer size
-    inline size_t capacity() const { return context->capacity(); }
+    inline int capacity() const { return context->capacity(); }
 
     /// return the number of values in the buffer
-    inline size_t size() const { return context->size(); }
+    inline int size() const { return context->size(); }
 
     /// return if channel is closed
     inline bool closed() const { return context->closed(); }
@@ -137,18 +145,18 @@ struct channel {
 
     /// `co_await`able send operation 
     template <typename T2>
-    inline hce::awaitable<bool> send(T2&& s) {
+    inline hce::awt<bool> send(T2&& s) {
         return context->send(std::forward<T2>(s)); 
     }
 
     /// `co_await`able recv operation
-    inline hce::awaitable<bool> recv(T& r) {
+    inline hce::awt<bool> recv(T& r) {
         return context->recv(r); 
     }
 
     /// `co_await`able try_send operation
     template <typename T2>
-    inline hce::awaitable<bool> try_send(T2&& s) {
+    inline hce::awt<bool> try_send(T2&& s) {
         return context->try_send(std::forward<T2>(s));
     }
 
@@ -185,7 +193,7 @@ struct channel {
     }
 
     template <typename LOCK>
-    struct unbuffered : public implementation {
+    struct unbuffered : public interface {
         unbuffered() : closed_flag_(false) {}
         
         virtual ~unbuffered(){}
@@ -194,8 +202,8 @@ struct channel {
             return typeid(unbuffered); 
         }
 
-        inline size_t capacity() const { return 0; }
-        inline size_t size() const { return 0; }
+        inline int capacity() const { return 0; }
+        inline int size() const { return 0; }
 
         inline bool closed() const {
             std::unique_lock<LOCK> lk(lk_);
@@ -213,15 +221,15 @@ struct channel {
             }
         }
 
-        inline awaitable<bool> send(const T& t) {
+        inline awt<bool> send(const T& t) {
             return send_((void*)t, false);
         }
 
-        inline awaitable<bool> send(T&& t) {
+        inline awt<bool> send(T&& t) {
             return send_((void*)t, true);
         }
 
-        inline awaitable<bool> recv(T& t) {
+        inline awt<bool> recv(T& t) {
             return recv_((void*)t);
         }
 
@@ -239,49 +247,62 @@ struct channel {
 
     private:
         struct send_pair {
+            send_pair() : source_(nullptr), is_rvalue_(false) { }
+
+            send_pair(void* source, bool is_rvalue) : 
+                source_(source), 
+                is_rvalue_(is_rvalue) 
+            { }
+
             inline void send(void* destination) {
-                if(is_rvalue) {
-                    *((T*)destination) = std::move(*((T*)(sp.source))); 
+                if(is_rvalue_) {
+                    *((T*)destination) = std::move(*((T*)(source_))); 
                 } else {
-                    *((T*)destination) = *((const T*)(sp.source)); 
+                    *((T*)destination) = *((const T*)(source_)); 
                 }
             }
 
-            void* source;
-            bool is_rvalue;
+        private:
+            void* source_;
+            bool is_rvalue_;
         };
 
-        inline hce::awaitable<bool> send_(void* s, bool is_rvalue) {
-            struct send_impl : public hce::awaitable<bool>::implementation {
-            protected:
-                inline std::unique_lock<LOCK>& get_lock() { return lk ; }
+        inline hce::awt<bool> send_(void* s, bool is_rvalue) {
+            struct send_interface : 
+                public hce::scheduler::reschedule<
+                    hce::awaitable::lockable::lockfree<
+                        hce::awt<bool>::interface 
+                    >
+                >
+            {
+                send_interface(bool ready, bool success, send_pair sp) :
+                    ready_(ready),
+                    success_(success),
+                    sp_(sp)
+                { }
 
-                inline bool ready() { return ready; }
+                inline bool ready_interface() { return ready_; }
 
-                inline void resume(void* m) {
+                inline void resume_interface(void* m) {
                     if(m) {
-                        sp.send(m);
-                        success = true;
+                        sp_.send(m);
+                        success_ = true;
                     }
-                    else{ success = false; }
+                    else{ success_ = false; }
                 }
 
-                inline bool result() { return success; }
-            
-                inline base_coroutine::destination acquire_destination() {
-                    return scheduler::reschedule{ scheduler::local() };
-                }
+                inline bool result_interface() { return success_; }
 
-                bool ready;
-                bool success;
-                std::unique_lock<LOCK> lk;
-                send_pair sp;
+            private:
+                bool ready_;
+                bool success_;
+                send_pair sp_;
             };
 
             std::unique_lock<LOCK> lk(lk_);
 
             if(closed_flag_) {
-                return hce::awaitable<bool>(new send_impl(true, false));
+                return hce::awt<bool>(new send_interface(true, false, send_pair()));
             }
 
             if(parked_recv_.size()) {
@@ -290,54 +311,59 @@ struct channel {
                 parked_recv_.pop_front();
 
                 // return an awaitable which immediately returns true
-                return hce::awaitable<bool>(new send_impl(true, true));
+                return hce::awt<bool>(new send_interface(true, true, send_pair()));
             } else {
-                auto ai = new send_impl(false, true, std::move(lk), { s, is_rvalue});
+                auto ai = new send_interface(std::move(lk), false, true, send_pair(s, is_rvalue ));
                 parked_send_.push_back(ai);
-                return hce::awaitable<bool>(ai);
+                return hce::awt<bool>(ai);
             }
         }
 
         /// stackless `co_await`able recv operation
-        inline hce::awaitable<bool> recv_(void* r) {
-            struct recv_impl : public hce::awaitable<bool>::implementation {
-            protected:
-                inline std::unique_lock<LOCK>& get_lock() { return lk ; }
-                inline bool ready() { return ready; }
+        inline hce::awt<bool> recv_(void* r) {
+            struct recv_interface : 
+                public hce::scheduler::reschedule<
+                    hce::awaitable::lockable::lockfree<
+                        hce::awt<bool>::interface 
+                    >
+                >
+            {
+                send_interface(bool ready, bool success, void* r) :
+                    ready_(ready),
+                    success_(success),
+                    r_(r)
+                { }
 
-                inline void resume(void* m) {
+                inline bool ready_interface() { return ready; }
+
+                inline void resume_interface(void* m) {
                     if(m) {
-                        ((send_pair*)m)->send(r);
-                        success = true;
+                        ((send_pair*)m)->send(r_);
+                        success_ = true;
                     }
-                    else { success = false; }
+                    else { success_ = false; }
                 }
 
-                inline bool result() { return success; }
-            
-                inline base_coroutine::destination acquire_destination() {
-                    return scheduler::reschedule{ scheduler::local() };
-                }
+                inline bool result_interface() { return success_; }
 
-                bool ready;
-                bool success;
-                std::unique_lock<LOCK> lk;
-                void* r; // pointer to receiver memory
+                bool ready_;
+                bool success_;
+                void* r_; // pointer to receiver memory
             };
 
             std::unique_lock<LOCK> lk(lk_);
 
             if(closed_flag_) { 
-                return hce::awaitable<bool>(new recv_impl(true, false));
+                return hce::awt<bool>(new recv_interface(true, false, nullptr));
             } else if(parked_send_.size()) {
                 parked_send_.front()->resume(r);
 
                 // return an awaitable which immediately returns true
-                return hce::awaitable<bool>(new recv_impl(true, true));
+                return hce::awt<bool>(new recv_interface(true, true, nullptr));
             } else {
-                auto ai = new recv_impl(false, true, std::move(lk), r);
+                auto ai = new recv_interface(false, true, r);
                 parked_send_.push_back(ai);
-                return hce::awaitable<bool>(ai);
+                return hce::awt<bool>(ai);
             }
         }
         
@@ -371,32 +397,32 @@ struct channel {
 
         mutable LOCK lk_;
         bool closed_flag_;
-        std::deque<awaitable<bool>::implementation*> parked_send_;
-        std::deque<awaitable<bool>::implementation*> parked_recv_;
+        std::deque<awt<bool>::interface*> parked_send_;
+        std::deque<awt<bool>::interface*> parked_recv_;
     };
 
     template <typename LOCK>
-    struct buffered : public implementation {
+    struct buffered : public interface {
         virtual ~buffered(){}
 
-        buffered(size_t sz) { }
+        buffered(int sz) : buf_(sz < 0 ? (size_t)1 : (size_t)sz) { }
 
         inline const std::type_info& type_info() const {
             return typeid(buffered); 
         }
 
-        inline size_t capacity() const {
-            std::unique_lock<LOCK> lk(lk_);
-            return buf_.capacity();
+        inline int capacity() const {
+            std::lock_guard<LOCK> lk(lk_);
+            return (int)buf_.capacity();
         }
 
         inline size_t size() const {
-            std::unique_lock<LOCK> lk(lk_);
-            return buf_.size();
+            std::lock_guard<LOCK> lk(lk_);
+            return (int)buf_.size();
         }
 
         inline bool closed() const {
-            std::unique_lock<LOCK> lk(lk_);
+            std::lock_guard<LOCK> lk(lk_);
             return closed_flag_;
         }
 
@@ -411,15 +437,15 @@ struct channel {
             }
         }
 
-        inline awaitable<bool> send(const T& t) {
+        inline awt<bool> send(const T& t) {
             return send_((void*)t, false);
         }
 
-        inline awaitable<bool> send(T&& t) {
+        inline awt<bool> send(T&& t) {
             return send_((void*)t, true);
         }
 
-        inline awaitable<bool> recv(T& t) {
+        inline awt<bool> recv(T& t) {
             return recv_((void*)t);
         }
 
@@ -451,40 +477,45 @@ struct channel {
             bool is_rvalue;
         };
 
-        inline hce::awaitable<bool> send_(void* s, bool is_rvalue) {
-            struct send_impl : public hce::awaitable<bool>::implementation {
-            protected:
-                inline std::unique_lock<LOCK>& get_lock() { return lk ; }
-                inline bool ready() { return ready; }
+        inline hce::awt<bool> send_(void* s, bool is_rvalue) {
+            struct send_interface : 
+                public hce::scheduler::reschedule<
+                    hce::awaitable::lockable::lockfree<
+                        hce::awt<bool>::interface 
+                    >
+                >
+            {
+                send_interface(bool ready, bool success, send_pair sp) :
+                    ready_(ready),
+                    success_(success),
+                    sp_(sp)
+                { }
+
+                inline bool ready() { return ready_; }
 
                 inline void resume(void* m) {
                     if(m) {
-                        s.send(m);
-                        success = true;
+                        sp_.send(m);
+                        success_ = true;
                     }
-                    else { success = false; }
+                    else { success_ = false; }
                 }
 
-                inline bool result() { return success; }
-            
-                inline base_coroutine::destination acquire_destination() {
-                    return scheduler::reschedule{ scheduler::local() };
-                }
+                inline bool result() { return success_; }
 
-                bool ready;
-                bool success;
-                std::unique_lock<LOCK> lk;
-                send_pair s; 
+                bool ready_;
+                bool success_;
+                send_pair sp_; 
             };
 
             std::unique_lock<LOCK> lk(lk_);
 
             if(closed_flag_) {
-                return hce::awaitable<bool>(new send_impl(true, false));
+                return hce::awt<bool>(new send_interface(true, false));
             } else if(buf_.full()) {
-                auto ai = new send_impl(false, true, std::move(lk), { s, is_rvalue});
+                auto ai = new send_interface(false, true, std::move(lk), { s, is_rvalue});
                 parked_send_.push_back();
-                return hce::awaitable<bool>(ai);
+                return hce::awt<bool>(ai);
             } else {
                 send_pair sp{s,is_rvalue};
                 sp.send((void*)&buf_);
@@ -495,47 +526,52 @@ struct channel {
                 }
 
                 // return an awaitable which immediately returns true
-                return hce::awaitable<bool>(new send_impl>(true, true));
+                return hce::awt<bool>(new send_interface(true, true));
             }
         }
 
         /// stackless `co_await`able recv operation
-        inline hce::awaitable<bool> recv_(void* r) {
-            struct recv_impl : public hce::awaitable<bool>::implementation {
-            protected:
-                inline std::unique_lock<LOCK>& get_lock() { return lk ; }
-                inline bool ready() { return ready; }
+        inline hce::awt<bool> recv_(void* r) {
+            struct recv_interface : 
+                public hce::scheduler::reschedule<
+                    hce::awaitable::lockable::lockfree<
+                        hce::awt<bool>::interface 
+                    >
+                >
+            {
+                recv_interface(bool ready, bool success, void* r) :
+                    ready_(ready),
+                    success_(success),
+                    r_(r)
+                { }
+
+                inline bool ready() { return ready_; }
 
                 inline void resume(void* m) {
                     if(m) {
                         auto b = (circular_buffer<T>*)m;
-                        *((T*)r) = std::move(b->front());
+                        *((T*)r_) = std::move(b->front());
                         b->pop();
-                        success = true;
+                        success_ = true;
                     }
-                    else { success = false; }
+                    else { success_ = false; }
                 }
 
                 inline bool result() { return success; }
-            
-                inline base_coroutine::destination acquire_destination() {
-                    return scheduler::reschedule{ scheduler::local() };
-                }
 
-                bool ready;
-                bool success;
-                std::unique_lock<LOCK> lk;
-                void* r; // pointer to receiver memory
+                bool ready_;
+                bool success_;
+                void* r_; // pointer to receiver memory
             };
 
             std::unique_lock<LOCK> lk(lk_);
 
             if(closed_flag_) {
-                return hce::awaitable<bool>(new recv_impl>(true, false));
+                return hce::awt<bool>(new recv_interface(true, false, nullptr));
             } else if(buf_.empty()) {
-                auto ai = new recv_impl(false, true, std::move(lk), r);
+                auto ai = new recv_interface(false, true, r);
                 parked_send_.push_back(ai);
-                return hce::awaitable<bool>(ai);
+                return hce::awt<bool>(ai);
             } else {
                 *((T*)r) = std::move(buf_.front());
                 buf_.pop();
@@ -546,7 +582,7 @@ struct channel {
                 }
 
                 // return an awaitable which immediately returns true
-                return hce::awaitable<bool>(new recv_impl>(true, true));
+                return hce::awt<bool>(new recv_interface(true, true, nullptr));
             }
         }
         
@@ -591,12 +627,12 @@ struct channel {
         mutable LOCK lk_;
         bool closed_flag_;
         hce::circular_buffer<T> buf_;
-        std::deque<awaitable<bool>::implementation*> parked_send_;
-        std::deque<awaitable<bool>::implementation*> parked_recv_;
+        std::deque<awt<bool>::interface*> parked_send_;
+        std::deque<awt<bool>::interface*> parked_recv_;
     };
 
 private:
-    std::shared_ptr<implementation> context;
+    std::shared_ptr<interface> context;
 };
 
 }

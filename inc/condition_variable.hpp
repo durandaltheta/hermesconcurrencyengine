@@ -28,52 +28,51 @@ struct condition_variable_any {
     condition_variable_any& operator=(condition_variable_any&&) = delete;
 
     template <typename Lock>
-    awaitable<bool> wait(hce::unique_lock<Lock>& lk) {
+    hce::awt<bool> wait(hce::unique_lock<Lock>& lk) {
         // a simple awaitable to block this coroutine
-        struct awt : protected hce::awaitable<void>::implementation,
-                     public resumable {
-            // inherit the std::unique_lock from the coroutine
-            awt(std::unique_lock<spinlock>&& lk) : lk_(std::move(lk) { }
+        struct ai : 
+            public hce::scheduler::reschedule<
+                hce::awaitable::lockable<
+                    hce::awt<bool>::interface,
+                    std::unique_lock<hce::spinlock>>>
+        {
 
-            static inline hce::coroutine<void> op(
+            // inherit the std::unique_lock from the coroutine
+            ai(std::unique_lock<spinlock>&& lk) : 
+                hce::scheduler::reschedule<
+                    hce::awaitable::lockable<
+                        hce::awt<bool>::interface,
+                        std::unique_lock<hce::spinlock>>>(std::move(lk), true)
+            { }
+
+            static inline hce::co<void> op(
                     hce::condition_variable& cv,
                     hce::unique_lock<Lock>& user_lk) {
-
                 // acquire the condition_variable lock and interleave locks
                 std::unique_lock<hce::spinlock> lk(cv.lk_);
                 user_lk.unlock();
 
-                auto a = new awt(std::move(lk));
-                cv.blocked_queue_.push_back(a);
+                auto a = new ai(std::move(lk));
+                cv.blocked_queue_.push_back({ a, [a]{ a->resume(nullptr); }});
 
                 // block until resume() is called by notify operation
-                co_await awaitable<void>( 
-                    std::unique_ptr<awaitable<void>::implementation>(a));
+                co_await hce::awt<void>(a);
 
                 // reacquire the user lock
                 co_await user_lk.lock();
             }
 
-        protected:
-            inline std::unique_lock<hce::spinlock>& get_lock() { return lk_; }
-            inline bool ready_impl() { return false; }
-            inline void resume_impl(void* m) { }
-        
-            inline base_coroutine::destination acquire_destination() {
-                return scheduler::reschedule{ scheduler::local() };
-            }
-
-        private:
-            std::unique_lock<hce::spinlock> lk_(lf_);
+            inline bool on_ready() { return false; }
+            inline void on_resume(void* m) { }
         };
 
-        return hce::await(awt::op(this, &user_lk));
+        return hce::join(awt::op(this, &user_lk));
     }
 
     template <typename Lock, class Pred>
-    awaitable<bool> wait(hce::unique_lock<Lock>& lk, Pred p) {
+    hce::awt<bool> wait(hce::unique_lock<Lock>& lk, Pred p) {
         struct awt {
-            static inline hce::coroutine<void> op(
+            static inline hce::co<void> op(
                     hce::condition_variable& cv,
                     hce::unique_lock<Lock>& lk,
                     const std::chrono::steady_clock::duration& d,
@@ -82,32 +81,39 @@ struct condition_variable_any {
             }
         };
 
-        return hce::await(awt::op(*this, lk, dur, std::move(p)));
+        return hce::join(awt::op(*this, lk, dur, std::move(p)));
     }
 
     template <typename Lock>
-    awaitable<std::optional<std::cv_status>> wait_for(
+    hce::awt<std::optional<std::cv_status>> wait_for(
             hce::unique_lock<Lock>& lk, 
             const std::chrono::steady_clock::duration d) {
         return wait_until(lk, timer::now() + d);
     }
     
     template <typename Lock, class Pred>
-    awaitable<bool> wait_for(
+    hce::awt<bool> wait_for(
             hce::unique_lock<Lock>& lk, 
             const std::chrono::steady_clock::duration d,
             Pred p) {
-        struct awt : protected awaitable<bool>::implementation,
-                     public resumable {
-            awt(hce::condition_variable& cv,
+        struct ai : 
+            public hce::scheduler::reschedule<
+                hce::awaitable::lockable<
+                    hce::awt<bool>::interface,
+                    hce::spinlock>>
+        {
+            ai(hce::condition_variable& cv,
                 hce::unique_lock<Lock>& user_lk,
                 const std::chrono::steady_clock::duration d,
                 Pred&& p) :
-                lk_(cv.lk_),
+                hce::scheduler::reschedule<
+                    hce::awaitable::lockable<
+                        hce::awt<bool>::interface,
+                        hce::spinlock>>(lk_,false),
                 co_(awt::op(cv, user_lk, d, std::move(p), cv, this))
             { }
 
-            static inline coroutine<void> op(
+            static inline co<void> op(
                     hce::condition_variable& cv,
                     hce::unique_lock<Lock>& lk,
                     const std::chrono::steady_clock::duration& d,
@@ -122,42 +128,35 @@ struct condition_variable_any {
                     } else { break; }
                 }
 
-                a->resume(&res);
+                a->resume((void*)res);
             }
 
-        protected:
-            inline std::unique_lock<spinlock>& get_lock() { return lk_; }
-
-            inline bool ready_impl() { 
+            inline bool on_ready() { 
                 schedule(std::move(co_));
                 return false; 
             }
 
-            inline void resume_impl(void* m) { res_ = *((bool*)m); }
-            inline bool result_impl() { return res_; }
-        
-            inline base_coroutine::destination acquire_destination() {
-                return scheduler::reschedule{ scheduler::local() };
-            }
+            inline void on_resume(void* m) { res_ = (bool)m; }
+            inline bool get_result() { return res_; }
 
         private:
-            std::unique_lock<spinlock> lk_(lf_);
-            hce::coroutine<void> co_;
+            hce::spinlock lk_;
+            hce::co<void> co_;
             bool res_ = false;
         };
 
-        return awaitable<bool>(new awt(*this, lk, dur, std::move(p)));
+        return awt<bool>(new ai(*this, lk, dur, std::move(p)));
     }
 
     template <typename Lock>
-    awaitable<std::optional<std::cv_status>> wait_until(
+    hce::awt<std::optional<std::cv_status>> wait_until(
         hce::unique_lock<Lock>& lk, 
         const std::chrono::steady_clock::time_point tp) {
 
-        struct awt : protected awaitable<std::cv_status>::implementation {
+        struct awt : protected hce::awt<std::cv_status>::impl {
             awt(std::unique_lock<hce::spinlock>&& lk) : lk_(std::move(lk)) { }
 
-            static inline hce::coroutine<std::cv_status> op(
+            static inline hce::co<std::cv_status> op(
                     hce::condition_variable* cv,
                     hce::unique_lock<Lock>& user_lk,
                     std::chrono::steady_clock::time_point tp) {
@@ -217,37 +216,30 @@ struct condition_variable_any {
                             a->resume((void*)0); 
                         });
 
-                cv->blocked_queue_.push_back(&c);
+                cv->blocked_queue_.push_back({ &c, [cp=&c]{ cp->resume(nullptr); }});
 
                 // move the lock to the awaitable
                 auto a = new awt(std::move(lk));
 
                 // block until resume() is called by a timer operation
-                auto status = co_await awaitable<std::cv_status>(a);
+                auto status = co_await hce::awt<std::cv_status>(a);
 
                 // reacquire user lock after we are resumed
                 co_await user_lk.lock();
 
                 // return the final result to the coroutine promise which will 
                 // be forwarded by the coroutine's cleanup handler to the 
-                // awaitable returned by await()
+                // awaitable returned by join()
                 co_return status;
             }
 
-        protected:
-            inline std::unique_lock<hce::spinlock>& get_lock() { return lk_; }
+            inline bool on_ready() { return false; }
+            inline void on_resume(void* m) { res_ = *((bool*)m); }
 
-            inline bool ready_impl() { return false; }
-            inline void resume_impl(void* m) { res_ = *((bool*)m); }
-
-            inline std::cv_status result_impl() { 
+            inline std::cv_status get_result() { 
                 return res_ 
                     ? std::cv_status::timeout 
                     : std::cv_status::no_timeout;
-            }
-        
-            inline base_coroutine::destination acquire_destination() {
-                return scheduler::reschedule{ scheduler::local() };
             }
 
             bool res_ = false;
@@ -255,7 +247,7 @@ struct condition_variable_any {
         };
 
         // await a coroutine which executes the operation logic
-        return hce::await(awt::op(this, user_lk, timer::now() + dur, a));
+        return hce::join(awt::op(this, user_lk, timer::now() + dur, a));
     }
     
     inline void notify_one() {
@@ -266,7 +258,7 @@ struct condition_variable_any {
             blocked_queue_.pop_front();
 
             lk.unlock();
-            r->resume(nullptr);
+            r.callback();
         }
     }
     
@@ -280,17 +272,17 @@ struct condition_variable_any {
             bq = std::move(blocked_queue_);
         }
 
-        for(auto r : bq) { r->resume(nullptr); }
+        for(auto r : bq) { r.callback(); }
     }
 
 private:
-    // a unified and limited interface for awaitables in the blocked queue
     struct resumable {
-        virtual void resume(nullptr) = 0;
+        void* key;
+        std::function<void()> callback;
     };
 
     spinlock slk_;
-    std::deque<resumable*> blocked_queue_;
+    std::deque<resumable> blocked_queue_;
 };
 
 /**
@@ -303,30 +295,30 @@ struct condition_variable {
     condition_variable& operator=(const condition_variable&) = delete;
     condition_variable& operator=(condition_variable&&) = delete;
     
-    inline awaitable<bool> wait(hce::unique_lock<hce::mutex>& lk) {
+    inline hce::awt<bool> wait(hce::unique_lock<hce::mutex>& lk) {
         return cv_.wait(lk);
     }
 
     template <class Pred>
-    awaitable<bool> wait(hce::unique_lock<hce::mutex>& lk, Pred&& p) {
+    hce::awt<bool> wait(hce::unique_lock<hce::mutex>& lk, Pred&& p) {
         return cv_.wait(lk, p);
     }
 
-    inline awaitable<std::optional<std::cv_status>> wait_for(
+    inline hce::awt<std::optional<std::cv_status>> wait_for(
             hce::unique_lock<hce::mutex>& lk, 
             const std::chrono::steady_clock::duration& d) {
         return cv_.wait_for(lk, d);
     }
     
     template <class Pred>
-    awaitable<bool> wait_for(
+    hce::awt<bool> wait_for(
             hce::unique_lock<hce::mutex>& lk, 
             const std::chrono::steady_clock::duration& d,
             Pred p) {
         return cv_.wait_for(lk, d, p);
     }
 
-    inline awaitable<std::optional<std::cv_status>> wait_until(
+    inline hce::awt<std::optional<std::cv_status>> wait_until(
             hce::unique_lock<hce::mutex>& lk, 
             const std::chrono::steady_clock::time_point& tp) {
         return cv_.wait_until(lk, tp);
