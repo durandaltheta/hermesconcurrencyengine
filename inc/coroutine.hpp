@@ -115,10 +115,10 @@ struct coroutine {
      return the promise.
 
      Will need to call this on a coroutine to get the actual promise. When 
-     expecting coroutine<T>:
+     expecting co<T>:
      ```
-     hce::coroutine my_co = hce::coroutine<T>();
-     hce::coroutine<T>::promise_type& my_promise = my_co.to_promise<hce::coroutine<T>>();
+     hce::coroutine my_co = hce::co<T>();
+     hce::co<T>::promise_type& my_promise = my_co.to_promise<hce::co<T>>();
      ```
      */
     template <typename COROUTINE>
@@ -205,7 +205,7 @@ struct co : public coroutine {
             result = std::forward<TSHADOW>(t);
         }
 
-        /// install a coroutine<T>::promise_type::cleanup::handler
+        /// install a co<T>::promise_type::cleanup::handler
         template <typename HANDLER>
         inline void install(HANDLER&& hdl) {
             if(!cleanup_) { 
@@ -217,7 +217,7 @@ struct co : public coroutine {
             cleanup_->install(std::forward<HANDLER>(hdl));
         }
 
-        /// the result of the coroutine<T>
+        /// the result of the co<T>
         T result; 
 
     private: 
@@ -265,7 +265,7 @@ struct co<void> : public coroutine {
 
         inline void return_void() {}
 
-        /// install a coroutine<T>::promise_type::cleanup::handler
+        /// install a co<T>::promise_type::cleanup::handler
         template <typename HANDLER>
         inline void install(HANDLER&& hdl) {
             if(!cleanup_) { 
@@ -383,18 +383,18 @@ private:
 }
 
 /**
- @brief wrap an arbitrary Callable and optional arguments as a coroutine<T>
+ @brief wrap an arbitrary Callable and optional arguments as a co<T>
 
  A utility to wrap any Callable as a coroutine for execution. A Callable is any 
  invokable object such as function pointers, Functors or lambdas.
 
- The resulting coroutine<T> will not have any special features, when resume()d
+ The resulting co<T> will not have any special features, when resume()d
  it will execute cb(as...) and `co_return` the result (if result is non-void). 
  This allows execution of arbitary code as a coroutine if necessary.
 
  @param cb a Callable
  @param as arguments to the Callable
- @return a coroutine<T>
+ @return a co<T>
  */
 template <typename Callable, typename... As>
 auto 

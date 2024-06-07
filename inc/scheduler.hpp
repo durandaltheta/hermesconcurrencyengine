@@ -218,7 +218,6 @@ struct timer {
         finalize_(std::forward<As>(as)...);
     }
 
-
     /// call cancel handler
     ~timer(){ if(!timeout_) { cancel_(); } }
 
@@ -489,9 +488,13 @@ struct scheduler {
             }
 
             /// install a handler
-            template <typename HANDLE>
-            inline void install(HANDLE h) {
-                hdls_.push_back(std::forward<HANDLE>(h));
+            inline void install(hce::thunk th) {
+                hdls_.push_back([th=std::move(th)](hce::scheduler&){ th(); });
+            }
+
+            /// install a handler
+            inline void install(handler h) {
+                hdls_.push_back(std::move(h));
             }
 
             /// call all handlers with the given scheduler
@@ -1060,7 +1063,7 @@ private:
     inline void suspend_() {
         std::unique_lock<spinlock> lk(lk_);
 
-        if(state_ == halted) { 
+        if(state_ != halted) { 
             state_ = suspended;
             // wakeup scheduler if necessary from waiting for tasks to force 
             // run() to exit
