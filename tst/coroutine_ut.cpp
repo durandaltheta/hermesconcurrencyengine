@@ -4,7 +4,9 @@
 #include "coroutine.hpp"
 
 #include <string>
+#include <sstream>
 #include <vector>
+#include <exception>
 
 #include <gtest/gtest.h>  
 
@@ -186,7 +188,10 @@ TEST(coroutine, co_await_void) {
 
             static inline hce::co<void>op1(std::vector<ai*> as) {
                 for(auto& a : as) {
-                    co_await hce::awt<void>(a);
+                    hce::awt<void> awt = hce::awt<void>(a);
+                    EXPECT_NE(nullptr, awt.address());
+                    co_await hce::awt<void>(std::move(awt));
+                    EXPECT_EQ(nullptr, awt.address());
                 }
             }
 
@@ -269,8 +274,11 @@ TEST(coroutine, co_await_int) {
             static inline hce::co<void>op1(std::vector<ai*> as) {
                 int i=0;
                 for(auto& a : as) {
-                    int result_i = co_await hce::awt<int>(a);
+                    hce::awt<int> awt = hce::awt<int>(a);
+                    EXPECT_NE(nullptr, awt.address());
+                    int result_i = co_await hce::awt<int>(std::move(awt));
                     EXPECT_EQ(i, result_i);
+                    EXPECT_EQ(nullptr, awt.address());
                     ++i;
                 }
             }
@@ -357,8 +365,11 @@ TEST(coroutine, co_await_string) {
             static inline hce::co<void>op1(std::vector<ai*> as) {
                 int i=0;
                 for(auto& a : as) {
-                    std::string result_i = co_await hce::awt<std::string>(a);
+                    hce::awt<std::string> awt = hce::awt<std::string>(a);
+                    EXPECT_NE(nullptr,awt.address());
+                    std::string result_i = co_await hce::awt<std::string>(std::move(awt));
                     EXPECT_EQ(std::to_string(i), result_i);
+                    EXPECT_EQ(nullptr,awt.address());
                     ++i;
                 }
             }

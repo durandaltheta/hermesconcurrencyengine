@@ -14,6 +14,7 @@
 #include <functional>
 
 // local 
+#include "loguru.hpp"
 #include "atomic.hpp"
 #include "utility.hpp"
 
@@ -659,13 +660,10 @@ struct awaitable {
                 static_cast<awaitable::interface*>(i)))
     { }
     
-    virtual inline ~awaitable() { if(impl_) { finalize(); } }
+    virtual inline ~awaitable() { finalize(); }
 
-    /// swap awaitables
-    inline void swap(awaitable& rhs) noexcept { std::swap(impl_, rhs.impl_); }
-
-    /// return true if the awaitable has an implementation
-    inline operator bool() { return (bool)impl_; }
+    /// return the address of the implementation
+    inline void* address() const { return impl_.get(); }
 
     /// return a reference to the implementation
     inline interface& implementation() { return *impl_; }
@@ -691,17 +689,19 @@ struct awaitable {
 
     // ensure logic completes before awaitable goes out of scope
     inline void finalize() {
-        if(!(impl_->awaited())) {
-            if(coroutine::in()) { 
-                // coroutine failed to `co_await` the awaitable
-                detail::coroutine::coroutine_did_not_co_await(this); 
-            } else if(!await_ready()) { 
-                // if we're here, this awaitable is operating without the 
-                // `co_await` keyword, and needs to operate as a regular system 
-                // thread blocking call, not a coroutine suspend.
-                await_suspend(std::coroutine_handle<>()); 
-            }
-        } 
+        if(impl_) {
+            if(!(impl_->awaited())) {
+                if(coroutine::in()) { 
+                    // coroutine failed to `co_await` the awaitable
+                    detail::coroutine::coroutine_did_not_co_await(this); 
+                } else if(!await_ready()) { 
+                    // if we're here, this awaitable is operating without the 
+                    // `co_await` keyword, and needs to operate as a regular system 
+                    // thread blocking call, not a coroutine suspend.
+                    await_suspend(std::coroutine_handle<>()); 
+                }
+            } 
+        }
     }
 
 private:
