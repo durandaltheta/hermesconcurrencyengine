@@ -6,26 +6,14 @@
 #include <string>
 #include <vector>
 
-#include <gtest/gtest.h> 
-
-TEST(coroutine, co_return_void) {
-    struct test {
-        static inline hce::co<void> co() {
-            co_return;
-        }
-    };
-
-    {
-        hce::co<void> co = test::co();
-        EXPECT_TRUE(co);
-        EXPECT_FALSE(co.done());
-        co.resume();
-        EXPECT_TRUE(co.done());
-    }
-}
+#include <gtest/gtest.h>  
 
 namespace test {
 namespace coroutine {
+
+inline hce::co<void> co_void() {
+    co_return;
+}
 
 template <typename T>
 inline hce::co<T> co(T* t) {
@@ -38,6 +26,78 @@ inline hce::co<T*> co_ptr(T* t) {
 }
 
 }
+}
+
+TEST(coroutine, address) {
+    hce::co<void> co;
+    EXPECT_EQ(co.address(), co.address());
+    EXPECT_EQ(nullptr, co.address());
+    co = test::coroutine::co_void();
+    EXPECT_EQ(co.address(), co.address());
+    EXPECT_NE(nullptr, co.address());
+    void* old_addr = co.address();
+    co = test::coroutine::co_void();
+    EXPECT_NE(old_addr, co.address());
+}
+
+TEST(coroutine, release) {
+    hce::co<void> co = test::coroutine::co_void();
+    EXPECT_TRUE(co);
+    std::coroutine_handle<> hdl = co.release();
+    EXPECT_FALSE(co);
+    co = hce::co<void>(hdl);
+    EXPECT_TRUE(co);
+}
+
+TEST(coroutine, reset) {
+    {
+        hce::co<void> co = test::coroutine::co_void();
+        EXPECT_TRUE(co);
+        co.reset();
+        EXPECT_FALSE(co);
+    }
+
+    {
+        hce::co<void> co = test::coroutine::co_void();
+        hce::co<void> co2 = test::coroutine::co_void();
+        EXPECT_TRUE(co);
+        EXPECT_TRUE(co2);
+        co.reset(co2.release());
+        EXPECT_TRUE(co);
+        EXPECT_FALSE(co2);
+    }
+}
+
+TEST(coroutine, swap) {
+    hce::co<void> co = test::coroutine::co_void();
+    hce::co<void> co2 = test::coroutine::co_void();
+    EXPECT_TRUE(co);
+    EXPECT_TRUE(co2);
+
+    void* co_addr = co.address();
+    void* co2_addr = co2.address();
+
+    co.swap(co2);
+
+    EXPECT_NE(co_addr, co.address());
+    EXPECT_EQ(co2_addr, co.address());
+    EXPECT_NE(co2_addr, co2.address());
+    EXPECT_EQ(co_addr, co2.address());
+
+    co.swap(co2);
+
+    EXPECT_EQ(co_addr, co.address());
+    EXPECT_NE(co2_addr, co.address());
+    EXPECT_EQ(co2_addr, co2.address());
+    EXPECT_NE(co_addr, co2.address());
+}
+
+TEST(coroutine, co_return_void) {
+    hce::co<void> co = test::coroutine::co_void();
+    EXPECT_TRUE(co);
+    EXPECT_FALSE(co.done());
+    co.resume();
+    EXPECT_TRUE(co.done());
 }
 
 TEST(coroutine, co_return_value) {

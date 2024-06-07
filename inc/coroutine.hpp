@@ -106,6 +106,9 @@ struct coroutine {
     /// return true if the coroutine is done, else false
     inline bool done() const { return handle_.done(); }
 
+    /// return the address of the underlying handle
+    inline void* address() const { return handle_.address(); }
+
     /**
      @brief cast the coroutine's handle to the descendant type's and 
      return the promise.
