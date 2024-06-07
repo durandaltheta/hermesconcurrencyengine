@@ -249,3 +249,179 @@ TEST(coroutine, co_await_void) {
         EXPECT_FALSE(flag);
     }
 }
+
+TEST(coroutine, co_await_int) {
+    {
+        struct ai : 
+            public hce::awaitable::lockable<
+                hce::awt<int>::interface,
+                hce::spinlock>
+        {
+            ai(std::coroutine_handle<>* hdl, bool* ready, int i) : 
+                hce::awaitable::lockable<
+                    hce::awt<int>::interface,
+                    hce::spinlock>(lk_,false),
+                hdl_(hdl),
+                ready_(ready),
+                i_(i)
+            { }
+
+            static inline hce::co<void>op1(std::vector<ai*> as) {
+                int i=0;
+                for(auto& a : as) {
+                    int result_i = co_await hce::awt<int>(a);
+                    EXPECT_EQ(i, result_i);
+                    ++i;
+                }
+            }
+
+            inline bool on_ready() { 
+                if(*ready_) {
+                    *ready_ = false;
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+
+            inline void on_resume(void* m) { }
+            inline int get_result() { return i_; }
+
+            inline void destination(std::coroutine_handle<> hdl) { 
+                *hdl_ = hdl; 
+            }
+
+        private:
+            hce::spinlock lk_;
+            std::coroutine_handle<>* hdl_;
+            bool* ready_;
+            int i_;
+        };
+
+        std::coroutine_handle<> hdl;
+        bool flag=true;
+        hce::co<void> co;
+        std::vector<ai*> as;
+        int i=0;
+
+        EXPECT_EQ(nullptr, hdl.address());
+        EXPECT_FALSE(co);
+
+        as.emplace_back(new ai(&hdl, &flag, i++));
+        as.emplace_back(new ai(&hdl, &flag, i++));
+        co = ai::op1(as);
+
+        EXPECT_EQ(nullptr, hdl.address());
+        EXPECT_TRUE(co);
+        EXPECT_FALSE(co.done());
+        EXPECT_TRUE(flag);
+
+        co.resume();
+
+        EXPECT_EQ(nullptr, hdl.address());
+        EXPECT_FALSE(co);
+        EXPECT_FALSE(flag);
+
+        as[1]->resume(nullptr);
+
+        EXPECT_NE(nullptr, hdl.address());
+        EXPECT_FALSE(co);
+        EXPECT_FALSE(flag);
+
+        co = hce::coroutine(hdl);
+        co.resume();
+
+        EXPECT_NE(nullptr, hdl.address());
+        EXPECT_TRUE(co);
+        EXPECT_TRUE(co.done());
+        EXPECT_FALSE(flag);
+    }
+}
+
+TEST(coroutine, co_await_string) {
+    {
+        struct ai : 
+            public hce::awaitable::lockable<
+                hce::awt<std::string>::interface,
+                hce::spinlock>
+        {
+            ai(std::coroutine_handle<>* hdl, bool* ready, int i) : 
+                hce::awaitable::lockable<
+                    hce::awt<std::string>::interface,
+                    hce::spinlock>(lk_,false),
+                hdl_(hdl),
+                ready_(ready),
+                s_(std::to_string(i))
+            { }
+
+            static inline hce::co<void>op1(std::vector<ai*> as) {
+                int i=0;
+                for(auto& a : as) {
+                    std::string result_i = co_await hce::awt<std::string>(a);
+                    EXPECT_EQ(std::to_string(i), result_i);
+                    ++i;
+                }
+            }
+
+            inline bool on_ready() { 
+                if(*ready_) {
+                    *ready_ = false;
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+
+            inline void on_resume(void* m) { }
+            inline std::string get_result() { return s_; }
+
+            inline void destination(std::coroutine_handle<> hdl) { 
+                *hdl_ = hdl; 
+            }
+
+        private:
+            hce::spinlock lk_;
+            std::coroutine_handle<>* hdl_;
+            bool* ready_;
+            std::string s_;
+        };
+
+        std::coroutine_handle<> hdl;
+        bool flag=true;
+        hce::co<void> co;
+        std::vector<ai*> as;
+        int i=0;
+
+        EXPECT_EQ(nullptr, hdl.address());
+        EXPECT_FALSE(co);
+
+        as.emplace_back(new ai(&hdl, &flag, i++));
+        as.emplace_back(new ai(&hdl, &flag, i++));
+        co = ai::op1(as);
+
+        EXPECT_EQ(nullptr, hdl.address());
+        EXPECT_TRUE(co);
+        EXPECT_FALSE(co.done());
+        EXPECT_TRUE(flag);
+
+        co.resume();
+
+        EXPECT_EQ(nullptr, hdl.address());
+        EXPECT_FALSE(co);
+        EXPECT_FALSE(flag);
+
+        as[1]->resume(nullptr);
+
+        EXPECT_NE(nullptr, hdl.address());
+        EXPECT_FALSE(co);
+        EXPECT_FALSE(flag);
+
+        co = hce::coroutine(hdl);
+        co.resume();
+
+        EXPECT_NE(nullptr, hdl.address());
+        EXPECT_TRUE(co);
+        EXPECT_TRUE(co.done());
+        EXPECT_FALSE(flag);
+    }
+}
