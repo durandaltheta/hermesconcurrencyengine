@@ -1,11 +1,7 @@
 //SPDX-License-Identifier: Apache-2.0
 //Author: Blayne Dennis 
-#include <thread>
-#include <memory>
-#include <string>
-#include <sstream>
-
 #include "loguru.hpp"
+#include "utility.hpp"
 #include "coroutine.hpp"
 #include "scheduler.hpp"
 
@@ -26,19 +22,9 @@ hce::detail::coroutine::this_thread::get() {
 void hce::detail::coroutine::coroutine_did_not_co_await(void* awt) {
     std::stringstream ss;
     ss << "hce::coroutine[0x" 
-       << (void*)&(hce::coroutine::local())
+       << (void*)(hce::coroutine::local().address())
        << "] did not call co_await on an hce::awaitable[0x"
        << awt 
        << "]";
-    LOG_F(ERROR, ss.str().c_str());
-}
-
-void hce::detail::coroutine::awaitable_not_resumed(void* awt, void* hdl) {
-    std::stringstream ss;
-    ss << "hce::awaitable[0x" 
-       << awt
-       << "] was not resumed before being destroyed; it held std::coroutine_handle<>::address()[0x"
-       << hdl 
-       << "]";
-    LOG_F(ERROR, ss.str().c_str());
+    HCE_ERROR_LOG(ss.str().c_str());
 }

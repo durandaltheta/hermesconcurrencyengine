@@ -190,7 +190,7 @@ TEST(coroutine, co_await_void) {
                 for(auto& a : as) {
                     hce::awt<void> awt = hce::awt<void>(a);
                     EXPECT_NE(nullptr, awt.address());
-                    co_await hce::awt<void>(std::move(awt));
+                    co_await std::move(awt);
                     EXPECT_EQ(nullptr, awt.address());
                 }
             }
@@ -276,7 +276,7 @@ TEST(coroutine, co_await_int) {
                 for(auto& a : as) {
                     hce::awt<int> awt = hce::awt<int>(a);
                     EXPECT_NE(nullptr, awt.address());
-                    int result_i = co_await hce::awt<int>(std::move(awt));
+                    int result_i = co_await std::move(awt);
                     EXPECT_EQ(i, result_i);
                     EXPECT_EQ(nullptr, awt.address());
                     ++i;
@@ -367,7 +367,7 @@ TEST(coroutine, co_await_string) {
                 for(auto& a : as) {
                     hce::awt<std::string> awt = hce::awt<std::string>(a);
                     EXPECT_NE(nullptr,awt.address());
-                    std::string result_i = co_await hce::awt<std::string>(std::move(awt));
+                    std::string result_i = co_await std::move(awt);
                     EXPECT_EQ(std::to_string(i), result_i);
                     EXPECT_EQ(nullptr,awt.address());
                     ++i;

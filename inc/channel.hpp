@@ -21,7 +21,7 @@ A communication object which can represent any object which implements
 channel<T>::interface interface.
 */
 template <typename T>
-struct channel {
+struct channel : public printable {
     /// template type for channel
     typedef T value_type;
 
@@ -33,8 +33,8 @@ struct channel {
     };
 
     /// interface for a channel implmentation
-    struct interface {
-        virtual ~implmentation(){}
+    struct interface : public printable {
+        virtual ~interface(){}
 
         /// type_info of the implementation
         virtual const std::type_info& type_info() const = 0;
@@ -76,6 +76,18 @@ struct channel {
         /// attempt receive a value
         virtual hce::yield<result> try_recv(T& t) = 0;
     };
+
+    inline const char* nspace() const { return "hce::"; }
+    inline const char* name() const { return "channel"; }
+    inline std::string content() const { return context ? *context : ""; }
+
+    /// string conversion, overrides printable::str()
+    inline const std::string& str() const override {
+        // because coroutine represents a coroutine handle (the 'this' pointer 
+        // is not important for printing) we have to potentially update the 
+        // string with a new memory address
+        return str(context.get());
+    }
 
     /**
      @brief construct a channel with an unbuffered implementation
@@ -194,23 +206,37 @@ struct channel {
 
     template <typename LOCK>
     struct unbuffered : public interface {
-        unbuffered() : closed_flag_(false) {}
+        unbuffered() : closed_flag_(false) { HCE_LOW_CONSTRUCTOR(); }
         
-        virtual ~unbuffered(){}
+        virtual ~unbuffered(){ HCE_LOW_DESTRUCTOR(); }
+
+        inline const char* nspace() const { return "hce::channel::"; }
+        inline const char* name() const { return "unbuffered"; }
 
         inline const std::type_info& type_info() const {
             return typeid(unbuffered); 
         }
 
-        inline int capacity() const { return 0; }
-        inline int size() const { return 0; }
+        inline int capacity() const { 
+            HCE_MIN_METHOD_ENTER("capacity");
+            return 0; 
+        }
+
+        inline int size() const { 
+            HCE_MIN_METHOD_ENTER("size");
+            return 0; 
+        }
 
         inline bool closed() const {
+            HCE_MIN_METHOD_ENTER("closed");
+
             std::unique_lock<LOCK> lk(lk_);
             return closed_flag_;
         }
 
         inline void close() {
+            HCE_LOW_METHOD_ENTER("close");
+
             std::unique_lock<LOCK> lk(lk_);
             if(!closed_flag_) {
                 closed_flag_ = true;
@@ -222,26 +248,32 @@ struct channel {
         }
 
         inline awt<bool> send(const T& t) {
+            HCE_LOW_METHOD_ENTER("send",(void*)&t);
             return send_((void*)t, false);
         }
 
         inline awt<bool> send(T&& t) {
+            HCE_LOW_METHOD_ENTER("send",(void*)&t);
             return send_((void*)t, true);
         }
 
         inline awt<bool> recv(T& t) {
+            HCE_LOW_METHOD_ENTER("recv",(void*)&t);
             return recv_((void*)t);
         }
 
         inline yield<result> try_send(const T& t) {
+            HCE_LOW_METHOD_ENTER("try_send",(void*)&t);
             return try_send_((void*)t, false);
         }
 
         inline yield<result> try_send(T&& t) {
+            HCE_LOW_METHOD_ENTER("try_send",(void*)&t);
             return try_send_((void*)t, true);
         }
 
         inline yield<result> try_recv(T& t) {
+            HCE_LOW_METHOD_ENTER("try_recv",(void*)&t);
             return recv_((void*)t);
         }
 
@@ -302,7 +334,7 @@ struct channel {
             std::unique_lock<LOCK> lk(lk_);
 
             if(closed_flag_) {
-                return hce::awt<bool>(new send_interface(true, false, send_pair()));
+                return hce::awt<bool>::make(new send_interface(true, false, send_pair()));
             }
 
             if(parked_recv_.size()) {
@@ -311,11 +343,11 @@ struct channel {
                 parked_recv_.pop_front();
 
                 // return an awaitable which immediately returns true
-                return hce::awt<bool>(new send_interface(true, true, send_pair()));
+                return hce::awt<bool>::make(new send_interface(true, true, send_pair()));
             } else {
                 auto ai = new send_interface(std::move(lk), false, true, send_pair(s, is_rvalue ));
                 parked_send_.push_back(ai);
-                return hce::awt<bool>(ai);
+                return hce::awt<bool>::make(ai);
             }
         }
 
@@ -354,16 +386,16 @@ struct channel {
             std::unique_lock<LOCK> lk(lk_);
 
             if(closed_flag_) { 
-                return hce::awt<bool>(new recv_interface(true, false, nullptr));
+                return hce::awt<bool>::make(new recv_interface(true, false, nullptr));
             } else if(parked_send_.size()) {
                 parked_send_.front()->resume(r);
 
                 // return an awaitable which immediately returns true
-                return hce::awt<bool>(new recv_interface(true, true, nullptr));
+                return hce::awt<bool>::make(new recv_interface(true, true, nullptr));
             } else {
                 auto ai = new recv_interface(false, true, r);
                 parked_send_.push_back(ai);
-                return hce::awt<bool>(ai);
+                return hce::awt<bool>::make(ai);
             }
         }
         
@@ -403,7 +435,12 @@ struct channel {
 
     template <typename LOCK>
     struct buffered : public interface {
-        virtual ~buffered(){}
+        buffered() { HCE_LOW_CONSTRUCTOR(); }
+
+        virtual ~buffered(){ HCE_LOW_DESTRUCTOR(); }
+
+        inline const char* nspace() const { return "hce::channel::"; }
+        inline const char* name() const { return "buffered"; }
 
         buffered(int sz) : buf_(sz < 0 ? (size_t)1 : (size_t)sz) { }
 
@@ -412,21 +449,29 @@ struct channel {
         }
 
         inline int capacity() const {
+            HCE_MIN_METHOD_ENTER("capacity");
+
             std::lock_guard<LOCK> lk(lk_);
             return (int)buf_.capacity();
         }
 
         inline size_t size() const {
+            HCE_MIN_METHOD_ENTER("size");
+
             std::lock_guard<LOCK> lk(lk_);
             return (int)buf_.size();
         }
 
         inline bool closed() const {
+            HCE_MIN_METHOD_ENTER("closed");
+
             std::lock_guard<LOCK> lk(lk_);
             return closed_flag_;
         }
 
         inline void close() {
+            HCE_LOW_METHOD_ENTER("close");
+
             std::unique_lock<LOCK> lk(lk_);
             if(!closed_flag_) {
                 closed_flag_ = true;
@@ -438,26 +483,32 @@ struct channel {
         }
 
         inline awt<bool> send(const T& t) {
+            HCE_LOW_METHOD_ENTER("send",(void*)&t);
             return send_((void*)t, false);
         }
 
         inline awt<bool> send(T&& t) {
+            HCE_LOW_METHOD_ENTER("send",(void*)&t);
             return send_((void*)t, true);
         }
 
         inline awt<bool> recv(T& t) {
+            HCE_LOW_METHOD_ENTER("recv",(void*)&t);
             return recv_((void*)t);
         }
 
         inline yield<result> try_send(const T& t) {
+            HCE_LOW_METHOD_ENTER("try_send",(void*)&t);
             return try_send_((void*)t, false);
         }
 
         inline yield<result> try_send(T&& t) {
+            HCE_LOW_METHOD_ENTER("try_send",(void*)&t);
             return try_send_((void*)t, true);
         }
 
         inline yield<result> try_recv(T& t) {
+            HCE_LOW_METHOD_ENTER("try_recv",(void*)&t);
             return recv_((void*)t);
         }
 
@@ -511,7 +562,7 @@ struct channel {
             std::unique_lock<LOCK> lk(lk_);
 
             if(closed_flag_) {
-                return hce::awt<bool>(new send_interface(true, false));
+                return hce::awt<bool>::make(new send_interface(true, false));
             } else if(buf_.full()) {
                 auto ai = new send_interface(false, true, std::move(lk), { s, is_rvalue});
                 parked_send_.push_back();
@@ -526,7 +577,7 @@ struct channel {
                 }
 
                 // return an awaitable which immediately returns true
-                return hce::awt<bool>(new send_interface(true, true));
+                return hce::awt<bool>::make(new send_interface(true, true));
             }
         }
 
@@ -567,11 +618,11 @@ struct channel {
             std::unique_lock<LOCK> lk(lk_);
 
             if(closed_flag_) {
-                return hce::awt<bool>(new recv_interface(true, false, nullptr));
+                return hce::awt<bool>::make(new recv_interface(true, false, nullptr));
             } else if(buf_.empty()) {
                 auto ai = new recv_interface(false, true, r);
                 parked_send_.push_back(ai);
-                return hce::awt<bool>(ai);
+                return hce::awt<bool>::make(ai);
             } else {
                 *((T*)r) = std::move(buf_.front());
                 buf_.pop();
@@ -582,7 +633,7 @@ struct channel {
                 }
 
                 // return an awaitable which immediately returns true
-                return hce::awt<bool>(new recv_interface(true, true, nullptr));
+                return hce::awt<bool>::make(new recv_interface(true, true, nullptr));
             }
         }
         

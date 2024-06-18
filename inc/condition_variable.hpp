@@ -10,6 +10,7 @@
 #include <optional>
 
 // local
+#include "utility.hpp"
 #include "atomic.hpp"
 #include "coroutine.hpp"
 #include "scheduler.hpp"
@@ -20,12 +21,15 @@ namespace hce {
 /**
  @brief a united coroutine and non-coroutine condition_variable
  */
-struct condition_variable_any {
+struct condition_variable_any : public printable {
     condition_variable_any() = default;
     condition_variable_any(const condition_variable_any&) = delete;
     condition_variable_any(condition_variable_any&&) = delete;
     condition_variable_any& operator=(const condition_variable_any&) = delete;
     condition_variable_any& operator=(condition_variable_any&&) = delete;
+
+    inline const char* nspace() const { return "hce::"; }
+    inline const char* name() const { return "condition_variable_any"; }
 
     template <typename Lock>
     hce::awt<bool> wait(hce::unique_lock<Lock>& lk) {
@@ -56,7 +60,7 @@ struct condition_variable_any {
                 cv.blocked_queue_.push_back({ a, [a]{ a->resume(nullptr); }});
 
                 // block until resume() is called by notify operation
-                co_await hce::awt<void>(a);
+                co_await hce::awt<void>::make(a);
 
                 // reacquire the user lock
                 co_await user_lk.lock();
@@ -145,7 +149,7 @@ struct condition_variable_any {
             bool res_ = false;
         };
 
-        return awt<bool>(new ai(*this, lk, dur, std::move(p)));
+        return awt<bool>::make(new ai(*this, lk, dur, std::move(p)));
     }
 
     template <typename Lock>
@@ -222,7 +226,7 @@ struct condition_variable_any {
                 auto a = new awt(std::move(lk));
 
                 // block until resume() is called by a timer operation
-                auto status = co_await hce::awt<std::cv_status>(a);
+                auto status = co_await hce::awt<std::cv_status>::make(a);
 
                 // reacquire user lock after we are resumed
                 co_await user_lk.lock();
@@ -288,12 +292,15 @@ private:
 /**
  @brief condition_variable variant which only accepts `hce::unique_lock<hce::mutex>`
  */
-struct condition_variable {
+struct condition_variable : public printable {
     condition_variable() = default;
     condition_variable(const condition_variable&) = delete;
     condition_variable(condition_variable&&) = delete;
     condition_variable& operator=(const condition_variable&) = delete;
     condition_variable& operator=(condition_variable&&) = delete;
+    
+    inline const char* nspace() const { return "hce::"; }
+    inline const char* name() const { return "condition_variable"; }
     
     inline hce::awt<bool> wait(hce::unique_lock<hce::mutex>& lk) {
         return cv_.wait(lk);

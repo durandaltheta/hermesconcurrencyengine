@@ -3,7 +3,6 @@
 #ifndef __HERMES_COROUTINE_ENGINE__
 #define __HERMES_COROUTINE_ENGINE__
 
-#include "loguru.hpp"
 #include "utility.hpp"
 #include "atomic.hpp"
 #include "circular_buffer.hpp"

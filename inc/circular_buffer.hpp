@@ -8,7 +8,7 @@
 #include <exception> 
 
 // local
-#include "loguru.hpp"
+#include "utility.hpp"
 
 namespace hce {
 
@@ -16,11 +16,11 @@ namespace hce {
  @brief a simple circular_buffer implementation
  */
 template <typename T>
-struct circular_buffer {
+struct circular_buffer : public printable {
     struct push_on_full : public std::exception {
         const char* what() const noexcept { 
             const char* s = "cannot call push() when the buffer is full";
-            LOG_F(ERROR, s);
+            HCE_ERROR_LOG(s);
             return s; 
         }
     };
@@ -28,7 +28,7 @@ struct circular_buffer {
     struct front_on_empty : public std::exception {
         const char* what() const noexcept { 
             const char* s = "cannot call front() when the buffer is empty"; 
-            LOG_F(ERROR, s);
+            HCE_ERROR_LOG(s);
             return s;
         }
     };
@@ -36,7 +36,7 @@ struct circular_buffer {
     struct pop_on_empty : public std::exception {
         const char* what() const noexcept { 
             const char* s = "cannot call pop() when the buffer is empty"; 
-            LOG_F(ERROR, s);
+            HCE_ERROR_LOG(s);
             return s;
         }
     };
@@ -46,36 +46,61 @@ struct circular_buffer {
         size_(0),
         back_idx_(0),
         front_idx_(0)
-    { }
+    { 
+        HCE_MIN_CONSTRUCTOR();
+    }
 
     circular_buffer(const circular_buffer<T>&) = default;
     circular_buffer(circular_buffer<T>&&) = default;
+
+    ~circular_buffer() { HCE_MIN_DESTRUCTOR(); }
+    
     circular_buffer& operator=(const circular_buffer<T>&) = default;
     circular_buffer& operator=(circular_buffer<T>&&) = default;
 
+    inline const char* nspace() const { return "hce::"; }
+    inline const char* name() const { return "circular_buffer"; }
+
     /// return the maximum size of the buffer 
-    inline size_t capacity() { return buffer_.size(); }
+    inline size_t capacity() { 
+        HCE_MIN_METHOD_ENTER("capacity");
+        return buffer_.size(); 
+    }
 
     /// return the current size of the buffer
-    inline size_t size() { return size_; }
+    inline size_t size() { 
+        HCE_MIN_METHOD_ENTER("size");
+        return size_; 
+    }
 
     /// return the available slots in the buffer
-    inline size_t remaining() { return capacity() - size(); }
+    inline size_t remaining() { 
+        HCE_MIN_METHOD_ENTER("remaining");
+        return capacity() - size(); 
+    }
 
     /// return true if the buffer is empty, else false
-    inline bool empty() { return 0 == size(); }
+    inline bool empty() { 
+        HCE_MIN_METHOD_ENTER("empty");
+        return 0 == size(); 
+    }
     
     /// return true if the buffer is full, else false
-    inline bool full() { return capacity() == size(); }
+    inline bool full() { 
+        HCE_MIN_METHOD_ENTER("full");
+        return capacity() == size(); 
+    }
 
     /// return a reference to the element at the front of the buffer
     inline T& front() { 
+        HCE_MIN_METHOD_ENTER("front");
         if(empty()) { throw front_on_empty(); }
         return buffer_[front_idx_]; 
     }
 
     /// lvalue push an element on the back of the buffer
     inline void push(const T& t) {
+        HCE_MIN_METHOD_ENTER("push");
         if(!full()) {
             buffer_[back_idx_] = t;
             increment(back_idx_);
@@ -85,6 +110,7 @@ struct circular_buffer {
 
     /// rvalue push an element on the back of the buffer
     inline void push(T&& t) {
+        HCE_MIN_METHOD_ENTER("push");
         if(!full()) {
             buffer_[back_idx_] = std::move(t);
             increment(back_idx_);
@@ -94,6 +120,7 @@ struct circular_buffer {
 
     /// pop the front element off the buffer
     inline void pop() {
+        HCE_MIN_METHOD_ENTER("pop");
         if(!empty()) {
             increment(front_idx_);
             --size_;

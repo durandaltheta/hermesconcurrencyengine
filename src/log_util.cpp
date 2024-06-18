@@ -1,14 +1,15 @@
+#include <string>
+#include <string.h>
+
 #include "loguru.hpp"
+#include "utility.hpp"
 
 struct log_initializer {
     log_initializer() {
-        // Put every log message in "everything.log":
-        //loguru::add_file("hermesconcurrencyengine_all.log", loguru::Append, loguru::Verbosity_MAX);
-
-        // Only log INFO, WARNING, ERROR and FATAL to "latest_readable.log":
-        //loguru::add_file("hermesconcurrencyengine.log", loguru::Truncate, loguru::Verbosity_INFO);
-
-        // Only show most relevant things on stderr:
-        loguru::g_stderr_verbosity = 1;
+        char* argv[1][4];
+        std::string verbosity = std::string("-v") + std::to_string(HCELOGLEVEL);
+        strncpy(argv[0],verbosity.c_str(),verbosity.length());
+        argv[0][3]=0;
+        loguru::init(1,argv);
     }
 } g_log_initializer;

@@ -23,16 +23,7 @@ hce::scheduler::lifecycle::manager& hce::scheduler::lifecycle::manager::instance
     return m;
 }
 
-hce::scheduler& hce::scheduler::global() {
-    struct launcher {
-        launcher() : sch(hce::scheduler::make())
-        { 
-            std::thread([&]{ sch->install(); }).detach();
-        }
-       
-        std::shared_ptr<hce::scheduler> sch;
-    };
-
-    static launcher l;
-    return *(l.sch);
+hce::scheduler& hce::scheduler::global_() {
+    static std::shared_ptr<hce::scheduler> sch = hce::scheduler::thread::launch();
+    return *sch;
 }
