@@ -57,10 +57,10 @@ RM = /usr/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /home/duran/tmp/hermesconcurrencyengine
+CMAKE_SOURCE_DIR = /home/duran/hermesconcurrencyengine
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /home/duran/tmp/hermesconcurrencyengine
+CMAKE_BINARY_DIR = /home/duran/hermesconcurrencyengine
 
 #=============================================================================
 # Targets provided globally by CMake.
@@ -132,14 +132,14 @@ install/strip/fast: preinstall/fast
 
 # The main all target
 all: cmake_check_build_system
-	cd /home/duran/tmp/hermesconcurrencyengine && $(CMAKE_COMMAND) -E cmake_progress_start /home/duran/tmp/hermesconcurrencyengine/CMakeFiles /home/duran/tmp/hermesconcurrencyengine/tst//CMakeFiles/progress.marks
-	cd /home/duran/tmp/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tst/all
-	$(CMAKE_COMMAND) -E cmake_progress_start /home/duran/tmp/hermesconcurrencyengine/CMakeFiles 0
+	cd /home/duran/hermesconcurrencyengine && $(CMAKE_COMMAND) -E cmake_progress_start /home/duran/hermesconcurrencyengine/CMakeFiles /home/duran/hermesconcurrencyengine/tst//CMakeFiles/progress.marks
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tst/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/duran/hermesconcurrencyengine/CMakeFiles 0
 .PHONY : all
 
 # The main clean target
 clean:
-	cd /home/duran/tmp/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tst/clean
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tst/clean
 .PHONY : clean
 
 # The main clean target
@@ -148,22 +148,22 @@ clean/fast: clean
 
 # Prepare targets for installation.
 preinstall: all
-	cd /home/duran/tmp/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tst/preinstall
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tst/preinstall
 .PHONY : preinstall
 
 # Prepare targets for installation.
 preinstall/fast:
-	cd /home/duran/tmp/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tst/preinstall
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tst/preinstall
 .PHONY : preinstall/fast
 
 # clear depends
 depend:
-	cd /home/duran/tmp/hermesconcurrencyengine && $(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles/Makefile.cmake 1
+	cd /home/duran/hermesconcurrencyengine && $(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles/Makefile.cmake 1
 .PHONY : depend
 
 # Convenience name for target.
 tst/CMakeFiles/hce_ut.dir/rule:
-	cd /home/duran/tmp/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tst/CMakeFiles/hce_ut.dir/rule
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 tst/CMakeFiles/hce_ut.dir/rule
 .PHONY : tst/CMakeFiles/hce_ut.dir/rule
 
 # Convenience name for target.
@@ -172,15 +172,87 @@ hce_ut: tst/CMakeFiles/hce_ut.dir/rule
 
 # fast build rule for target.
 hce_ut/fast:
-	cd /home/duran/tmp/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/build
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/build
 .PHONY : hce_ut/fast
+
+atomic_ut.o: atomic_ut.cpp.o
+.PHONY : atomic_ut.o
+
+# target to build an object file
+atomic_ut.cpp.o:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/atomic_ut.cpp.o
+.PHONY : atomic_ut.cpp.o
+
+atomic_ut.i: atomic_ut.cpp.i
+.PHONY : atomic_ut.i
+
+# target to preprocess a source file
+atomic_ut.cpp.i:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/atomic_ut.cpp.i
+.PHONY : atomic_ut.cpp.i
+
+atomic_ut.s: atomic_ut.cpp.s
+.PHONY : atomic_ut.s
+
+# target to generate assembly for a file
+atomic_ut.cpp.s:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/atomic_ut.cpp.s
+.PHONY : atomic_ut.cpp.s
+
+circular_buffer_ut.o: circular_buffer_ut.cpp.o
+.PHONY : circular_buffer_ut.o
+
+# target to build an object file
+circular_buffer_ut.cpp.o:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/circular_buffer_ut.cpp.o
+.PHONY : circular_buffer_ut.cpp.o
+
+circular_buffer_ut.i: circular_buffer_ut.cpp.i
+.PHONY : circular_buffer_ut.i
+
+# target to preprocess a source file
+circular_buffer_ut.cpp.i:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/circular_buffer_ut.cpp.i
+.PHONY : circular_buffer_ut.cpp.i
+
+circular_buffer_ut.s: circular_buffer_ut.cpp.s
+.PHONY : circular_buffer_ut.s
+
+# target to generate assembly for a file
+circular_buffer_ut.cpp.s:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/circular_buffer_ut.cpp.s
+.PHONY : circular_buffer_ut.cpp.s
+
+coroutine_ut.o: coroutine_ut.cpp.o
+.PHONY : coroutine_ut.o
+
+# target to build an object file
+coroutine_ut.cpp.o:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/coroutine_ut.cpp.o
+.PHONY : coroutine_ut.cpp.o
+
+coroutine_ut.i: coroutine_ut.cpp.i
+.PHONY : coroutine_ut.i
+
+# target to preprocess a source file
+coroutine_ut.cpp.i:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/coroutine_ut.cpp.i
+.PHONY : coroutine_ut.cpp.i
+
+coroutine_ut.s: coroutine_ut.cpp.s
+.PHONY : coroutine_ut.s
+
+# target to generate assembly for a file
+coroutine_ut.cpp.s:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/coroutine_ut.cpp.s
+.PHONY : coroutine_ut.cpp.s
 
 scheduler_ut.o: scheduler_ut.cpp.o
 .PHONY : scheduler_ut.o
 
 # target to build an object file
 scheduler_ut.cpp.o:
-	cd /home/duran/tmp/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/scheduler_ut.cpp.o
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/scheduler_ut.cpp.o
 .PHONY : scheduler_ut.cpp.o
 
 scheduler_ut.i: scheduler_ut.cpp.i
@@ -188,7 +260,7 @@ scheduler_ut.i: scheduler_ut.cpp.i
 
 # target to preprocess a source file
 scheduler_ut.cpp.i:
-	cd /home/duran/tmp/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/scheduler_ut.cpp.i
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/scheduler_ut.cpp.i
 .PHONY : scheduler_ut.cpp.i
 
 scheduler_ut.s: scheduler_ut.cpp.s
@@ -196,7 +268,7 @@ scheduler_ut.s: scheduler_ut.cpp.s
 
 # target to generate assembly for a file
 scheduler_ut.cpp.s:
-	cd /home/duran/tmp/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/scheduler_ut.cpp.s
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/scheduler_ut.cpp.s
 .PHONY : scheduler_ut.cpp.s
 
 # Help Target
@@ -212,6 +284,15 @@ help:
 	@echo "... list_install_components"
 	@echo "... rebuild_cache"
 	@echo "... hce_ut"
+	@echo "... atomic_ut.o"
+	@echo "... atomic_ut.i"
+	@echo "... atomic_ut.s"
+	@echo "... circular_buffer_ut.o"
+	@echo "... circular_buffer_ut.i"
+	@echo "... circular_buffer_ut.s"
+	@echo "... coroutine_ut.o"
+	@echo "... coroutine_ut.i"
+	@echo "... coroutine_ut.s"
 	@echo "... scheduler_ut.o"
 	@echo "... scheduler_ut.i"
 	@echo "... scheduler_ut.s"
@@ -226,6 +307,6 @@ help:
 # No rule that depends on this can have commands that come from listfiles
 # because they might be regenerated.
 cmake_check_build_system:
-	cd /home/duran/tmp/hermesconcurrencyengine && $(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles/Makefile.cmake 0
+	cd /home/duran/hermesconcurrencyengine && $(CMAKE_COMMAND) -S$(CMAKE_SOURCE_DIR) -B$(CMAKE_BINARY_DIR) --check-build-system CMakeFiles/Makefile.cmake 0
 .PHONY : cmake_check_build_system
 

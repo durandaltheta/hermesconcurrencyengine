@@ -35,7 +35,7 @@ struct spinlock : public printable {
         lock_.clear(std::memory_order_release); 
     }
 
-    inline const char* nspace() const { return "hce::"; }
+    inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "spinlock"; }
 
 private:

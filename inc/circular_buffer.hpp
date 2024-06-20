@@ -58,7 +58,7 @@ struct circular_buffer : public printable {
     circular_buffer& operator=(const circular_buffer<T>&) = default;
     circular_buffer& operator=(circular_buffer<T>&&) = default;
 
-    inline const char* nspace() const { return "hce::"; }
+    inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "circular_buffer"; }
 
     /// return the maximum size of the buffer 

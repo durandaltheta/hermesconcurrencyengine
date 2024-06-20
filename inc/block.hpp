@@ -128,7 +128,7 @@ private:
     // block workers implicitly start a scheduler on a new thread during 
     // construction and shutdown said scheduler during destruction.
     struct worker {
-        worker() : sch_(hce::scheduler::thread::launch(lf_)) { }
+        worker() : sch_(hce::scheduler::thread(lf_)) { }
 
         // thread_local value defaults to false
         static bool& tl_is_block();

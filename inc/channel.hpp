@@ -77,7 +77,7 @@ struct channel : public printable {
         virtual hce::yield<result> try_recv(T& t) = 0;
     };
 
-    inline const char* nspace() const { return "hce::"; }
+    inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "channel"; }
     inline std::string content() const { return context ? *context : ""; }
 
@@ -210,7 +210,7 @@ struct channel : public printable {
         
         virtual ~unbuffered(){ HCE_LOW_DESTRUCTOR(); }
 
-        inline const char* nspace() const { return "hce::channel::"; }
+        inline const char* nspace() const { return "hce::channel"; }
         inline const char* name() const { return "unbuffered"; }
 
         inline const std::type_info& type_info() const {
@@ -439,7 +439,7 @@ struct channel : public printable {
 
         virtual ~buffered(){ HCE_LOW_DESTRUCTOR(); }
 
-        inline const char* nspace() const { return "hce::channel::"; }
+        inline const char* nspace() const { return "hce::channel"; }
         inline const char* name() const { return "buffered"; }
 
         buffered(int sz) : buf_(sz < 0 ? (size_t)1 : (size_t)sz) { }

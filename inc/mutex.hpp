@@ -47,7 +47,7 @@ struct mutex : public printable {
     mutex& operator=(const mutex&) = delete;
     mutex& operator=(mutex&&) = delete;
 
-    inline const char* nspace() const { return "hce::"; }
+    inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "mutex"; }
 
     /// lock the mutex, returning true if the lock operation succeeded
@@ -195,7 +195,7 @@ struct unique_lock : public printable {
         if(acquired_) { unlock(); } 
     }
     
-    inline const char* nspace() const { return "hce::"; }
+    inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "unique_lock"; }
 
     /// return our stringified mutex address

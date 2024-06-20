@@ -25,6 +25,34 @@ namespace hce {
 
 struct scheduler;
 
+struct coroutine_destroyed_without_completing : 
+        public printable,
+        public std::exception 
+{
+    coroutine_destroyed_without_completing(void* c, void* j) :
+        estr([&]() -> std::string {
+            std::stringstream ss;
+            ss << "std::coroutine_handle<>@" 
+               << (void*)c
+               << " was destroyed before it was completed, so joiner@" 
+               << (void*)j
+               << " cannot join with it";
+            return ss.str();
+        }()) 
+    { 
+        HCE_ERROR_CONSTRUCTOR();
+    }
+
+    inline const char* nspace() const { return "hce"; }
+    inline const char* name() const { return "coroutine_destroyed_without_completing"; }
+    inline std::string content() const { return what(); }
+
+    inline const char* what() const noexcept { return estr.c_str(); }
+
+private:
+    const std::string estr;
+};
+
 namespace detail {
 namespace scheduler {
 
@@ -36,6 +64,31 @@ hce::scheduler*& tl_this_scheduler();
  redirecting operations away from the actual scheduler to some other scheduler.
  */ 
 hce::scheduler*& tl_this_scheduler_redirect();
+
+/*
+ Due to (potentially developer local) compiler limitations, an alternative 
+ duration to stream implementation is needed;
+ */
+template <typename Rep, typename Period>
+std::ostream& duration_to_string(std::ostream& os, const std::chrono::duration<Rep, Period>& d) {
+    os << d.count() << " ";
+    if (std::ratio_equal<Period, std::nano>::value) {
+        os << "ns";
+    } else if (std::ratio_equal<Period, std::micro>::value) {
+        os << "µs";
+    } else if (std::ratio_equal<Period, std::milli>::value) {
+        os << "ms";
+    } else if (std::ratio_equal<Period, std::ratio<1>>::value) {
+        os << "s";
+    } else if (std::ratio_equal<Period, std::ratio<60>>::value) {
+        os << "min";
+    } else if (std::ratio_equal<Period, std::ratio<3600>>::value) {
+        os << "h";
+    } else {
+        os << "unknown_period";
+    }
+    return os;
+}
 
 template <typename T>
 using awt_interface = hce::awt<T>::interface;
@@ -52,26 +105,6 @@ struct joiner :
         awt_interface<T>,
         hce::spinlock>
 {
-    struct coroutine_destroyed_without_completing : public std::exception {
-        coroutine_destroyed_without_completing(void* c, joiner<T>* j) :
-            estr([&]() -> std::string {
-                std::stringstream ss;
-                ss << "std::coroutine_handle<>@" 
-                   << (void*)c
-                   << " was destroyed before it was completed, so joiner@" 
-                   << (void*)j
-                   << " cannot join with it";
-                return ss.str();
-            }()) 
-        { 
-            HCE_ERROR_LOG(estr.c_str());
-        }
-
-        inline const char* what() const noexcept { return estr.c_str(); }
-
-    private:
-        const std::string estr;
-    };
 
     /// resume immediately and return a constructed T
     template <typename... As>
@@ -179,6 +212,44 @@ inline void assemble_joins_<void>(std::deque<hce::awt<void>>& dq, awt<void>&& a)
 }
 }
 
+struct time_point : 
+        public std::chrono::steady_clock::time_point,
+        public hce::printable
+{
+    template <typename... As>
+    time_point(As&&... as) : 
+        std::chrono::steady_clock::time_point(std::forward<As>(as)...)
+    { }
+
+    inline std::string content() const {
+        std::stringstream ss;
+        detail::scheduler::duration_to_string(ss,time_since_epoch());
+        return ss.str();
+    }
+    
+    inline const char* nspace() const { return "hce"; }
+    inline const char* name() const { return "time_point"; }
+};
+
+struct duration : 
+        public std::chrono::steady_clock::duration,
+        public hce::printable
+{
+    template <typename... As>
+    duration(As&&... as) : 
+        std::chrono::steady_clock::duration(std::forward<As>(as)...)
+    { }
+
+    inline std::string content() const {
+        std::stringstream ss;
+        detail::scheduler::duration_to_string(ss,*this);
+        return ss.str();
+    }
+    
+    inline const char* nspace() const { return "hce"; }
+    inline const char* name() const { return "duration"; }
+};
+
 /**
  @brief timer which can be scheduled on the scheduler with scheduler::start() 
 
@@ -234,7 +305,7 @@ struct timer : public printable {
      @brief construct an allocated timer
 
      Arguments list:
-     1. a std::chrono::time_point or std::chrono::duration to specify the timeout point
+     1. a hce::time_point or hce::duration to specify the timeout point
      2. a Callable convertable to std::function<void()> for the timeout handler
      3. an optional Callable convertable to std::function<void()> for the cancel handler
      */
@@ -243,18 +314,18 @@ struct timer : public printable {
         return std::unique_ptr<timer>(new timer(std::forward<As>(as)...));
     }
 
-    inline const char* nspace() const { return "hce::"; }
+    inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "timer"; }
     inline std::string content() const { return id_; }
 
     /// acquire the current time
-    static inline std::chrono::steady_clock::time_point now() {
+    static inline hce::time_point now() {
         return std::chrono::steady_clock::now();
     }
 
     /// return a duration equivalent to the count of units
     static inline 
-    std::chrono::steady_clock::duration 
+    hce::duration 
     to_duration(unit u, size_t count) {
         switch(u) {
             case unit::hour:
@@ -284,7 +355,7 @@ struct timer : public printable {
     }
 
     /// return the timeout time_point for the timer
-    const std::chrono::steady_clock::time_point& time_point() const {
+    const hce::time_point& time_point() const {
         return time_point_;
     }
 
@@ -303,7 +374,7 @@ struct timer : public printable {
     /// the operation for if the timer is times out
     inline void timeout() { 
         if(timeout_) {
-            HCE_MED_METHOD_ENTER("timeout",hce::detail::to_string(timeout_));
+            HCE_MED_METHOD_ENTER("timeout",hce::detail::callable_to_string(timeout_));
             timeout_(); 
             timeout_ = std::function<void()>(); // reset timeout memory
         }
@@ -312,7 +383,7 @@ struct timer : public printable {
     /// the operation for if the timer is cancelled
     inline void cancel() {
         if(timeout_) { // only cancel if we are waiting to timeout
-            HCE_MED_METHOD_ENTER("cancel",hce::detail::to_string(cancel_));
+            HCE_MED_METHOD_ENTER("cancel",hce::detail::callable_to_string(cancel_));
             cancel_(); 
             cancel_ = std::function<void()>(); // reset cancel memory
             timeout_ = std::function<void()>(); // reset timeout memory 
@@ -330,15 +401,15 @@ private:
      @param as timeout operation followed by optional cancel operation
      */
     template <typename... As>
-    timer(const std::chrono::steady_clock::time_point& tp, As&&... as) :
+    timer(const hce::time_point& tp, As&&... as) :
         time_point_(tp)
     { 
         finalize_(std::forward<As>(as)...);
         HCE_MED_CONSTRUCTOR(
             "timer", 
-            time_point_.time_since_epoch(), 
-            hce::detail::to_string(timeout_),
-            hce::detail::to_string(cancel_));
+            time_point_, 
+            hce::detail::callable_to_string(timeout_),
+            hce::detail::callable_to_string(cancel_));
     }
 
     /**
@@ -351,15 +422,15 @@ private:
      @param as timeout operation followed by optional cancel operation
      */
     template <typename... As>
-    timer(const std::chrono::steady_clock::duration& dur, As&&... as) :
+    timer(const hce::duration& dur, As&&... as) :
         time_point_(timer::now() + dur)
     { 
         finalize_(std::forward<As>(as)...);
         HCE_MED_CONSTRUCTOR(
             "timer", 
-            time_point_.time_since_epoch(), 
-            hce::detail::to_string(timeout_),
-            hce::detail::to_string(cancel_));
+            time_point_,
+            hce::detail::callable_to_string(timeout_),
+            hce::detail::callable_to_string(cancel_));
     }
 
     /**
@@ -379,9 +450,9 @@ private:
         finalize_(std::forward<As>(as)...);
         HCE_MED_CONSTRUCTOR(
             "timer", 
-            time_point_.time_since_epoch(), 
-            hce::detail::to_string(timeout_),
-            hce::detail::to_string(cancel_));
+            time_point_,
+            hce::detail::callable_to_string(timeout_),
+            hce::detail::callable_to_string(cancel_));
     }
 
     template <typename TIMEOUT, typename CANCEL>
@@ -396,7 +467,7 @@ private:
         cancel_ = []{}; // empty handler
     }
 
-    const std::chrono::steady_clock::time_point time_point_;
+    const hce::time_point time_point_;
     id id_;
     std::function<void()> timeout_;
     std::function<void()> cancel_;
@@ -441,7 +512,9 @@ struct scheduler : public printable {
         { }
 
         inline void destination(std::coroutine_handle<> h) {
-            HCE_LOW_METHOD_ENTER("destination",hce::detail::to_string(h));
+            HCE_LOW_METHOD_ENTER(
+                "destination",
+                hce::coroutine::handle_to_string(h));
 
             auto d = destination_.lock();
 
@@ -513,7 +586,7 @@ struct scheduler : public printable {
             static manager& instance();
 
             ~manager() { 
-                HCE_HIGH_CONSTRUCTOR();
+                HCE_HIGH_DESTRUCTOR();
                 exited_ = true; 
             }
 
@@ -640,13 +713,13 @@ struct scheduler : public printable {
             /// install a handler
             inline void install(hce::thunk th) {
                 hdls_.push_back([th=std::move(th)](hce::scheduler&){ th(); });
-                HCE_HIGH_METHOD_ENTER("install",hce::detail::to_string(hdls_.back()));
+                HCE_HIGH_METHOD_ENTER("install",hce::detail::callable_to_string(hdls_.back()));
             }
 
             /// install a handler
             inline void install(handler h) {
                 hdls_.push_back(std::move(h));
-                HCE_HIGH_METHOD_ENTER("install",hce::detail::to_string(hdls_.back()));
+                HCE_HIGH_METHOD_ENTER("install",hce::detail::callable_to_string(hdls_.back()));
             }
 
             /// call all handlers with the given scheduler
@@ -654,7 +727,7 @@ struct scheduler : public printable {
                 HCE_HIGH_METHOD_ENTER("call", (void*)(&sch));
 
                 for(auto& hdl : hdls_) { 
-                    HCE_HIGH_METHOD_BODY("call",hce::detail::to_string(hdl));
+                    HCE_HIGH_METHOD_BODY("call",hce::detail::callable_to_string(hdl));
                     hdl(sch); 
                 }
             }
@@ -695,62 +768,23 @@ struct scheduler : public printable {
         config(){ HCE_HIGH_CONSTRUCTOR(); }
     };
 
-    /**
-     @brief worker thread launching functions
-
-     Construct an `hce::scheduler` and launch a worker `std::thread` whose 
-     lifecycle is tied to the associated `hce::scheduler::lifecycle`. The thread
-     will `install()` the `hce::scheduler` with any given 
-     `hce::scheduler::config`.
-     */
-    struct thread {
-        /// launch a worker thread
-        static inline std::shared_ptr<hce::scheduler> launch(
-               std::unique_ptr<hce::scheduler::lifecycle>& lc,
-               std::unique_ptr<hce::scheduler::config> c) 
-        {
-            HCE_HIGH_LOG("hce::thread::launch(std::unique_ptr<hce::scheduler::lifecycle>&,std::unique_ptr<hce::scheduler::config>)");
-            auto sch(hce::scheduler::make(lc));
-            std::thread([sch](std::unique_ptr<hce::scheduler::config> c){ 
-                sch->install(std::move(c)); 
-            }, std::move(c)).detach();
-            return sch;
-        }
-
-        /// launch a worker thread
-        static inline std::shared_ptr<hce::scheduler> launch(
-                std::unique_ptr<hce::scheduler::lifecycle>& lc) {
-            HCE_HIGH_LOG("hce::thread::launch(std::unique_ptr<hce::scheduler::lifecycle>&)");
-            auto sch(hce::scheduler::make(lc));
-            std::thread([sch]{ sch->install(); }).detach();
-            return sch;
-        }
-
-        /// launch a worker thread
-        static inline std::shared_ptr<hce::scheduler> launch(
-                std::unique_ptr<hce::scheduler::config> c) {
-            HCE_HIGH_LOG("hce::thread::launch(std::unique_ptr<hce::scheduler::config>)");
-            auto sch(hce::scheduler::make());
-            std::thread([sch](std::unique_ptr<hce::scheduler::config> c){ 
-                sch->install(std::move(c)); 
-            }, std::move(c)).detach();
-            return sch;
-        }
-
-        /// launch a worker thread
-        static inline std::shared_ptr<hce::scheduler> launch() {
-            HCE_HIGH_LOG("hce::thread::launch()");
-            auto sch(hce::scheduler::make());
-            std::thread([sch]{ sch->install(); }).detach();
-            return sch;
-        }
-    };
-
     ~scheduler() {
         HCE_HIGH_CONSTRUCTOR();
         halt_();
         // ensure all tasks are manually deleted
         clear_queues_();
+    }
+
+    /// return a copy of this scheduler's shared pointer by conversion
+    inline operator std::shared_ptr<scheduler>() { 
+        HCE_TRACE_METHOD_ENTER("hce::scheduler::operator std::shared_ptr<scheduler>()");
+        return self_wptr_.lock(); 
+    }
+
+    /// return a copy of this scheduler's weak pointer by conversion
+    inline operator std::weak_ptr<scheduler>() { 
+        HCE_TRACE_METHOD_ENTER("hce::scheduler::operator std::weak_ptr<scheduler>()");
+        return self_wptr_; 
     }
 
     /**
@@ -772,7 +806,7 @@ struct scheduler : public printable {
      @return an allocated and initialized scheduler 
      */
     static inline std::shared_ptr<scheduler> make(std::unique_ptr<lifecycle>& lc) {
-        HCE_HIGH_LOG("hce::scheduler::make(std::unique_ptr<hce::scheduler::lifecycle>&)");
+        HCE_HIGH_FUNCTION_ENTER("hce::scheduler::make","std::unique_ptr<hce::scheduler::lifecycle>&");
         scheduler* sp = new scheduler();
         std::shared_ptr<scheduler> s(sp);
         s->self_wptr_ = s;
@@ -789,33 +823,81 @@ struct scheduler : public printable {
      @return an allocated and initialized scheduler 
      */
     static inline std::shared_ptr<scheduler> make() {
-        HCE_HIGH_LOG("hce::scheduler::make()");
+        HCE_HIGH_FUNCTION_ENTER("hce::scheduler::make");
         std::unique_ptr<lifecycle> lc;
         auto s = make(lc);
         lifecycle::manager::instance().registration(std::move(lc));
         return s;
     };
 
-    inline const char* nspace() const { return "hce::"; }
-    inline const char* name() const { return "scheduler"; }
+    /**
+     @brief worker thread launching function
 
-    /// return a copy of this scheduler's shared pointer by conversion
-    inline operator std::shared_ptr<scheduler>() { 
-        HCE_TRACE_LOG("hce::scheduler::operator std::shared_ptr<scheduler>()");
-        return self_wptr_.lock(); 
+     Construct an `hce::scheduler` and launch a worker `std::thread` whose 
+     lifecycle is tied to the associated `hce::scheduler::lifecycle`. The thread
+     will `install()` the `hce::scheduler` with any given 
+     `hce::scheduler::config` and shutdown when the given lifecycle goes out of 
+     scope.
+     */
+    static inline std::shared_ptr<hce::scheduler> thread(
+           std::unique_ptr<hce::scheduler::lifecycle>& lc,
+           std::unique_ptr<hce::scheduler::config> c) 
+    {
+        if(c) {
+            HCE_HIGH_FUNCTION_ENTER(
+                "hce::thread",
+                "hce::scheduler::lifecycle",
+                *c);
+
+            auto sch(hce::scheduler::make(lc));
+
+            std::thread([sch](std::unique_ptr<hce::scheduler::config> c){ 
+                sch->install(std::move(c)); 
+            }, std::move(c)).detach();
+
+            return sch;
+        } else { return scheduler::thread(lc); }
     }
 
-    /// return a copy of this scheduler's weak pointer by conversion
-    inline operator std::weak_ptr<scheduler>() { 
-        HCE_TRACE_LOG("hce::scheduler::operator std::weak_ptr<scheduler>()");
-        return self_wptr_; 
+    /// launch a worker thread
+    static inline std::shared_ptr<hce::scheduler> thread(
+            std::unique_ptr<hce::scheduler::lifecycle>& lc) {
+        HCE_HIGH_FUNCTION_ENTER("hce::thread", "hce::scheduler::lifecycle");
+
+        auto sch(hce::scheduler::make(lc));
+        std::thread([sch]{ sch->install(); }).detach();
+        return sch;
+    }
+
+    /// launch a worker thread registered with the global lifecycle::manager
+    static inline std::shared_ptr<hce::scheduler> thread(
+            std::unique_ptr<hce::scheduler::config> c = {}) {
+
+        if(c) {
+            HCE_HIGH_FUNCTION_ENTER("hce::thread",*c);
+
+            auto sch(hce::scheduler::make());
+
+            std::thread([sch](std::unique_ptr<hce::scheduler::config> c){ 
+                sch->install(std::move(c)); 
+            }, std::move(c)).detach();
+
+            return sch;
+        } else {
+            HCE_HIGH_FUNCTION_ENTER("hce::thread");
+
+            auto sch(hce::scheduler::make());
+            std::thread([sch]{ sch->install(); }).detach();
+
+            return sch;
+        }
     }
 
     /**
      @return `true` if calling thread is running a scheduler, else `false`
      */
     static inline bool in() { 
-        HCE_TRACE_LOG("hce::scheduler::in()");
+        HCE_TRACE_FUNCTION_ENTER("hce::scheduler::in");
         return detail::scheduler::tl_this_scheduler_redirect(); 
     }
 
@@ -824,7 +906,7 @@ struct scheduler : public printable {
      @return a scheduler reference
      */
     static inline scheduler& local() {
-        HCE_TRACE_LOG("hce::scheduler::local()");
+        HCE_TRACE_FUNCTION_ENTER("hce::scheduler::local");
         return *(detail::scheduler::tl_this_scheduler_redirect());
     }
 
@@ -837,7 +919,7 @@ struct scheduler : public printable {
      @return the global scheduler
      */
     static inline scheduler& global() {
-        HCE_TRACE_LOG("hce::scheduler::global()");
+        HCE_TRACE_FUNCTION_ENTER("hce::scheduler::global");
         return global_();
     }
 
@@ -849,9 +931,12 @@ struct scheduler : public printable {
      @return a scheduler reference
      */
     static inline scheduler& get() {
-        HCE_TRACE_LOG("hce::scheduler::get()");
+        HCE_TRACE_FUNCTION_ENTER("hce::scheduler::get");
         return scheduler::in() ? scheduler::local() : scheduler::global();
     }
+
+    inline const char* nspace() const { return "hce"; }
+    inline const char* name() const { return "scheduler"; }
 
     /**
      @brief install the scheduler on the calling thread to continuously execute scheduled coroutines and timers
@@ -1173,7 +1258,7 @@ private:
     scheduler() : 
             state_(ready), // state_ persists between suspends
             coroutine_queue_(new std::deque<std::coroutine_handle<>>) { // persists as necessary
-        HCE_HIGH_CONSTRUCTOR("scheduler");
+        HCE_HIGH_CONSTRUCTOR();
         reset_flags_(); // initialize flags
     }
     
@@ -1593,7 +1678,7 @@ private:
  */
 template <typename... As>
 void schedule(As&&... as) {
-    HCE_HIGH_LOG("schedule(...)");
+    HCE_HIGH_FUNCTION_ENTER("schedule",as...);
     scheduler::get().schedule(std::forward<As>(as)...);
 }
 
@@ -1604,7 +1689,7 @@ void schedule(As&&... as) {
  */
 template <typename... As>
 auto join(As&&... as) {
-    HCE_HIGH_LOG("join(",as...,")");
+    HCE_HIGH_FUNCTION_ENTER("join",as...);
     return scheduler::get().join(std::forward<As>(as)...);
 }
 
@@ -1615,7 +1700,7 @@ auto join(As&&... as) {
  */
 template <typename... As>
 auto scope(As&&... as) {
-    HCE_HIGH_LOG("scope(",as...,")");
+    HCE_HIGH_FUNCTION_ENTER("scope",as...);
     return scheduler::get().scope(std::forward<As>(as)...);
 }
 
@@ -1624,14 +1709,14 @@ auto scope(As&&... as) {
  @param dur a duration to sleep for
  @return an awaitable whose result is true if timeout completed, else false
  */
-inline hce::awt<bool> sleep(const std::chrono::steady_clock::duration& dur) {
+inline hce::awt<bool> sleep(const hce::duration& dur) {
     struct ai : 
         public hce::scheduler::reschedule<
             hce::awaitable::lockable<
                 hce::awt<bool>::interface,
                 hce::spinlock>>
     {
-        ai(const std::chrono::steady_clock::duration& dur) : 
+        ai(const hce::duration& dur) : 
             hce::scheduler::reschedule<
                 hce::awaitable::lockable<
                     hce::awt<bool>::interface,
@@ -1657,13 +1742,13 @@ inline hce::awt<bool> sleep(const std::chrono::steady_clock::duration& dur) {
         inline bool get_result() { return result_; }
 
     private:
-        std::chrono::steady_clock::duration dur_;
+        hce::duration dur_;
         bool ready_ = false;
         bool result_ = false;
         hce::spinlock slk_;
     };
 
-    HCE_HIGH_LOG("sleep(",(hce::timer::now()+dur).time_since_epoch(),")");
+    HCE_HIGH_FUNCTION_ENTER("sleep(",dur,")");
     return hce::awt<bool>::make(new ai(dur));
 }
 

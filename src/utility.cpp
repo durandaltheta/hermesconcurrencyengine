@@ -24,11 +24,14 @@ extern void hce_log_initialize(int hceloglevel);
 
 #ifndef HCECUSTOMLOGINIT
 /// the default log initialization code is defined here
-void hce_log_initialize() {
+void hce_log_initialize(int hceloglevel) {
     std::stringstream ss;
     ss << "-v" << HCELOGLEVEL;
+    std::string process("hermesconcurrencyengine");
     std::string verbosity = ss.str();
-    std::vector<char*> argv(1,verbosity.data());
+    std::vector<char*> argv;
+    argv.push_back(process.data());
+    argv.push_back(verbosity.data());
     int argc=argv.size();
     loguru::init(argc, argv.data());
 }

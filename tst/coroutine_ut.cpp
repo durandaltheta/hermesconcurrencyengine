@@ -1,6 +1,7 @@
 //SPDX-License-Identifier: Apache-2.0
 //Author: Blayne Dennis 
 #include "loguru.hpp"
+#include "atomic.hpp"
 #include "coroutine.hpp"
 
 #include <string>
@@ -110,8 +111,8 @@ TEST(coroutine, co_return_value) {
         EXPECT_FALSE(co.done());
         co.resume();
         EXPECT_TRUE(co.done());
-        EXPECT_EQ(3, co.promise().result);
-        EXPECT_NE(&i, &co.promise().result);
+        EXPECT_EQ(3, *(co.promise().result));
+        EXPECT_NE(&i, co.promise().result.get());
     }
 
     {
@@ -121,8 +122,8 @@ TEST(coroutine, co_return_value) {
         EXPECT_FALSE(co.done());
         co.resume();
         EXPECT_TRUE(co.done());
-        EXPECT_EQ("3", co.promise().result);
-        EXPECT_NE(&s, &co.promise().result);
+        EXPECT_EQ("3", *(co.promise().result));
+        EXPECT_NE(&s, co.promise().result.get());
     }
 }
 
@@ -134,8 +135,8 @@ TEST(coroutine, co_return_value_erased) {
         EXPECT_FALSE(co.done());
         co.resume();
         EXPECT_TRUE(co.done());
-        EXPECT_EQ(3, co.to_promise<hce::co<int>>().result);
-        EXPECT_NE(&i, &co.to_promise<hce::co<int>>().result);
+        EXPECT_EQ(3, *(co.to_promise<hce::co<int>>().result));
+        EXPECT_NE(&i, co.to_promise<hce::co<int>>().result.get());
     }
     {
         int i = 3;
@@ -144,8 +145,8 @@ TEST(coroutine, co_return_value_erased) {
         EXPECT_FALSE(co.done());
         co.resume();
         EXPECT_TRUE(co.done());
-        EXPECT_EQ(3, *(co.to_promise<hce::co<int*>>().result));
-        EXPECT_EQ(&i, co.to_promise<hce::co<int*>>().result);
+        EXPECT_EQ(3, **(co.to_promise<hce::co<int*>>().result));
+        EXPECT_EQ(&i, *(co.to_promise<hce::co<int*>>().result));
     }
 
     {
@@ -155,8 +156,8 @@ TEST(coroutine, co_return_value_erased) {
         EXPECT_FALSE(co.done());
         co.resume();
         EXPECT_TRUE(co.done());
-        EXPECT_EQ("3", co.to_promise<hce::co<std::string>>().result);
-        EXPECT_NE(&s, &co.to_promise<hce::co<std::string>>().result);
+        EXPECT_EQ("3", *(co.to_promise<hce::co<std::string>>().result));
+        EXPECT_NE(&s, co.to_promise<hce::co<std::string>>().result.get());
     }
 
     {
@@ -166,8 +167,8 @@ TEST(coroutine, co_return_value_erased) {
         EXPECT_FALSE(co.done());
         co.resume();
         EXPECT_TRUE(co.done());
-        EXPECT_EQ("3", *(co.to_promise<hce::co<std::string*>>().result));
-        EXPECT_EQ(&s, co.to_promise<hce::co<std::string*>>().result);
+        EXPECT_EQ("3", **(co.to_promise<hce::co<std::string*>>().result));
+        EXPECT_EQ(&s, *(co.to_promise<hce::co<std::string*>>().result));
     }
 }
 
@@ -188,7 +189,7 @@ TEST(coroutine, co_await_void) {
 
             static inline hce::co<void>op1(std::vector<ai*> as) {
                 for(auto& a : as) {
-                    hce::awt<void> awt = hce::awt<void>(a);
+                    hce::awt<void> awt = hce::awt<void>::make(a);
                     EXPECT_NE(nullptr, awt.address());
                     co_await std::move(awt);
                     EXPECT_EQ(nullptr, awt.address());
@@ -274,7 +275,7 @@ TEST(coroutine, co_await_int) {
             static inline hce::co<void>op1(std::vector<ai*> as) {
                 int i=0;
                 for(auto& a : as) {
-                    hce::awt<int> awt = hce::awt<int>(a);
+                    hce::awt<int> awt = hce::awt<int>::make(a);
                     EXPECT_NE(nullptr, awt.address());
                     int result_i = co_await std::move(awt);
                     EXPECT_EQ(i, result_i);
@@ -365,7 +366,7 @@ TEST(coroutine, co_await_string) {
             static inline hce::co<void>op1(std::vector<ai*> as) {
                 int i=0;
                 for(auto& a : as) {
-                    hce::awt<std::string> awt = hce::awt<std::string>(a);
+                    hce::awt<std::string> awt = hce::awt<std::string>::make(a);
                     EXPECT_NE(nullptr,awt.address());
                     std::string result_i = co_await std::move(awt);
                     EXPECT_EQ(std::to_string(i), result_i);

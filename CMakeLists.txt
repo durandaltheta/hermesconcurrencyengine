@@ -12,27 +12,24 @@ project(libhce)
 #-------------------------------------------------------------------------------
 # environment variable controls 
 
-# setting environment variable HCEDEBUG will cause this library to build in 
-# cmake Debug mode (debugger symbols will be created and preserved).
-if(DEFINED ENV{HCEDEBUG})
-    set(CMAKE_BUILD_TYPE Debug) 
+if(DEFINED CMAKE_BUILD_TYPE)
+    message("CMAKE_BUILD_TYPE:${CMAKE_BUILD_TYPE}")
 else()
     set(CMAKE_BUILD_TYPE Release) 
+    message("CMAKE_BUILD_TYPE:${CMAKE_BUILD_TYPE}")
 endif()
 
 # Define the minimum count of available threads for await tasks executed by 
 # `hce::blocking::call()` (more will be temporarily spawned as necessary).
-if(DEFINED ENV{HCEMINBLOCKPROCS})
-    set(HCEMINBLOCKPROCS $ENV{HCEMINBLOCKPROCS})
+if(DEFINED HCEMINBLOCKPROCS)
 else()
-    set(HCEMINBLOCKPROCS 1)
+    set(HCEMINBLOCKPROCS 1) 
 endif()
 
-# set HCELOGLEVEL
-if(DEFINED ENV{HCELOGLEVEL})
-    set(HCELOGLEVEL $ENV{HCELOGLEVEL})
+# set loglevel
+if(DEFINED HCELOGLEVEL)
 else()
-    set(HCELOGLEVEL 0)
+    set(HCELOGLEVEL 0) 
 endif()
 
 # logging comes from the 'easyloggingpp' project:
@@ -76,7 +73,7 @@ ListToString(PRETTY_HCE_SOURCE_FILES "\n" ${HCE_SOURCE_FILES})
 add_library(hce STATIC ${HCE_SOURCE_FILES} ${HCE_HEADER_FILES})
 
 target_include_directories(hce PUBLIC ${HCE_INCLUDE_DIR} PRIVATE ${LOG_SOURCE_DIR})
-target_link_libraries(hce PRIVATE loguru::loguru)
+target_link_libraries(hce PUBLIC loguru::loguru)
 
 set(HCE_COMPILE_DEFS 
     -DHCELOGLEVEL=${HCELOGLEVEL}

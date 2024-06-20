@@ -28,7 +28,7 @@ struct condition_variable_any : public printable {
     condition_variable_any& operator=(const condition_variable_any&) = delete;
     condition_variable_any& operator=(condition_variable_any&&) = delete;
 
-    inline const char* nspace() const { return "hce::"; }
+    inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "condition_variable_any"; }
 
     template <typename Lock>
@@ -299,7 +299,7 @@ struct condition_variable : public printable {
     condition_variable& operator=(const condition_variable&) = delete;
     condition_variable& operator=(condition_variable&&) = delete;
     
-    inline const char* nspace() const { return "hce::"; }
+    inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "condition_variable"; }
     
     inline hce::awt<bool> wait(hce::unique_lock<hce::mutex>& lk) {

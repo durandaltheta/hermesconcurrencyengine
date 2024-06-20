@@ -19,9 +19,6 @@
 #include "utility.hpp"
 
 namespace hce {
-namespace detail {
-
-}
 
 /** 
  @brief interface coroutine type 
@@ -76,7 +73,7 @@ struct coroutine : public printable {
 
     // construct the coroutine from a type erased handle
     coroutine(std::coroutine_handle<> h) : handle_(h) { 
-        HCE_MIN_CONSTRUCTOR("coroutine",detail::to_string(h));
+        HCE_MIN_CONSTRUCTOR("coroutine");
     }
 
     inline coroutine& operator=(const coroutine&) = delete;
@@ -136,7 +133,7 @@ struct coroutine : public printable {
         return d; 
     }
 
-    inline const char* nspace() const { return "hce::"; }
+    inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "coroutine"; }
 
     /// return our stringified coroutine handle's address
@@ -192,15 +189,23 @@ struct coroutine : public printable {
         }
     }
 
-protected:
-    // always points to the coroutine running on the scheduler on this thread
-    static coroutine*& tl_this_coroutine();
+    /**
+     @brief convert the handle to return the requested promise_type
+
+     Only valid if `coroutine::promise().type_info() == typeid(COROUTINE::promise_type)`
+
+     @return a reference to the unwrapped promise type
+     */
+    template <typename COROUTINE>
+    inline typename COROUTINE::promise_type& to_promise() const {
+        return std::coroutine_handle<typename COROUTINE::promise_type>::from_address(
+                handle_.address()).promise();
+    }
 
     static inline std::string handle_to_string(const std::coroutine_handle<>& h) {
         std::stringstream ss;
+        ss << h;
         void* addr = h.address();
-        ss << "std::coroutine_handle@" 
-           << h.address();
 
         if(addr) {
             ss << "["
@@ -211,6 +216,10 @@ protected:
 
         return ss.str();
     }
+
+protected:
+    // always points to the coroutine running on the scheduler on this thread
+    static coroutine*& tl_this_coroutine();
 
     inline void destroy_() {
         HCE_MED_LOG(
@@ -427,7 +436,7 @@ struct yield : public printable {
         }
     }
 
-    inline const char* nspace() const { return "hce::"; }
+    inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "yield"; }
 
     inline bool await_ready() {
@@ -746,7 +755,7 @@ struct awaitable : public printable {
         finalize(); 
     }
     
-    inline const char* nspace() const { return "hce::"; }
+    inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "awaitable"; }
 
     inline std::string content() const {
