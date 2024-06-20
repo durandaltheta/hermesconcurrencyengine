@@ -579,7 +579,7 @@ struct awaitable : public printable {
                 ss << *this
                    << " was not resumed before being destroyed; it held " 
                    << co;
-                HCE_ERROR_LOG(ss.str().c_str());
+                HCE_ERROR_METHOD_BODY("~interface",ss.str().c_str());
             }
         }
 

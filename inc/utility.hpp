@@ -92,46 +92,46 @@
  The following log macros are always compiled and printed when called
  */
 
-#define HCE_FATAL_CONSTRUCTOR(...) log_constructor__(loguru::Verbosity_FATAL __VA_OPT__(,) __VA_ARGS__)
-#define HCE_FATAL_DESTRUCTOR() log_destructor__(loguru::Verbosity_FATAL)
-#define HCE_FATAL_METHOD_ENTER(...) log_method_enter__(loguru::Verbosity_FATAL __VA_OPT__(,) __VA_ARGS__)
-#define HCE_FATAL_METHOD_BODY(...) log_method_body__(loguru::Verbosity_FATAL __VA_OPT__(,) __VA_ARGS__)
-#define HCE_FATAL_FUNCTION_ENTER(...) printable::log_function_enter__(loguru::Verbosity_FATAL __VA_OPT__(,) __VA_ARGS__)
-#define HCE_FATAL_FUNCTION_BODY(...) printable::log_function_body__(loguru::Verbosity_FATAL __VA_OPT__(,) __VA_ARGS__)
-#define HCE_FATAL_LOG(...) VLOG_F(loguru::Verbosity_FATAL __VA_OPT__(,) __VA_ARGS__)
+#define HCE_FATAL_CONSTRUCTOR(...) log_constructor__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_FATAL_DESTRUCTOR() log_destructor__(loguru::Verbosity_FATAL, __FILE__, __LINE__)
+#define HCE_FATAL_METHOD_ENTER(...) log_method_enter__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_FATAL_METHOD_BODY(...) log_method_body__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_FATAL_FUNCTION_ENTER(...) printable::log_function_enter__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_FATAL_FUNCTION_BODY(...) printable::log_function_body__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_FATAL_LOG(...) loguru::log(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 
 
-#define HCE_ERROR_CONSTRUCTOR(...) log_constructor__(loguru::Verbosity_ERROR __VA_OPT__(,) __VA_ARGS__)
-#define HCE_ERROR_DESTRUCTOR() log_destructor__(loguru::Verbosity_ERROR)
-#define HCE_ERROR_METHOD_ENTER(...) log_method_enter__(loguru::Verbosity_ERROR __VA_OPT__(,) __VA_ARGS__)
-#define HCE_ERROR_METHOD_BODY(...) log_method_body__(loguru::Verbosity_ERROR __VA_OPT__(,) __VA_ARGS__)
-#define HCE_ERROR_FUNCTION_ENTER(...) printable::log_function_enter__(loguru::Verbosity_ERROR __VA_OPT__(,) __VA_ARGS__)
-#define HCE_ERROR_FUNCTION_BODY(...) printable::log_function_body__(loguru::Verbosity_ERROR __VA_OPT__(,) __VA_ARGS__)
-#define HCE_ERROR_LOG(...) VLOG_F(loguru::Verbosity_ERROR __VA_OPT__(,) __VA_ARGS__)
+#define HCE_ERROR_CONSTRUCTOR(...) log_constructor__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_ERROR_DESTRUCTOR() log_destructor__(loguru::Verbosity_ERROR, __FILE__, __LINE__)
+#define HCE_ERROR_METHOD_ENTER(...) log_method_enter__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_ERROR_METHOD_BODY(...) log_method_body__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_ERROR_FUNCTION_ENTER(...) printable::log_function_enter__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_ERROR_FUNCTION_BODY(...) printable::log_function_body__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_ERROR_LOG(...) loguru::log(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 
 
-#define HCE_WARNING_CONSTRUCTOR(...) log_constructor__(loguru::Verbosity_WARNING __VA_OPT__(,) __VA_ARGS__)
-#define HCE_WARNING_DESTRUCTOR() log_destructor__(loguru::Verbosity_WARNING)
-#define HCE_WARNING_METHOD_ENTER(...) log_method_enter__(loguru::Verbosity_WARNING __VA_OPT__(,) __VA_ARGS__)
-#define HCE_WARNING_METHOD_BODY(...) log_method_body__(loguru::Verbosity_WARNING __VA_OPT__(,) __VA_ARGS__)
-#define HCE_WARNING_FUNCTION_ENTER(...) printable::log_function_enter__(loguru::Verbosity_WARNING __VA_OPT__(,) __VA_ARGS__)
-#define HCE_WARNING_FUNCTION_BODY(...) printable::log_function_body__(loguru::Verbosity_WARNING __VA_OPT__(,) __VA_ARGS__)
-#define HCE_WARNING_LOG(...) VLOG_F(loguru::Verbosity_WARNING __VA_OPT__(,) __VA_ARGS__)
+#define HCE_WARNING_CONSTRUCTOR(...) log_constructor__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_WARNING_DESTRUCTOR() log_destructor__(loguru::Verbosity_WARNING, __FILE__, __LINE__)
+#define HCE_WARNING_METHOD_ENTER(...) log_method_enter__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_WARNING_METHOD_BODY(...) log_method_body__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_WARNING_FUNCTION_ENTER(...) printable::log_function_enter__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_WARNING_FUNCTION_BODY(...) printable::log_function_body__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_WARNING_LOG(...) loguru::log(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 
 
-#define HCE_INFO_CONSTRUCTOR(...) log_constructor__(loguru::Verbosity_INFO __VA_OPT__(,) __VA_ARGS__)
-#define HCE_INFO_DESTRUCTOR() log_destructor__(loguru::Verbosity_INFO)
-#define HCE_INFO_METHOD_ENTER(...) log_method_enter__(loguru::Verbosity_INFO __VA_OPT__(,) __VA_ARGS__)
+#define HCE_INFO_CONSTRUCTOR(...) log_constructor__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_INFO_DESTRUCTOR() log_destructor__(loguru::Verbosity_INFO, __FILE__, __LINE__)
+#define HCE_INFO_METHOD_ENTER(...) log_method_enter__(loguru::Verbosity_INF, __FILE__, __LINE__O __VA_OPT__(,) __VA_ARGS__)
 #define HCE_INFO_METHOD_BODY(...) log_method_body__(loguru::Verbosity_INFO __VA_OPT__(,) __VA_ARGS__)
-#define HCE_INFO_FUNCTION_ENTER(...) printable::log_function_enter__(loguru::Verbosity_INFO __VA_OPT__(,) __VA_ARGS__)
-#define HCE_INFO_FUNCTION_BODY(...) printable::log_function_body__(loguru::Verbosity_INFO __VA_OPT__(,) __VA_ARGS__)
-#define HCE_INFO_LOG(...) VLOG_F(loguru::Verbosity_INFO __VA_OPT__(,) __VA_ARGS__)
+#define HCE_INFO_FUNCTION_ENTER(...) printable::log_function_enter__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_INFO_FUNCTION_BODY(...) printable::log_function_body__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_INFO_LOG(...) loguru::log(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 
 
 // high criticality lifecycle
 #if HCELOGLIMIT >= 1
-#define HCE_HIGH_CONSTRUCTOR(...) log_constructor__(1 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_HIGH_DESTRUCTOR() log_destructor__(1)
+#define HCE_HIGH_CONSTRUCTOR(...) log_constructor__(1, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_HIGH_DESTRUCTOR() log_destructor__(1, __FILE__, __LINE__)
 #else
 #define HCE_HIGH_CONSTRUCTOR(...) (void)0
 #define HCE_HIGH_DESTRUCTOR() (void)0
@@ -139,11 +139,11 @@
 
 // high criticality functions and methods
 #if HCELOGLIMIT >= 2
-#define HCE_HIGH_METHOD_ENTER(...) log_method_enter__(2 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_HIGH_METHOD_BODY(...) log_method_body__(2 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_HIGH_FUNCTION_ENTER(...) printable::log_function_enter__(2 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_HIGH_FUNCTION_BODY(...) printable::log_function_body__(2 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_HIGH_LOG(...) VLOG_F(2 __VA_OPT__(,) __VA_ARGS__)
+#define HCE_HIGH_METHOD_ENTER(...) log_method_enter__(2, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_HIGH_METHOD_BODY(...) log_method_body__(2, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_HIGH_FUNCTION_ENTER(...) printable::log_function_enter__(2, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_HIGH_FUNCTION_BODY(...) printable::log_function_body__(2, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_HIGH_LOG(...) loguru::log(2, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #else
 #define HCE_HIGH_METHOD_ENTER(...) (void)0
 #define HCE_HIGH_METHOD_BODY(...) (void)0
@@ -154,8 +154,8 @@
 
 // medium criticality lifecycle
 #if HCELOGLIMIT >= 3
-#define HCE_MED_CONSTRUCTOR(...) log_constructor__(3 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MED_DESTRUCTOR() log_destructor__(3)
+#define HCE_MED_CONSTRUCTOR(...) log_constructor__(3, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MED_DESTRUCTOR() log_destructor__(3, __FILE__, __LINE__)
 #else
 #define HCE_MED_CONSTRUCTOR(...) (void)0
 #define HCE_MED_DESTRUCTOR() (void)0
@@ -163,11 +163,11 @@
 
 // medium criticality functions and methods
 #if HCELOGLIMIT >= 4
-#define HCE_MED_METHOD_ENTER(...) log_method_enter__(4 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MED_METHOD_BODY(...) log_method_body__(4 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MED_FUNCTION_ENTER(...) printable::log_function_enter__(4 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MED_FUNCTION_BODY(...) printable::log_function_body__(4 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MED_LOG(...) VLOG_F(4 __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MED_METHOD_ENTER(...) log_method_enter__(4, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MED_METHOD_BODY(...) log_method_body__(4, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MED_FUNCTION_ENTER(...) printable::log_function_enter__(4, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MED_FUNCTION_BODY(...) printable::log_function_body__(4, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MED_LOG(...) loguru::log(4, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #else
 #define HCE_MED_METHOD_ENTER(...) (void)0
 #define HCE_MED_METHOD_BODY(...) (void)0
@@ -178,8 +178,8 @@
 
 // low criticality lifecycle
 #if HCELOGLIMIT >= 5
-#define HCE_LOW_CONSTRUCTOR(...) log_constructor__(5 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_LOW_DESTRUCTOR() log_destructor__(5)
+#define HCE_LOW_CONSTRUCTOR(...) log_constructor__(5, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_LOW_DESTRUCTOR() log_destructor__(5, __FILE__, __LINE__)
 #else
 #define HCE_LOW_CONSTRUCTOR(...) (void)0
 #define HCE_LOW_DESTRUCTOR() (void)0
@@ -187,11 +187,11 @@
 
 // low criticality functions and methods
 #if HCELOGLIMIT >= 6
-#define HCE_LOW_METHOD_ENTER(...) log_method_enter__(6 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_LOW_METHOD_BODY(...) log_method_body__(6 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_LOW_FUNCTION_ENTER(...) printable::log_function_enter__(6 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_LOW_FUNCTION_BODY(...) printable::log_function_body__(6 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_LOW_LOG(...) VLOG_F(6 __VA_OPT__(,) __VA_ARGS__)
+#define HCE_LOW_METHOD_ENTER(...) log_method_enter__(6, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_LOW_METHOD_BODY(...) log_method_body__(6, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_LOW_FUNCTION_ENTER(...) printable::log_function_enter__(6, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_LOW_FUNCTION_BODY(...) printable::log_function_body__(6, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_LOW_LOG(...) loguru::log(6, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #else
 #define HCE_LOW_METHOD_ENTER(...) (void)0
 #define HCE_LOW_METHOD_BODY(...) (void)0
@@ -202,8 +202,8 @@
 
 // minimal criticality lifecycle
 #if HCELOGLIMIT >= 7
-#define HCE_MIN_CONSTRUCTOR(...) log_constructor__(7 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MIN_DESTRUCTOR() log_destructor__(7)
+#define HCE_MIN_CONSTRUCTOR(...) log_constructor__(7, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MIN_DESTRUCTOR() log_destructor__(7, __FILE__, __LINE__)
 #else
 #define HCE_MIN_CONSTRUCTOR(...) (void)0
 #define HCE_MIN_DESTRUCTOR() (void)0
@@ -211,11 +211,11 @@
 
 // minimal criticality functions and methods
 #if HCELOGLIMIT >= 8
-#define HCE_MIN_METHOD_ENTER(...) log_method_enter__(8 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MIN_METHOD_BODY(...) log_method_body__(8 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MIN_FUNCTION_ENTER(...) printable::log_function_enter__(8 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MIN_FUNCTION_BODY(...) printable::log_function_body__(8 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MIN_LOG(...) VLOG_F(8 __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MIN_METHOD_ENTER(...) log_method_enter__(8, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MIN_METHOD_BODY(...) log_method_body__(8, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MIN_FUNCTION_ENTER(...) printable::log_function_enter__(8, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MIN_FUNCTION_BODY(...) printable::log_function_body__(8, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MIN_LOG(...) loguru::log(8, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #else
 #define HCE_MIN_METHOD_ENTER(...) (void)0
 #define HCE_MIN_METHOD_BODY(...) (void)0
@@ -228,11 +228,11 @@
 // trying to actively debug code that stepping through with a debugger would be 
 // painful or otherwise not useful
 #if HCELOGLIMIT >= 9
-#define HCE_TRACE_METHOD_ENTER(...) log_method_enter__(9 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_TRACE_METHOD_BODY(...) log_method_body__(9 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_TRACE_FUNCTION_ENTER(...) printable::log_function_enter__(9 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_TRACE_FUNCTION_BODY(...) printable::log_function_body__(9 __VA_OPT__(,) __VA_ARGS__)
-#define HCE_TRACE_LOG(...) VLOG_F(9 __VA_OPT__(,) __VA_ARGS__)
+#define HCE_TRACE_METHOD_ENTER(...) log_method_enter__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_TRACE_METHOD_BODY(...) log_method_body__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_TRACE_FUNCTION_ENTER(...) printable::log_function_enter__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_TRACE_FUNCTION_BODY(...) printable::log_function_body__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_TRACE_LOG(...) loguru::log(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #else
 #define HCE_TRACE_METHOD_ENTER(...) (void)0
 #define HCE_TRACE_METHOD_BODY(...) (void)0
@@ -355,15 +355,15 @@ struct printable {
     // The following public methods should be called by macros *ONLY*
     
     template <typename... As>
-    void log_constructor__(int verbosity, As&&... as) {
+    void log_constructor__(int verbosity, const char* file, int line, As&&... as) {
         if(verbosity <= printable::thread_log_level()) {
             std::stringstream ss;
             printable::ingest_args_(ss, std::forward<As>(as)...);
             std::string self(*this);
 
             loguru::log(verbosity, 
-                        __FILE__, 
-                        __LINE__, 
+                        file, 
+                        line, 
                         "%s::%s(%s)", 
                         self.c_str(), 
                         this->name(), 
@@ -371,13 +371,13 @@ struct printable {
         }
     }
 
-    inline void log_destructor__(int verbosity) {
+    inline void log_destructor__(int verbosity, const char* file, int line) {
         if(verbosity <= printable::thread_log_level()) {
             std::string self(*this);
 
             loguru::log(verbosity, 
-                        __FILE__, 
-                        __LINE__, 
+                        file, 
+                        line, 
                         "%s::~%s()", 
                         self.c_str(), 
                         this->name());
@@ -385,15 +385,15 @@ struct printable {
     }
 
     template <typename... As>
-    void log_method_enter__(int verbosity, const char* method_name, As&&... as) {
+    void log_method_enter__(int verbosity, const char* file, int line, const char* method_name, As&&... as) {
         if(verbosity <= printable::thread_log_level()) {
             std::stringstream ss;
             printable::ingest_args_(ss, std::forward<As>(as)...);
             std::string self(*this);
 
             loguru::log(verbosity, 
-                        __FILE__, 
-                        __LINE__, 
+                        file, 
+                        line, 
                         "%s::%s(%s)", 
                         self.c_str(), 
                         method_name, 
@@ -402,15 +402,15 @@ struct printable {
     }
 
     template <typename... As>
-    void log_method_body__(int verbosity, const char* method_name, As&&... as) {
+    void log_method_body__(int verbosity, const char* file, int line, const char* method_name, As&&... as) {
         if(verbosity <= printable::thread_log_level()) {
             std::stringstream ss;
             printable::ingest_(ss, std::forward<As>(as)...);
             std::string self(*this);
 
             loguru::log(verbosity, 
-                        __FILE__, 
-                        __LINE__, 
+                        file, 
+                        line, 
                         "%s::%s():%s", 
                         self.c_str(), 
                         method_name, 
@@ -419,14 +419,14 @@ struct printable {
     }
 
     template <typename... As>
-    static void log_function_enter__(int verbosity, const char* method_name, As&&... as) {
+    static void log_function_enter__(int verbosity, const char* file, int line, const char* method_name, As&&... as) {
         if(verbosity <= printable::thread_log_level()) {
             std::stringstream ss;
             printable::ingest_(ss, std::forward<As>(as)...);
 
             loguru::log(verbosity, 
-                        __FILE__, 
-                        __LINE__, 
+                        file, 
+                        line, 
                         "%s(%s)", 
                         method_name, 
                         ss.str().c_str());
@@ -434,14 +434,14 @@ struct printable {
     }
 
     template <typename... As>
-    static void log_function_body__(int verbosity, const char* method_name, As&&... as) {
+    static void log_function_body__(int verbosity, const char* file, int line, const char* method_name, As&&... as) {
         if(verbosity <= printable::thread_log_level()) {
             std::stringstream ss;
             printable::ingest_(ss, std::forward<As>(as)...);
 
             loguru::log(verbosity, 
-                        __FILE__, 
-                        __LINE__, 
+                        file, 
+                        line, 
                         "%s():%s", 
                         method_name, 
                         ss.str().c_str());

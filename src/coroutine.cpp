@@ -26,5 +26,5 @@ void hce::detail::coroutine::coroutine_did_not_co_await(void* awt) {
        << "] did not call co_await on an hce::awaitable[0x"
        << awt 
        << "]";
-    HCE_ERROR_LOG(ss.str().c_str());
+    HCE_ERROR_LOG("%s",ss.str().c_str());
 }
