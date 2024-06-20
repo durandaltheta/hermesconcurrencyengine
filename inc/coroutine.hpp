@@ -103,14 +103,14 @@ struct coroutine : public printable {
     /// replaces the managed handle
     inline void reset() { 
         HCE_LOW_METHOD_ENTER("reset");
-        if(handle_) { destroy_(); }
+        if(handle_) { destroy(); }
         handle_ = std::coroutine_handle<>(); 
     }
 
     /// replaces the managed handle
     inline void reset(std::coroutine_handle<> h) { 
         HCE_LOW_METHOD_ENTER("reset", coroutine::handle_to_string(h));
-        if(handle_) { destroy_(); }
+        if(handle_) { destroy(); }
         handle_ = h; 
     }
 
@@ -221,10 +221,8 @@ protected:
     // always points to the coroutine running on the scheduler on this thread
     static coroutine*& tl_this_coroutine();
 
-    inline void destroy_() {
-        HCE_MED_LOG(
-            "destroying handle[",
-            coroutine::handle_to_string(handle_));
+    inline void destroy() {
+        HCE_MED_FUNCTION_BODY("destroy",coroutine::handle_to_string(handle_));
         handle_.destroy(); 
     }
 
@@ -384,14 +382,14 @@ struct this_thread {
     template <typename LOCK>
     static inline void block(LOCK& lk) {
         auto tt = this_thread::get();
-        HCE_TRACE_LOG("hce::this_thread@",tt,"::block(Lock&)");
+        HCE_TRACE_LOG("hce::this_thread@%p::block(Lock&)",tt);
         tt->block_(lk);
     }
 
     // unblock an arbitrary this_thread
     template <typename LOCK>
     inline void unblock(LOCK& lk) {
-        HCE_TRACE_LOG("hce::this_thread@",this,"::unblock(Lock&)");
+        HCE_TRACE_LOG("hce::this_thread@%p::unblock(Lock&)",this);
         ready = true;
         lk.unlock();
         cv.notify_one();

@@ -20,7 +20,7 @@ struct circular_buffer : public printable {
     struct push_on_full : public std::exception {
         const char* what() const noexcept { 
             const char* s = "cannot call push() when the buffer is full";
-            HCE_ERROR_LOG(s);
+            HCE_ERROR_LOG("%s",s);
             return s; 
         }
     };
@@ -28,7 +28,7 @@ struct circular_buffer : public printable {
     struct front_on_empty : public std::exception {
         const char* what() const noexcept { 
             const char* s = "cannot call front() when the buffer is empty"; 
-            HCE_ERROR_LOG(s);
+            HCE_ERROR_LOG("%s",s);
             return s;
         }
     };
@@ -36,7 +36,7 @@ struct circular_buffer : public printable {
     struct pop_on_empty : public std::exception {
         const char* what() const noexcept { 
             const char* s = "cannot call pop() when the buffer is empty"; 
-            HCE_ERROR_LOG(s);
+            HCE_ERROR_LOG("%s",s);
             return s;
         }
     };
