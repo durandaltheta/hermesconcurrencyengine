@@ -22,7 +22,7 @@ add_executable(hce_ut
 )
 
 target_include_directories(hce_ut PUBLIC ${HCE_INCLUDE_DIR} PRIVATE ${LOG_SOURCE_DIR})
-target_link_libraries(hce_ut gtest gtest_main loguru hce)
+target_link_libraries(hce_ut PRIVATE gtest gtest_main hce)
 
 message("-- HCE UNIT TEST COMPILE DEFINES -- ")
 message("-DHCELOGLIMIT:${HCELOGLIMIT}")

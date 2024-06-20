@@ -210,8 +210,8 @@ def buildAndExecuteTests(args):
 
     success = True
     toolchain = None
+    loglevel = -1
     loglimit = 0
-    loglevel = 0
     runinfos = []
             
     os.environ['HCE_TIMED_TEST_LOGLEVEL_LIMIT'] = args.timed_test_loglevel_limit

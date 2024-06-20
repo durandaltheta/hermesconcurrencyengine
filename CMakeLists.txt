@@ -5,7 +5,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -O3 -Wall")
 set(HCE_INCLUDE_DIR ${CMAKE_CURRENT_LIST_DIR}/inc)
 set(HCE_SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/src)
-set(LOG_SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/loguru)
+set(LOGURU_DIR ${CMAKE_CURRENT_LIST_DIR}/loguru)
+set(BUILD_SHARED_LIBS OFF)
 
 project(libhce)
 
@@ -29,7 +30,7 @@ endif()
 # set loglevel
 if(DEFINED HCELOGLEVEL)
 else()
-    set(HCELOGLEVEL 0) 
+    set(HCELOGLEVEL -1) 
 endif()
 
 # logging comes from the 'easyloggingpp' project:
@@ -38,7 +39,7 @@ endif()
 # Said project uses the MIT license
 
 set(HCE_HEADER_FILES 
-    ${LOG_SOURCE_DIR}/loguru.hpp
+    ${LOGURU_DIR}/loguru.hpp
     ${HCE_INCLUDE_DIR}/utility.hpp
     ${HCE_INCLUDE_DIR}/atomic.hpp
     ${HCE_INCLUDE_DIR}/circular_buffer.hpp
@@ -51,6 +52,7 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/hce.hpp)
 
 set(HCE_SOURCE_FILES
+    ${LOGURU_DIR}/loguru.cpp
     ${HCE_SOURCE_DIR}/utility.cpp
     ${HCE_SOURCE_DIR}/coroutine.cpp
     ${HCE_SOURCE_DIR}/scheduler.cpp
@@ -70,10 +72,9 @@ endfunction(ListToString)
 ListToString(PRETTY_HCE_HEADER_FILES "\n" ${HCE_HEADER_FILES})
 ListToString(PRETTY_HCE_SOURCE_FILES "\n" ${HCE_SOURCE_FILES})
 
-add_library(hce STATIC ${HCE_SOURCE_FILES} ${HCE_HEADER_FILES})
+add_library(hce STATIC ${HCE_HEADER_FILES} ${HCE_SOURCE_FILES})
 
-target_include_directories(hce PUBLIC ${HCE_INCLUDE_DIR} PRIVATE ${LOG_SOURCE_DIR})
-target_link_libraries(hce PUBLIC loguru::loguru)
+target_include_directories(hce PUBLIC ${HCE_INCLUDE_DIR} ${LOGURU_DIR})
 
 set(HCE_COMPILE_DEFS 
     -DHCELOGLEVEL=${HCELOGLEVEL}
@@ -93,5 +94,4 @@ message("-- HCE LIBRARY COMPILE DEFINES -- ")
 message("-DHCEMINBLOCKPROCS=${HCEMINBLOCKPROCS}")
 message("-DHCELOGLEVEL:${HCELOGLEVEL}")
 
-add_subdirectory(loguru)
 add_subdirectory(tst EXCLUDE_FROM_ALL)

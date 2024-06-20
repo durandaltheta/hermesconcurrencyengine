@@ -45,11 +45,11 @@ The `validate` command is a `python3` executable script. It's goal is to provide
 
 The total times the the `hce_ut` unit tests are built and run is the combinatorial total of all enabled options. IE:
 - the maximum count of compiler toolchains: 3x
-- the maximum `HCELOGLEVEL`: 10x
+- the maximum `HCELOGLEVEL`: 11x
 - the maximum `HCELOGLIMIT`: 10x
 - valgrind `memcheck` for each enabled toolchain: + 3
 
-Then the unit tests will be run "303" times (the default runcount is "202" because a custom compiler is not specified by default).
+Then the unit tests will be run "333" times (the default runcount is "222" because a custom compiler is not specified by default).
 
 The goal of all this is to introduce timing differences and general processing jitter, to increase confidence that the feature logic of the project is correct. A successful `validate` run (with various default tests enabled) should produce high confidence for the runtime hardware.
 
@@ -87,7 +87,7 @@ Additionally, all user accessible objects provided by this library are printable
 
 `HCELOGLIMIT` is a compiler define that is used when building *this library* (*not* user code!). As such, `HCELOGLEVEL` can be defined for the library as environment variables when building or set in their associated `cmake` variables in the toplevel `CMakeLists.txt`. However, these values may have to be additionally passed in as explicit compiler defines to user source compilation.
 
-The default value for `HCELOGLEVEL` is `0`, generally limiting logging to errors or critical messages.
+The default value for `HCELOGLEVEL` is `-1`, generally limiting logging to errors or critical messages.
 
 `HCELOGLEVEL` can be set lower than `HCELOGLIMIT` to prevent logging (though some extra runtime processing may occur if the `HCELOGLIMIT` is set higher than `HCELOGLEVEL` even if nothing is printed).
 

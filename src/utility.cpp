@@ -14,9 +14,9 @@
 #define HCELOGLEVEL 9
 #endif
 
-#if HCELOGLEVEL < 0
-/// force a loglevel of 0 or higher
-#define HCELOGLEVEL 0
+#if HCELOGLEVEL < -3 
+/// force a loglevel of loguru::Verbosity_FATAL or higher
+#define HCELOGLEVEL loguru::Verbosity_FATAL
 #endif 
 
 /// declaration of user replacable log initialization function
@@ -33,7 +33,10 @@ void hce_log_initialize(int hceloglevel) {
     argv.push_back(process.data());
     argv.push_back(verbosity.data());
     int argc=argv.size();
-    loguru::init(argc, argv.data());
+    loguru::Options opt;
+    opt.main_thread_name = nullptr;
+    opt.signal_options = loguru::SignalOptions::none();
+    loguru::init(argc, argv.data(), opt);
 }
 #endif 
 

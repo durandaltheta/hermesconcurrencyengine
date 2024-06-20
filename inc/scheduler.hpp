@@ -1273,6 +1273,7 @@ private:
      Returns true on suspend, false on halt.
      */
     inline bool run_() {
+        HCE_MED_METHOD_ENTER("run_");
         // error out immediately if called improperly
         if(coroutine::in()) { throw coroutine_called_run(); }
 
@@ -1306,7 +1307,12 @@ private:
         std::unique_lock lk(lk_);
 
         // block until no longer suspended
-        while(state_ == suspended) { resume_block_(lk); }
+        while(state_ == suspended) { 
+            HCE_MED_METHOD_BODY("run_","suspended before run loop");
+            resume_block_(lk); 
+        }
+        
+        HCE_MED_METHOD_BODY("run_","entering run loop");
 
         // If halt_() has been called, return immediately only one caller of 
         // run() is possible. A double run() will cause a halt_().
@@ -1427,6 +1433,8 @@ private:
             }
         }
 
+        HCE_MED_METHOD_BODY("run_","exitted run loop");
+
         // restore parent thread_local this_scheduler state
         tl_cs = parent_cs; 
         tl_cs_re = parent_cs_re;
@@ -1487,20 +1495,24 @@ private:
         std::unique_lock<spinlock> lk(lk_);
 
         if(state_ != halted) {
+            bool was_running = state_ == running; 
+
             // set the scheduler to the permanent halted state
             state_ = halted;
 
-            // wakeup from suspend if necessary
+            // resume scheduler if necessary
             resume_notify_();
 
-            // called from outside this scheduler
             if(detail::scheduler::tl_this_scheduler() != this) {
                 // wakeup scheduler if necessary
                 tasks_available_notify_();
-                
-                // block until halted
-                waiting_for_halt_ = true;
-                halt_cv_.wait(lk);
+            
+                if(was_running) {
+                    // block until halted
+                    HCE_MED_METHOD_BODY("halt_","waiting");
+                    waiting_for_halt_ = true;
+                    halt_cv_.wait(lk);
+                }
             }
         }
     }
@@ -1572,6 +1584,7 @@ private:
 
     inline void halt_notify_() {
         if(waiting_for_halt_) {
+            HCE_MED_METHOD_BODY("halt_notify_");
             waiting_for_halt_ = false;
             halt_cv_.notify_one();
         }
