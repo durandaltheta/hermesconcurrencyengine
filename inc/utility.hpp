@@ -454,7 +454,7 @@ private:
 
     // ingest a container of items, prints like: [elem1, elem2, elem3]
     template <typename A>
-    static void ingest_item_(std::true_type, std::stringstream& ss, A&& container) {
+    static void ingest_item_disambiguation_(std::true_type, std::stringstream& ss, A&& container) {
         auto it = container.begin();
         auto end = container.end();
         
@@ -476,8 +476,31 @@ private:
 
     // ingest a single item
     template <typename A>
-    static void ingest_item_(std::false_type, std::stringstream& ss, A&& a) {
+    static void ingest_item_disambiguation_(std::false_type, std::stringstream& ss, A&& a) {
         ss << std::forward<A>(a);
+    }
+   
+    // catch any variant of `std::basic_string<>` (IE, `std::string`)
+    template <typename CharT, typename Traits, typename Alloc>
+    static void ingest_item_(
+            std::stringstream& ss, 
+            const std::basic_string<CharT, Traits, Alloc>& s) {
+        ss << s;
+    }
+    
+    template <typename CharT, typename Traits, typename Alloc>
+    static void ingest_item_(
+            std::stringstream& ss, 
+            std::basic_string<CharT, Traits, Alloc>&& s) {
+        ss << s;
+    }
+
+    template <typename A>
+    static void ingest_item_(std::stringstream& ss, A&& a) {
+        ingest_item_disambiguation_(
+            detail::is_container<typename std::decay<A>::type>(),
+            ss,
+            std::forward<A>(a));
     }
 
     static inline void ingest_continue_(std::stringstream& ss) { }
@@ -485,10 +508,7 @@ private:
     template <typename A, typename... As>
     static void ingest_continue_(std::stringstream& ss, A&& a, As&&... as) {
         ss << ", "; 
-        ingest_item_(
-            detail::is_container<typename std::decay<A>::type>(),
-            ss,
-            std::forward<A>(a));
+        ingest_item_(ss,std::forward<A>(a));
         ingest_continue_(ss, std::forward<As>(as)...);
     }
     
@@ -497,10 +517,7 @@ private:
     // for ingesting a list of arguments
     template <typename A, typename... As>
     static void ingest_args_(std::stringstream& ss, A&& a, As&&... as) {
-        ingest_item_(
-            detail::is_container<typename std::decay<A>::type>(),
-            ss,
-            std::forward<A>(a));
+        ingest_item_(ss,std::forward<A>(a));
         ingest_continue_(ss, std::forward<As>(as)...);
     }
     
@@ -509,10 +526,7 @@ private:
     // for ingesting arbitrary data
     template <typename A, typename... As>
     static void ingest_(std::stringstream& ss, A&& a, As&&... as) {
-        ingest_item_(
-            detail::is_container<typename std::decay<A>::type>(),
-            ss,
-            std::forward<A>(a));
+        ingest_item_(ss,std::forward<A>(a));
         ingest_(ss, std::forward<As>(as)...);
     }
 };
