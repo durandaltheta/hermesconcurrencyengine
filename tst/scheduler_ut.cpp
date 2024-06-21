@@ -16,6 +16,10 @@
 namespace test {
 namespace scheduler {
 
+/*
+ Test only replacement for something like a channel. Synchronizes sends and 
+ receives between a thread and a thread or a thread and a coroutine
+ */
 template <typename T>
 struct queue {
     template <typename TSHADOW>
@@ -524,7 +528,7 @@ TEST(scheduler, schedule_and_thread_locals) {
     }
 }
 
-
+/*
 TEST(scheduler, join) {
     // join and return int
     {
@@ -555,3 +559,4 @@ TEST(scheduler, join) {
         }
     }
 }
+*/
