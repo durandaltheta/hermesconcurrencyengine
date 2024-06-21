@@ -46,9 +46,21 @@ private:
 
 inline hce::co<void> co_void() { co_return; }
 
-inline hce::co<void> co_push_int(queue<int>& q, int i) {
-    q.push(i);
+template <typename T>
+hce::co<void> co_push_T(queue<T>& q, T t) {
+    q.push(t);
     co_return;
+}
+
+template <typename T>
+inline hce::co<T> co_return_T(T t) {
+    co_return t;
+}
+
+template <typename T>
+hce::co<T> co_push_T_ret_T(queue<T>& q, T t) {
+    q.push(t);
+    co_return t;
 }
 
 inline hce::co<void> co_scheduler_in_check(queue<void*>& q) { 
@@ -232,103 +244,253 @@ TEST(scheduler, install) {
     }
 }
 
-TEST(scheduler, schedule) {
+namespace test {
+
+// Provides a standard initialization API that enables template specialization
+template <typename T>
+struct init {
+    // initialize value 
+    template <typename... As>
+    init(As&&... as) : t_(std::forward<As>(as)...) { }
+
+    // trivial conversion
+    inline operator T() { return std::move(t_); }
+
+private:
+    T t_;
+};
+
+// std::string initialization specialization
+template <>
+struct init<std::string> {
+    template <typename... As>
+    init(As&&... as) : t_(std::to_string(std::forward<As>(as)...)) { }
+
+    inline operator std::string() { return std::move(t_); }
+
+private:
+    std::string t_;
+};
+
+template <typename T>
+size_t schedule_T() {
+
+    size_t success_count = 0;
+
+    // schedule individually
     {
-        test::scheduler::queue<int> q;
+        test::scheduler::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
 
-        sch->schedule(test::scheduler::co_push_int(q,3));
-        sch->schedule(test::scheduler::co_push_int(q,2));
-        sch->schedule(test::scheduler::co_push_int(q,1));
+        sch->schedule(test::scheduler::co_push_T<T>(q,init<T>(3)));
+        sch->schedule(test::scheduler::co_push_T<T>(q,init<T>(2)));
+        sch->schedule(test::scheduler::co_push_T<T>(q,init<T>(1)));
 
         try {
-            EXPECT_EQ(3, q.pop());
-            EXPECT_EQ(2, q.pop());
-            EXPECT_EQ(1, q.pop());
+            EXPECT_EQ((T)init<T>(3), q.pop());
+            EXPECT_EQ((T)init<T>(2), q.pop());
+            EXPECT_EQ((T)init<T>(1), q.pop());
 
             lf.reset();
             thd.join();
+            ++success_count;
         } catch(const std::exception& e) {
             LOG_F(ERROR, e.what());
         }
     }
 
+    // schedule group
     {
-        test::scheduler::queue<int> q;
+        test::scheduler::queue<T> q;
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+
+        sch->schedule(test::scheduler::co_push_T<T>(q,init<T>(3)),
+                      test::scheduler::co_push_T<T>(q,init<T>(2)),
+                      test::scheduler::co_push_T<T>(q,init<T>(1)));
+
+        try {
+            EXPECT_EQ((T)init<T>(3), q.pop());
+            EXPECT_EQ((T)init<T>(2), q.pop());
+            EXPECT_EQ((T)init<T>(1), q.pop());
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    }
+
+    // schedule group of base hce::coroutines
+    {
+        test::scheduler::queue<T> q;
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+
+        sch->schedule(hce::coroutine(test::scheduler::co_push_T<T>(q,init<T>(3))),
+                      hce::coroutine(test::scheduler::co_push_T<T>(q,init<T>(2))),
+                      hce::coroutine(test::scheduler::co_push_T<T>(q,init<T>(1))));
+
+        try {
+            EXPECT_EQ((T)init<T>(3), q.pop());
+            EXPECT_EQ((T)init<T>(2), q.pop());
+            EXPECT_EQ((T)init<T>(1), q.pop());
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    }
+
+    // schedule group of different coroutine signatures
+    {
+        test::scheduler::queue<T> q;
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+
+        sch->schedule(test::scheduler::co_push_T<T>(q,init<T>(3)),
+                      hce::coroutine(test::scheduler::co_push_T<T>(q,init<T>(2))),
+                      test::scheduler::co_push_T_ret_T<T>(q,init<T>(1)));
+
+        try {
+            EXPECT_EQ((T)init<T>(3), q.pop());
+            EXPECT_EQ((T)init<T>(2), q.pop());
+            EXPECT_EQ((T)init<T>(1), q.pop());
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    }
+
+    // schedule group and single
+    {
+        test::scheduler::queue<T> q;
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+
+        sch->schedule(test::scheduler::co_push_T<T>(q,init<T>(3)),
+                      test::scheduler::co_push_T<T>(q,init<T>(2)));
+        sch->schedule(test::scheduler::co_push_T<T>(q,init<T>(1)));
+
+        try {
+            EXPECT_EQ((T)init<T>(3), q.pop());
+            EXPECT_EQ((T)init<T>(2), q.pop());
+            EXPECT_EQ((T)init<T>(1), q.pop());
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    }
+
+    // schedule in a vector
+    {
+        test::scheduler::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
 
         std::vector<hce::co<void>> cos;
-        cos.push_back(test::scheduler::co_push_int(q,3));
-        cos.push_back(test::scheduler::co_push_int(q,2));
-        cos.push_back(test::scheduler::co_push_int(q,1));
+        cos.push_back(test::scheduler::co_push_T<T>(q,init<T>(3)));
+        cos.push_back(test::scheduler::co_push_T<T>(q,init<T>(2)));
+        cos.push_back(test::scheduler::co_push_T<T>(q,init<T>(1)));
 
         try {
             sch->schedule(std::move(cos));
 
-            EXPECT_EQ(3, q.pop());
-            EXPECT_EQ(2, q.pop());
-            EXPECT_EQ(1, q.pop());
+            EXPECT_EQ((T)init<T>(3), q.pop());
+            EXPECT_EQ((T)init<T>(2), q.pop());
+            EXPECT_EQ((T)init<T>(1), q.pop());
 
             lf.reset();
             thd.join();
+            ++success_count;
         } catch(const std::exception& e) {
             LOG_F(ERROR, e.what());
         }
     }
 
+    // schedule in a list
     {
-        test::scheduler::queue<int> q;
+        test::scheduler::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
 
         std::list<hce::co<void>> cos;
-        cos.push_back(test::scheduler::co_push_int(q,3));
-        cos.push_back(test::scheduler::co_push_int(q,2));
-        cos.push_back(test::scheduler::co_push_int(q,1));
+        cos.push_back(test::scheduler::co_push_T<T>(q,init<T>(3)));
+        cos.push_back(test::scheduler::co_push_T<T>(q,init<T>(2)));
+        cos.push_back(test::scheduler::co_push_T<T>(q,init<T>(1)));
 
         try {
             sch->schedule(std::move(cos));
 
-            EXPECT_EQ(3, q.pop());
-            EXPECT_EQ(2, q.pop());
-            EXPECT_EQ(1, q.pop());
+            EXPECT_EQ((T)init<T>(3), q.pop());
+            EXPECT_EQ((T)init<T>(2), q.pop());
+            EXPECT_EQ((T)init<T>(1), q.pop());
 
             lf.reset();
             thd.join();
+            ++success_count;
         } catch(const std::exception& e) {
             LOG_F(ERROR, e.what());
         }
     }
 
+    // schedule in a forward_list
     {
-        test::scheduler::queue<int> q;
+        test::scheduler::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
 
         std::forward_list<hce::co<void>> cos;
-        cos.push_front(test::scheduler::co_push_int(q,3));
-        cos.push_front(test::scheduler::co_push_int(q,2));
-        cos.push_front(test::scheduler::co_push_int(q,1));
+        cos.push_front(test::scheduler::co_push_T<T>(q,init<T>(3)));
+        cos.push_front(test::scheduler::co_push_T<T>(q,init<T>(2)));
+        cos.push_front(test::scheduler::co_push_T<T>(q,init<T>(1)));
 
         try {
             sch->schedule(std::move(cos));
 
-            EXPECT_EQ(1, q.pop());
-            EXPECT_EQ(2, q.pop());
-            EXPECT_EQ(3, q.pop());
+            EXPECT_EQ((T)init<T>(1), q.pop());
+            EXPECT_EQ((T)init<T>(2), q.pop());
+            EXPECT_EQ((T)init<T>(3), q.pop());
 
             lf.reset();
             thd.join();
+            ++success_count;
         } catch(const std::exception& e) {
             LOG_F(ERROR, e.what());
         }
     }
+
+    return success_count;
+}
+
+}
+
+TEST(scheduler, schedule) {
+    // the count of schedule subtests we expect to complete without throwing 
+    // exceptions
+    const size_t expected = 8;
+    EXPECT_EQ(expected, test::schedule_T<int>());
+    EXPECT_EQ(expected, test::schedule_T<size_t>());
+    EXPECT_EQ(expected, test::schedule_T<double>());
+    EXPECT_EQ(expected, test::schedule_T<std::string>());
 }
 
 TEST(scheduler, schedule_and_thread_locals) {
@@ -353,6 +515,38 @@ TEST(scheduler, schedule_and_thread_locals) {
             recv = (hce::scheduler*)(sch_q.pop());
             EXPECT_NE(sch.get(), recv);
             EXPECT_EQ(global_sch, recv);
+
+            lf.reset();
+            thd.join();
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    }
+}
+
+
+TEST(scheduler, join) {
+    // join and return int
+    {
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+        std::deque<hce::awt<int>> joins;
+
+        joins.push_back(sch->join(test::scheduler::co_return_T<int>(test::init<int>(3))));
+        joins.push_back(sch->join(test::scheduler::co_return_T<int>(test::init<int>(2))));
+        joins.push_back(sch->join(test::scheduler::co_return_T<int>(test::init<int>(1))));
+
+        try {
+            int result = joins.front();
+            joins.pop_front();
+            EXPECT_EQ((int)test::init<int>(3), result);
+            result = joins.front();
+            joins.pop_front();
+            EXPECT_EQ((int)test::init<int>(2), result);
+            result = joins.front();
+            joins.pop_front();
+            EXPECT_EQ((int)test::init<int>(1), result);
 
             lf.reset();
             thd.join();
