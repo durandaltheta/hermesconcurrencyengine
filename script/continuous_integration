@@ -1,0 +1,27 @@
+#!/usr/bin/python3 
+import os
+import hce_utility
+
+SCRIPT_DIRECTORY = os.path.dirname(os.path.realpath(__file__))
+
+def main():
+    success = True 
+
+    def run(args):
+        global SCRIPT_DIRECTORY
+        # execute command with the correct environment and print function
+        code, err = execute(f'{SCRIPT_DIRECTORY}/validate {args}'.split())
+        return code == 0
+
+    gcc_cmd = '-cc gcc -cxx g++'
+    clang_cmd = '-cc clang -cxx clang++'
+
+    if run(gcc_cmd) and run(clang_cmd):
+        log('Continuous Integration Validation Success')
+        sys.exit(0)
+    else:
+        log('Continuous Integration Validation FAILURE')
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

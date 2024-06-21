@@ -8,7 +8,7 @@ C++20 Stackless Coroutine Concurrency Engine
 - `c++20` compiler toolchain (eg, `gcc`, `clang`, etc.) 
 - `cmake`
 
-Because this library is depends only on the `c++` language, in theory, it should be usable on different operating systems.
+Because usage of this library depends only on the `c++` language, in theory, it should be usable on different operating systems.
 
 ### Build 
 Set your environment variables (IE, `HCELOGLEVEL`, etc.) and execute:
@@ -17,13 +17,31 @@ cmake .
 make hce
 ```
 
+`hce.a` can then be statically linked against by user software. The directories `inc/` and `loguru/` will need to be added to user software include directories.
+
+## Documentation
+### Prerequisites 
+- `doxygen`
+- `graphviz`
+
+### Generate
+`doxygen` documentation can be generated locally for this library. Install `doxygen` and `graphviz` packages then run `doxygen`:
+```
+cd /path/to/your/mce/repo/checkout
+doxygen
+```
+The generated `doc/` directory should contain both `html` and `rtf` generated documentation. For `html`, open `index.html` by a browser to view the documentation. 
+
 ## Building and Running Unit Tests
 ### Prerequisites
 - `python3`
+- `cmake`
 - `gcc` compiler toolchain (if not not disabled)
 - `clang` compiler toolchain (if not not disabled)
 - custom compiler toolchain (if specified)
 - `valgrind` (specifically `memcheck`)
+- `roff` 
+- `tex`
 
 ### Build and Run
 Execute all tests with:
@@ -37,21 +55,19 @@ Print test help with:
 ```
 
 The `validate` command is a `python3` executable script. It's goal is to provide a consistent unit test validation algorithm. It builds and runs the library in many different configurations:
-- both `gcc` and `clang` toolchains (by default)
-- custom toolchain (optionally)
+- the specified `c` and `c++` compiler
 - produce `valgrind` memory leak reports 
 - `hce` library compiled with various `HCELOGLEVEL`s
 - `hce_ut` unit tests compiled with various `HCELOGLIMIT`s
 
 The total times the the `hce_ut` unit tests are built and run is the combinatorial total of all enabled options. IE:
-- the maximum count of compiler toolchains: 3x
 - the maximum `HCELOGLEVEL`: 11x
 - the maximum `HCELOGLIMIT`: 10x
-- valgrind `memcheck` for each enabled toolchain: + 3
+- valgrind `memcheck`: 1
 
-Then the unit tests will be run "333" times (the default runcount is "222" because a custom compiler is not specified by default).
+Then the unit tests will be run "111" times.
 
-The goal of all this is to introduce timing differences and general processing jitter, to increase confidence that the feature logic of the project is correct. A successful `validate` run (with various default tests enabled) should produce high confidence for the runtime hardware.
+The goal of all this is to introduce timing differences and general processing jitter, to increase confidence that the feature logic of the project is correct. A successful default `validate` run should produce high confidence of this software's correctness for the runtime hardware with the specified compiler.
 
 ### Compiler options
 The `gcc`/`g++`/`clang`/`clang++` executables are provided to `script/validate` by searching the `PATH` (similar to how `linux` `which my-program` will return the path to the first found `my-program`). 
@@ -103,11 +119,6 @@ extern void hce_log_initialize(int hceloglevel);
 
 The argument `hceloglevel` will be set to the value of the `HCELOGLEVEL` definition compiled with this library.
 
-Reasons to utilize this feature may include:
-- modifying the output stream (IE, disabling stdout or specifying a custom logfile and options)
-- specifying a custom logging format 
-- any other special usecase initialization code
-
 It is expected that the user implementation of the above function will need to `#include "loguru.hpp"` somehow, link against the both compiled `loguru` and `hce` libraries and call `loguru::init()` with any desired arguments.
 
 ### User Code Compile Time Definitions 
@@ -122,7 +133,7 @@ If additional debugging becomes necessary, rebuild *user code* with `HCELOGLIMIT
 
 ### Runtime Log Control
 #### Thread Local Logging 
-Assuming the `HCELOGLIMIT` is specified high enough when compiled against user code, it is actually possible to modify the log level for a specific thread at runtime (effectively applying a logging "mask" to an individual thread). This allows for user code to specify which threads should print more verbosely for thread specific debugging. Each thread's default log level is set to the compiled `HCELOGLEVEL` (unless the user has specified `HCECUSTOMLOGINIT` and implemented the default `loguru` loglevel differently).
+Assuming the `HCELOGLIMIT` is specified high enough when compiled against user code, it is actually possible to modify the log level for a specific thread at runtime. This allows for user code to specify which threads should print more verbosely for debugging. Each thread's default log level is set to the compiled `HCELOGLEVEL` (unless the user has specified `HCECUSTOMLOGINIT` and implemented the default `loguru` loglevel differently).
 
 The following methods are provided for this:
 `static int hce::printable::thread_log_level()`: return the log level for the calling thread
@@ -131,7 +142,7 @@ The following methods are provided for this:
 `void hce::scheduler::log_level(int)`: schedule a coroutine to set the log level of the scheduler's thread
 
 An example debuggable non-production design might:
-- Compile user application with `HCELOGLIMIT` to the necessary level when compiling user code (for example, `6` to enable "low criticality" logging)
+- Compile user application with `HCELOGLIMIT` to the necessary level when compiling user code (for example, `6` to enable up to "low criticality" logging)
 - Compile `HCELOGLEVEL` to some low default level when compiling this library (maybe `2`, to only print "high" criticality logs, or `4` to print "medium" criticality logs) 
 - On threads where debugging becomes necessary, set the thread local logging level (calling `hce::printable::thread_log_level(6)` or `hce::scheduler::log_level(6)`) to make that thread print "low" criticality logs)
 
@@ -147,7 +158,7 @@ An example debuggable non-production design might:
 6: method calls of low criticality objects and functions 
 7: construction/destruction of minimal criticality objects
 8: method calls of minimal criticality objects and functions
-9: all logging enabled
+9: trace criticality logging enabled
 ```
 
 All logs for an object of a given criticality are not guaranteed to print at the specified loglevels, they should be taken as a general debugging guide. View the source code for what *exact* log macros are called in specific functions.
@@ -180,4 +191,9 @@ All logs for an object of a given criticality are not guaranteed to print at the
 - `hce::mutex`
 - `hce::unique_lock<Lock>`
 - `hce::condition_variable`
-- `hce::condition_variable_any`
+- `hce::condition_variable_any` 
+
+#### Trace criticality
+All remaining API (that has does not log with any lower loglevel) will print with at this level. Output may be *extremely* verbose. It is expected this is only necessary in 2 situations:
+- debugging of a very specific issue 
+- introducing maximum processing jitter during calls to `validate`
