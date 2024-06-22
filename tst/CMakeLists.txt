@@ -9,7 +9,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -O3 -Wall")
 # set HCELOGLIMIT
 if(DEFINED HCELOGLIMIT)
 else()
-    set(HCELOGLIMIT 0) 
+    set(HCELOGLIMIT -1) 
 endif()
 
 add_subdirectory(googletest)

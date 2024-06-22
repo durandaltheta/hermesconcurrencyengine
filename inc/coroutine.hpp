@@ -89,6 +89,16 @@ struct coroutine : public printable {
         reset(); 
     }
 
+    inline const char* nspace() const { return "hce"; }
+    inline const char* name() const { return "coroutine"; }
+
+    /// return our stringified coroutine handle's address
+    inline std::string content() const { 
+        std::stringstream ss;
+        ss << handle_;
+        return ss.str();
+    }
+
     /// return true if the handle is valid, else false
     inline operator bool() const { return (bool)handle_; }
 
@@ -102,20 +112,20 @@ struct coroutine : public printable {
 
     /// replaces the managed handle
     inline void reset() { 
-        HCE_LOW_METHOD_ENTER("reset");
+        HCE_TRACE_METHOD_ENTER("reset");
         if(handle_) { destroy(); }
         handle_ = std::coroutine_handle<>(); 
     }
 
     /// replaces the managed handle
     inline void reset(std::coroutine_handle<> h) { 
-        HCE_LOW_METHOD_ENTER("reset", coroutine::handle_to_string(h));
+        HCE_TRACE_METHOD_ENTER("reset", h);
         if(handle_) { destroy(); }
         handle_ = h; 
     }
 
     inline void swap(coroutine& rhs) noexcept { 
-        HCE_LOW_METHOD_ENTER("swap", rhs);
+        HCE_TRACE_METHOD_ENTER("swap", rhs);
         if(handle_) {
             auto h = handle_;
             handle_ = rhs.handle_;
@@ -131,14 +141,6 @@ struct coroutine : public printable {
         bool d = handle_.done();
         HCE_MIN_METHOD_BODY("done", d);
         return d; 
-    }
-
-    inline const char* nspace() const { return "hce"; }
-    inline const char* name() const { return "coroutine"; }
-
-    /// return our stringified coroutine handle's address
-    inline std::string content() const { 
-        return coroutine::handle_to_string(handle_); 
     }
 
     /// return the address of the underlying handle
@@ -202,27 +204,12 @@ struct coroutine : public printable {
                 handle_.address()).promise();
     }
 
-    static inline std::string handle_to_string(const std::coroutine_handle<>& h) {
-        std::stringstream ss;
-        ss << h;
-        void* addr = h.address();
-
-        if(addr) {
-            ss << "["
-               << std::coroutine_handle<promise_type>::from_address(
-                h.address()).promise().type_info().name()
-               << "]";
-        }
-
-        return ss.str();
-    }
-
 protected:
     // always points to the coroutine running on the scheduler on this thread
     static coroutine*& tl_this_coroutine();
 
     inline void destroy() {
-        HCE_MED_FUNCTION_BODY("destroy",coroutine::handle_to_string(handle_));
+        HCE_MED_FUNCTION_BODY("destroy", handle_);
         handle_.destroy(); 
     }
 
@@ -382,14 +369,14 @@ struct this_thread {
     template <typename LOCK>
     static inline void block(LOCK& lk) {
         auto tt = this_thread::get();
-        HCE_TRACE_LOG("hce::this_thread@%p::block(Lock&)",tt);
+        HCE_TRACE_LOG("hce::this_thread@%p::block(LOCK&)",tt);
         tt->block_(lk);
     }
 
     // unblock an arbitrary this_thread
     template <typename LOCK>
     inline void unblock(LOCK& lk) {
-        HCE_TRACE_LOG("hce::this_thread@%p::unblock(Lock&)",this);
+        HCE_TRACE_LOG("hce::this_thread@%p::unblock(LOCK&)",this);
         ready = true;
         lk.unlock();
         cv.notify_one();

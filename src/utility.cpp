@@ -4,20 +4,21 @@
 #include "loguru.hpp"
 #include "utility.hpp"
 
-#ifndef HCELOGLEVEL
 /// library compile time macro determining default printing log level
-#define HCELOGLEVEL 0
+#ifndef HCELOGLEVEL
+// default to under loguru::Verbosity_INFO
+#define HCELOGLEVEL -1
 #endif 
 
-#if HCELOGLEVEL > 9
+/// force a loglevel of loguru::Verbosity_OFF or higher
+#if HCELOGLEVEL < -10 
+#define HCELOGLEVEL loguru::Verbosity_OFF
+#endif 
+
 /// force a loglevel of 9 or lower
+#if HCELOGLEVEL > 9
 #define HCELOGLEVEL 9
 #endif
-
-#if HCELOGLEVEL < -3 
-/// force a loglevel of loguru::Verbosity_FATAL or higher
-#define HCELOGLEVEL loguru::Verbosity_FATAL
-#endif 
 
 /// declaration of user replacable log initialization function
 extern void hce_log_initialize(int hceloglevel);

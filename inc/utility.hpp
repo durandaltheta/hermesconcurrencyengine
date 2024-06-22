@@ -11,11 +11,9 @@
 #include <sstream>
 #include <ostream>
 #include <coroutine>
+#include <chrono>
 
 #include "loguru.hpp"
-
-//------------------------------------------------------------------------------
-// method macros callable by inheritors of hce::printable
 
 #ifndef HCE_LOGGING_MACROS
 #define HCE_LOGGING_MACROS
@@ -26,15 +24,16 @@
  code won't even be compiled because the statements will resolve to an empty 
  statement.
 
- What's interesting about this is that by setting the HCELOGLIMIT to 0, maximum 
+ What's interesting about this is that by setting the HCELOGLIMIT to -9, maximum 
  library performance will be achieved no matter how high the library's default 
- loglevel is compiled with. 
+ loglevel is compiled with. However, it should realistically never be necessary 
+ to set HCELOGLIMIT lower than -1, even in most production code, because any 
+ error messages may be very important to have logged.
 
- This should be taken to heart, a lot of the slightly odd design of the the 
- logging mechanics is to enforce "no compile unless required" behavior, along 
- with standardizing output to a high degree. This enables consistent printing of 
- identifying information, such as object addresses and optional object internal 
- state for debugging purposes.
+ A lot of the slightly odd design of the logging mechanics is to enforce "no 
+ compile unless required" behavior, along with standardizing output to a high 
+ degree. This enables consistent printing of identifying information, such as 
+ object addresses and optional object internal state for debugging purposes.
 
  The reason most of these functions concatenate arguments rather than pass them 
  to a formatting string is because it allows the log functions to ingest 
@@ -75,12 +74,12 @@
  hello:world:3
  */
 #ifndef HCELOGLIMIT
-#define HCELOGLIMIT 0
+#define HCELOGLIMIT -1
 #endif 
 
-// HCELOGLIMIT min value is 0
-#if HCELOGLIMIT < 0 
-#define HCELOGLIMIT 0
+// HCELOGLIMIT min value is -9
+#if HCELOGLIMIT < -10
+#define HCELOGLIMIT -9
 #endif
 
 // HCELOGLIMIT max value is 9
@@ -88,10 +87,7 @@
 #define HCELOGLIMIT 9
 #endif
 
-/* 
- The following log macros are always compiled and printed when called
- */
-
+#if HCELOGLIMIT >= -3
 #define HCE_FATAL_CONSTRUCTOR(...) this->log_constructor__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_FATAL_DESTRUCTOR() this->log_destructor__(loguru::Verbosity_FATAL, __FILE__, __LINE__)
 #define HCE_FATAL_METHOD_ENTER(...) this->log_method_enter__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
@@ -99,8 +95,17 @@
 #define HCE_FATAL_FUNCTION_ENTER(...) hce::printable::log_function_enter__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_FATAL_FUNCTION_BODY(...) hce::printable::log_function_body__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_FATAL_LOG(...) loguru::log(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#else 
+#define HCE_FATAL_CONSTRUCTOR(...) (void)0
+#define HCE_FATAL_DESTRUCTOR() (void)0
+#define HCE_FATAL_METHOD_ENTER(...) (void)0
+#define HCE_FATAL_METHOD_BODY(...) (void)0
+#define HCE_FATAL_FUNCTION_ENTER(...) (void)0
+#define HCE_FATAL_FUNCTION_BODY(...) (void)0
+#define HCE_FATAL_LOG(...) (void)0
+#endif
 
-
+#if HCELOGLIMIT >= -2
 #define HCE_ERROR_CONSTRUCTOR(...) this->log_constructor__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_ERROR_DESTRUCTOR() this->log_destructor__(loguru::Verbosity_ERROR, __FILE__, __LINE__)
 #define HCE_ERROR_METHOD_ENTER(...) this->log_method_enter__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
@@ -108,8 +113,17 @@
 #define HCE_ERROR_FUNCTION_ENTER(...) hce::printable::log_function_enter__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_ERROR_FUNCTION_BODY(...) hce::printable::log_function_body__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_ERROR_LOG(...) loguru::log(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#else 
+#define HCE_ERROR_CONSTRUCTOR(...) (void)0
+#define HCE_ERROR_DESTRUCTOR() (void)0
+#define HCE_ERROR_METHOD_ENTER(...) (void)0
+#define HCE_ERROR_METHOD_BODY(...) (void)0
+#define HCE_ERROR_FUNCTION_ENTER(...) (void)0
+#define HCE_ERROR_FUNCTION_BODY(...) (void)0
+#define HCE_ERROR_LOG(...) (void)0
+#endif
 
-
+#if HCELOGLIMIT >= -1
 #define HCE_WARNING_CONSTRUCTOR(...) this->log_constructor__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_WARNING_DESTRUCTOR() this->log_destructor__(loguru::Verbosity_WARNING, __FILE__, __LINE__)
 #define HCE_WARNING_METHOD_ENTER(...) this->log_method_enter__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
@@ -117,8 +131,17 @@
 #define HCE_WARNING_FUNCTION_ENTER(...) hce::printable::log_function_enter__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_WARNING_FUNCTION_BODY(...) hce::printable::log_function_body__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_WARNING_LOG(...) loguru::log(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#else
+#define HCE_WARNING_CONSTRUCTOR(...) (void)0
+#define HCE_WARNING_DESTRUCTOR() (void)0
+#define HCE_WARNING_METHOD_ENTER(...) (void)0
+#define HCE_WARNING_METHOD_BODY(...) (void)0
+#define HCE_WARNING_FUNCTION_ENTER(...) (void)0
+#define HCE_WARNING_FUNCTION_BODY(...) (void)0
+#define HCE_WARNING_LOG(...) (void)0
+#endif
 
-
+#if HCELOGLIMIT >= 0
 #define HCE_INFO_CONSTRUCTOR(...) this->log_constructor__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_INFO_DESTRUCTOR() this->log_destructor__(loguru::Verbosity_INFO, __FILE__, __LINE__)
 #define HCE_INFO_METHOD_ENTER(...) this->log_method_enter__(loguru::Verbosity_INF, __FILE__, __LINE__O __VA_OPT__(,) __VA_ARGS__)
@@ -126,7 +149,15 @@
 #define HCE_INFO_FUNCTION_ENTER(...) hce::printable::log_function_enter__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_INFO_FUNCTION_BODY(...) hce::printable::log_function_body__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_INFO_LOG(...) loguru::log(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-
+#else
+#define HCE_INFO_CONSTRUCTOR(...) (void)0
+#define HCE_INFO_DESTRUCTOR() (void)0
+#define HCE_INFO_METHOD_ENTER(...) (void)0
+#define HCE_INFO_METHOD_BODY(...) (void)0
+#define HCE_INFO_FUNCTION_ENTER(...) (void)0
+#define HCE_INFO_FUNCTION_BODY(...) (void)0
+#define HCE_INFO_LOG(...) (void)0
+#endif
 
 // high criticality lifecycle
 #if HCELOGLIMIT >= 1
@@ -224,16 +255,20 @@
 #define HCE_MIN_LOG(...) (void)0 
 #endif
 
-// trace methods are of such low importance, you only want to print them when
-// trying to actively debug code that stepping through with a debugger would be 
+// trace logs are of such low importance, you only want to print them when
+// trying to actively debug code when stepping through with a debugger would be 
 // painful or otherwise not useful
 #if HCELOGLIMIT >= 9
+#define HCE_TRACE_CONSTRUCTOR(...) this->log_constructor__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_TRACE_DESTRUCTOR() this->log_destructor__(9, __FILE__, __LINE__)
 #define HCE_TRACE_METHOD_ENTER(...) this->log_method_enter__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_TRACE_METHOD_BODY(...) this->log_method_body__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_TRACE_FUNCTION_ENTER(...) hce::printable::log_function_enter__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_TRACE_FUNCTION_BODY(...) hce::printable::log_function_body__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_TRACE_LOG(...) loguru::log(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #else
+#define HCE_TRACE_CONSTRUCTOR(...) (void)0
+#define HCE_TRACE_DESTRUCTOR() (void)0
 #define HCE_TRACE_METHOD_ENTER(...) (void)0
 #define HCE_TRACE_METHOD_BODY(...) (void)0
 #define HCE_TRACE_FUNCTION_ENTER(...) (void)0
@@ -245,9 +280,6 @@
 
 namespace hce {
 namespace detail {
-namespace coroutine {
-
-}
 
 template <typename T>
 using unqualified = typename std::decay<T>::type;
@@ -532,6 +564,7 @@ private:
 };
 
 namespace detail {
+
 /// convenience std::function->std::string conversion
 template <typename Callable>
 inline std::string callable_to_string(Callable& f) {
@@ -541,16 +574,38 @@ inline std::string callable_to_string(Callable& f) {
     return ss.str();
 }
 
-/// less efficient double conversion
-template <typename R, typename... As>
-inline std::string to_string(std::function<R(As...)> f) {
-    return to_string(f);
+/*
+ Due to (potentially developer local) compiler limitations, an alternative 
+ duration to stream implementation is needed;
+ */
+template <typename Rep, typename Period>
+std::string duration_to_string(const std::chrono::duration<Rep, Period>& d) {
+    std::stringstream ss;
+    ss << d.count() << " ";
+
+    if (std::ratio_equal<Period, std::nano>::value) {
+        ss << "ns";
+    } else if (std::ratio_equal<Period, std::micro>::value) {
+        ss << "µs";
+    } else if (std::ratio_equal<Period, std::milli>::value) {
+        ss << "ms";
+    } else if (std::ratio_equal<Period, std::ratio<1>>::value) {
+        ss << "s";
+    } else if (std::ratio_equal<Period, std::ratio<60>>::value) {
+        ss << "min";
+    } else if (std::ratio_equal<Period, std::ratio<3600>>::value) {
+        ss << "h";
+    } else {
+        ss << "unknown_period";
+    }
+
+    return ss.str();
 }
 
 }
 
 /**
- @brief call handlers on object destructor
+ @brief call runtime handlers on object destructor
 
  It is worth pointing out that `T` can be a reference, like `int&`, or a pointer 
  `int*`.
@@ -600,23 +655,126 @@ private:
     std::deque<handler> handlers_; 
 };
 
+namespace chrono {
+
+// time units 
+enum unit {
+    hour,
+    minute,
+    second,
+    millisecond,
+    microsecond,
+    nanosecond
+};
+
+/// project wide time_point type
+struct time_point : 
+        public std::chrono::steady_clock::time_point,
+        public hce::printable
+{
+    template <typename... As>
+    time_point(As&&... as) : 
+        std::chrono::steady_clock::time_point(as...)
+    { 
+        HCE_TRACE_CONSTRUCTOR(as...);
+    }
+
+    ~time_point() { HCE_TRACE_DESTRUCTOR(); }
+
+    inline std::string content() const {
+        return detail::scheduler::duration_to_string(time_since_epoch());
+    }
+    
+    inline const char* nspace() const { return "hce"; }
+    inline const char* name() const { return "time_point"; }
+};
+
+/// project wide duration type
+struct duration : 
+        public std::chrono::steady_clock::duration,
+        public hce::printable
+{
+    template <typename... As>
+    duration(As&&... as) : 
+        std::chrono::steady_clock::duration(as...)
+    { 
+        HCE_TRACE_CONSTRUCTOR(as...);
+    }
+
+    ~duration() { HCE_TRACE_DESTRUCTOR(); }
+
+    inline std::string content() const {
+        return detail::scheduler::duration_to_string(*this);
+    }
+    
+    inline const char* nspace() const { return "hce"; }
+    inline const char* name() const { return "duration"; }
+};
+
+/// acquire the current time
+static inline hce::chrono::time_point now() {
+    HCE_TRACE_METHOD_ENTER("now");
+    return std::chrono::steady_clock::now();
+}
+
+/// return a duration equivalent to the count of units
+static inline hce::chrono::duration to_duration(unit u, size_t count) {
+    HCE_TRACE_METHOD_ENTER("to_duration", u, count);
+    switch(u) {
+        case unit::hour:
+            return std::chrono::hours(count);
+            break;
+        case unit::minute:
+            return std::chrono::minutes(count);
+            break;
+        case unit::second:
+            return std::chrono::seconds(count);
+            break;
+        case unit::millisecond:
+            return std::chrono::milliseconds(count);
+            break;
+        case unit::microsecond:
+            return std::chrono::microseconds(count);
+            break;
+        default:
+            return std::chrono::milliseconds(0);
+            break;
+    }
+}
+
+};
+
+// Arbitrary word sized allocated memory. The unique address of this 
+// memory is used as a unique value
+struct id : public std::shared_ptr<bool>, public printable {
+    template <typename... As>
+    id(As&&... as) : std::shared_ptr<bool>(std::forward<As>(as)...) {
+        HCE_TRACE_CONSTRUCTOR();
+    }
+
+    ~id() { HCE_TRACE_DESTRUCTOR(); }
+
+    inline const char* nspace() const { return "hce"; }
+    inline const char* name() const { return "id"; }
+
+    inline std::string content() const {
+        std::stringstream ss;
+        ss << "unique@" << get();
+        return ss.str();
+    }
+};
+
 }
 
 namespace std {
 
 /// std:: printable conversion
-inline std::string to_string(const hce::printable& p) { 
-    HCE_TRACE_FUNCTION_ENTER("std::to_string","const hce::printable&");
-    HCE_TRACE_FUNCTION_BODY("std::to_string",p);
-    return p.to_string(); 
-}
+inline std::string to_string(const hce::printable& p) { return p.to_string(); }
 
 }
 
 /// :: ostream writing
 inline std::ostream& operator<<(std::ostream& out, const hce::printable& p) {
-    HCE_TRACE_FUNCTION_ENTER("std::ostream& std::operator<<","std::ostream&","const hce::printable& p)");
-    HCE_TRACE_FUNCTION_BODY("std::ostream& std::operator<<",(void*)&out,p);
     out << p.to_string();
     return out;
 }
