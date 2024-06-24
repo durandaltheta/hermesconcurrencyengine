@@ -128,7 +128,12 @@ private:
     // block workers implicitly start a scheduler on a new thread during 
     // construction and shutdown said scheduler during destruction.
     struct worker {
-        worker() : sch_(hce::scheduler::thread(lf_)) { }
+        worker() : sch_([&]() -> std::shared_ptr<hce::scheduler> {
+            auto sch = hce::scheduler::make(lf_);
+            std::thread([=]() mutable { sch->install(); }).detach();
+            return sch;
+        }())
+        { }
 
         // thread_local value defaults to false
         static bool& tl_is_block();

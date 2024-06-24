@@ -24,6 +24,11 @@ hce::scheduler::lifecycle::manager& hce::scheduler::lifecycle::manager::instance
 }
 
 hce::scheduler& hce::scheduler::global_() {
-    static std::shared_ptr<hce::scheduler> sch(hce::scheduler::thread());
+    static std::shared_ptr<hce::scheduler> sch(
+        []() -> std::shared_ptr<hce::scheduler> {
+            auto sch = hce::scheduler::make();
+            std::thread([=]() mutable { sch->install(); }).detach();
+            return sch;
+        }());
     return *sch;
 }

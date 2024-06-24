@@ -17,6 +17,7 @@
 
 // local 
 #include "utility.hpp"
+#include "chrono.hpp"
 #include "atomic.hpp"
 #include "coroutine.hpp"
 
@@ -195,11 +196,6 @@ inline void assemble_joins_<void>(std::deque<hce::awt<void>>& dq, awt<void>&& a)
  Scheduler API, unless otherwise specified, is threadsafe and coroutine-safe.
  That is, it can be called from anywhere safely, including from within a 
  coroutine running on the scheduler which is being accessed.
-
- Attempting scheduling manager on a scheduler when it is halted will throw 
- an exception. This means that the user is responsible for ensuring their 
- coroutines are cleanly finished before the scheduler halts or the process 
- returns.
 */
 struct scheduler : public printable {
     /// an enumeration which represents the scheduler's current state
@@ -292,7 +288,9 @@ struct scheduler : public printable {
      std::shared_ptr<scheduler> scheduler::make(std::unique_ptr<scheduler::lifecycle>&)
      ```
 
-     It will be allocated and take ownership of the returned scheduler object.
+     It will be allocated during the call to `make()` and take ownership of the 
+     returned scheduler object.
+
      When that lifecycle object goes out of scope, the scheduler will be 
      permanently halted (no more coroutines will be executed).
      */
@@ -487,208 +485,11 @@ struct scheduler : public printable {
         config(){ HCE_HIGH_CONSTRUCTOR(); }
     };
 
-    /**
-     @brief timer coroutine which can be scheduled 
-
-     Timers are coroutines which can be scheduled on a scheduler. They are 
-     primarily useful when scheduling them with `hce::scheduler::join()` or 
-     `hce::scheduler::scope()` and awaiting the result (`co_await` in a 
-     coroutine, casting to `bool` in a raw system thread). 
-     
-     If the awaited result is `true`, the timer timed out, else the timer was 
-     cancelled early.
-
-     If the timer reaches its timeout, the timeout operation will be 
-     called (the timer operation will return `true`). If the timer is 
-     `hce::scheduler::cancel()`led or object is destructed without calling 
-     timeout(), the cancel operation will be called instead (the timer operation 
-     will return `false`). 
-     */
-    struct timer : hce::co<bool> {
-        virtual ~timer() { }
-
-        /**
-         @brief construct a timer coroutine
-
-         The result of this can be passed to `hce::scheduler::join()` to schedule 
-         it and block until it completes. This coroutine `co_return`s `true` on 
-         timeout and `false` if cancelled early.
-
-         @param tp the timeout point
-         */
-        inline static timer make(const hce::chrono::time_point& tp) {
-            HCE_MED_METHOD_ENTER("make",tp);
-            resumer* r(new resumer);
-            timer t = timer_co(hce::awt<bool>(r));
-            t.init(r, tp);
-            return t;
-        }
-       
-        /**
-         @brief construct a timer coroutine
-         @param dur the duration from now until timeout
-         */
-        inline static timer make(const hce::chrono::duration& dur) {
-            HCE_TRACE_METHOD_ENTER("make",dur);
-            return timer::make(hce::chrono::now() + dur);
-        }
-
-        /**
-         @brief construct a timer coroutine
-         @param u the time unit to construct a duration 
-         @param count the number of time units to construct a duration
-         */
-        inline static timer make(unit u, size_t count) {
-            HCE_TRACE_METHOD_ENTER("make",u,count);
-            return timer::make(hce::chrono::to_duration(u, count));
-        }
-
-        inline const char* nspace() const { return "hce"; }
-        inline const char* name() const { return "timer"; }
-
-        inline std::string content() const { 
-            std::stringstream ss;
-            ss << id_ << ", " << this->hce::co<bool>::content();
-            return ss.str(); 
-        }
-
-        /// return the timeout point for this timer
-        inline const hce::chrono::time_point& timeout(){ 
-            HCE_TRACE_METHOD_ENTER("timeout");
-            return tp_; 
-        }
-
-        /**
-         This value can be acquired and passed to `hce::scheduler::cancel()` to 
-         cancel a scheduled `hce::scheduler::timer`.
-
-         @return the unique id associated with this timer
-         */
-        inline const hce::id& id() { 
-            HCE_TRACE_METHOD_ENTER("id");
-            return id_; 
-        }
-
-    private:
-        // awaitable implementation which blockes the timer coroutine
-        struct resumer : 
-            public hce::scheduler::reschedule<
-                hce::awaitable::lockable<
-                    hce::awt<bool>::interface,
-                    hce::spinlock>>
-        {
-            resumer() : 
-                hce::scheduler::reschedule<
-                    hce::awaitable::lockable<
-                        hce::awt<bool>::interface,
-                        hce::spinlock>>(slk_,false),
-                tp_(tp),
-                ready_(false),
-                result_(false)
-            { }
-
-            virtual ~ai(){}
-
-            inline bool on_ready() { return ready_; }
-
-            inline void on_resume(void* m) { 
-                ready_ = true;
-                result_ = (bool)m; 
-            }
-
-            inline bool get_result() { return result_; }
-
-        private:
-            bool ready_; 
-            bool result_;
-            hce::spinlock slk_;
-        };
-
-        /*
-         Capable of resuming a blocked timer. This object is utilized by a 
-         scheduler internally to reschedule an `hce::scheduler::timer` when 
-         timeout point is reached.
-         */
-        struct manager {
-            // ensure timer is cancelled if timeout() isn't called
-            ~manager() { 
-                if(resumer_) {
-                    HCE_MED_METHOD_ENTER("cancel");
-                    resumer_->resume((void*)0);
-                    resumer_ = nullptr;
-                }
-            }
-
-            // notify timer of timeout
-            inline void timeout() {
-                if(resumer_) {
-                    HCE_MED_METHOD_ENTER("timed_out");
-                    resumer_->resume((void*)1);
-                    resumer_ = nullptr;
-                }
-            }
-
-            // return the id associated with the source timer
-            const hce::id& id() { return id_; }
-
-        private:
-            manager() = delete;
-            manager(hce::id&& id, const hce::chrono::time_point& tp, resumer* r) : 
-                id_(std::move(id)),
-                tp_(tp),
-                resumer_(r) 
-            { }
-
-            hce::id id_;
-            hce::chrono::time_point tp_;
-            resumer* resumer_;
-        };
-
-        // joinable coroutine which blocks on a timer's resumer
-        inline static timer timer_co(hce::awt<bool> a) {
-            // blocks until timeout or cancel
-            co_return std::move(a);
-        }
-
-        timer() : id_(std::make_shared<bool>()) { 
-            HCE_MED_CONSTRUCTOR("timer");
-        }
-
-        // finish initalizing a timer with an allocated resumer and timeout point
-        inline void init(resumer* r, const hce::chrono::time_point& tp) {
-            HCE_MED_METHOD_ENTER("init", *r, tp);
-            tp_ = tp;
-            manager_ = std::unique_ptr<manager>(new manager(id_, tp, r));
-        }
-
-        /// permanently extract the associated manager from this timer
-        inline std::unique_ptr<manager> extract_manager() { 
-            return std::move(manager_);
-        }
-
-        hce::chrono::time_point tp_;
-        id id_;
-        std::unique_ptr<manager> manager_;
-        friend struct scheduler;
-    };
-
     ~scheduler() {
         HCE_HIGH_CONSTRUCTOR();
         halt_();
         // ensure all tasks are manually deleted
         clear_queues_();
-    }
-
-    /// return a copy of this scheduler's shared pointer by conversion
-    inline operator std::shared_ptr<scheduler>() { 
-        HCE_TRACE_METHOD_ENTER("hce::scheduler::operator std::shared_ptr<scheduler>()");
-        return self_wptr_.lock(); 
-    }
-
-    /// return a copy of this scheduler's weak pointer by conversion
-    inline operator std::weak_ptr<scheduler>() { 
-        HCE_TRACE_METHOD_ENTER("hce::scheduler::operator std::weak_ptr<scheduler>()");
-        return self_wptr_; 
     }
 
     /**
@@ -700,11 +501,13 @@ struct scheduler : public printable {
      with the newly allocated and constructed scheduler.
 
      It is generally a bad idea to allow the lifecycle pointer to go out of 
-     scope (causing the scheduler to halt) before all manager executed 
-     through the scheduler are completed cleanly. As such, it is often a good 
-     idea to register schedulers with the `lifecycle::manager` instance (IE, 
-     call `scheduler::make()` without an argument lifecycle pointer to do this 
-     automatically) so they will be automatically halted on program exit.
+     scope (causing the scheduler to halt) before all coroutines executed 
+     through the scheduler are completed cleanly. 
+
+     As such, it is often a good idea to register schedulers with the 
+     `lifecycle::manager` instance (IE, call `scheduler::make()` without an 
+     argument lifecycle pointer to do this automatically) so they will be 
+     automatically halted on program exit instead of manually.
 
      @param lc reference to a lifecycle unique pointer
      @return an allocated and initialized scheduler 
@@ -733,69 +536,6 @@ struct scheduler : public printable {
         lifecycle::manager::instance().registration(std::move(lc));
         return s;
     };
-
-    /**
-     @brief worker thread launching function
-
-     Construct an `hce::scheduler` and launch a worker `std::thread` whose 
-     lifecycle is tied to the associated `hce::scheduler::lifecycle`. The thread
-     will `install()` the `hce::scheduler` with any given 
-     `hce::scheduler::config` and shutdown when the given lifecycle goes out of 
-     scope.
-     */
-    static inline std::shared_ptr<hce::scheduler> thread(
-           std::unique_ptr<hce::scheduler::lifecycle>& lc,
-           std::unique_ptr<hce::scheduler::config> c) 
-    {
-        if(c) {
-            HCE_HIGH_FUNCTION_ENTER(
-                "hce::thread",
-                "hce::scheduler::lifecycle",
-                *c);
-
-            auto sch(hce::scheduler::make(lc));
-
-            std::thread([sch](std::unique_ptr<hce::scheduler::config> c){ 
-                sch->install(std::move(c)); 
-            }, std::move(c)).detach();
-
-            return sch;
-        } else { return scheduler::thread(lc); }
-    }
-
-    /// launch a worker thread
-    static inline std::shared_ptr<hce::scheduler> thread(
-            std::unique_ptr<hce::scheduler::lifecycle>& lc) {
-        HCE_HIGH_FUNCTION_ENTER("hce::thread", "hce::scheduler::lifecycle");
-
-        auto sch(hce::scheduler::make(lc));
-        std::thread([sch]{ sch->install(); }).detach();
-        return sch;
-    }
-
-    /// launch a worker thread registered with the global lifecycle::manager
-    static inline std::shared_ptr<hce::scheduler> thread(
-            std::unique_ptr<hce::scheduler::config> c = {}) {
-
-        if(c) {
-            HCE_HIGH_FUNCTION_ENTER("hce::thread",*c);
-
-            auto sch(hce::scheduler::make());
-
-            std::thread([sch](std::unique_ptr<hce::scheduler::config> c){ 
-                sch->install(std::move(c)); 
-            }, std::move(c)).detach();
-
-            return sch;
-        } else {
-            HCE_HIGH_FUNCTION_ENTER("hce::thread");
-
-            auto sch(hce::scheduler::make());
-            std::thread([sch]{ sch->install(); }).detach();
-
-            return sch;
-        }
-    }
 
     /**
      @return `true` if calling thread is running a scheduler, else `false`
@@ -841,6 +581,18 @@ struct scheduler : public printable {
 
     inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "scheduler"; }
+
+    /// return a copy of this scheduler's shared pointer by conversion
+    inline operator std::shared_ptr<scheduler>() { 
+        HCE_TRACE_METHOD_ENTER("hce::scheduler::operator std::shared_ptr<scheduler>()");
+        return self_wptr_.lock(); 
+    }
+
+    /// return a copy of this scheduler's weak pointer by conversion
+    inline operator std::weak_ptr<scheduler>() { 
+        HCE_TRACE_METHOD_ENTER("hce::scheduler::operator std::weak_ptr<scheduler>()");
+        return self_wptr_; 
+    }
 
     /**
      @brief install the scheduler on the calling thread to continuously execute scheduled coroutines and process timers
@@ -889,9 +641,19 @@ struct scheduler : public printable {
      Multi-argument schedule()s hold the scheduler's lock throughout (they are 
      simultaneously scheduled).
 
+     A resuming coroutine that attempts to reschedule on a halted scheduler 
+     will fail. This means, to ensure program logic operates correctly, all 
+     communication operations between coroutines (via `channel`s or some other 
+     mechanism) should be completed before the user allows the scheduler to 
+     halt. This typically means all `send()`/`recv()` operations are completed 
+     and `channel::close()` is called before a scheduler is halted.
+
+     If a coroutine is *required* to actually finish, as opposed to simply 
+     complete a series of required communications, it should be scheduled and 
+     awaited with `join()`/`scope()` instead.
+
      @param a the first argument
      @param as any remaining arguments
-     @return false if the scheduler is halted, else true
      */
     template <typename A, typename... As>
     void schedule(A&& a, As&&... as) {
@@ -899,9 +661,9 @@ struct scheduler : public printable {
 
         std::unique_lock<spinlock> lk(lk_);
 
-        if(state_ == halted) { throw is_halted(this,"schedule()"); }
-
-        schedule_(std::forward<A>(a), std::forward<As>(as)...);
+        if(state_ != halted) { 
+            schedule_(std::forward<A>(a), std::forward<As>(as)...);
+        } 
     }
 
     /**
@@ -910,45 +672,35 @@ struct scheduler : public printable {
      It is an error if the `co_return`ed value from the coroutine cannot be 
      converted to expected type `T`.
 
+     Attempting to launch a joinable operation (calling either `join()` or 
+     `scope()`) on a scheduler when it is halted will throw an exception. User 
+     code is responsible for ensuring their coroutines which utilize join 
+     mechanics are cleanly finished before the scheduler halts (or user code 
+     must catch and handle exceptions).
+
+     The above can be done by assembling a tree of coroutines synchronized by 
+     `join()`/`scope()` and only halting the scheduler (allowing the associated 
+     `scheduler::lifecycle` to be destroyed) when the root coroutine of the tree 
+     is joined. This is good practice when designing any program which needs to 
+     exit cleanly.
+
      @param co a coroutine to schedule
-     @return an awaitable which when `co_await`ed will return an allocated `std::optional<T>` if the coroutine completed, else an unallocated one (operator bool() == false)
+     @return an awaitable which when `co_await`ed will return an the result of the completed coroutine
      */
     template <typename T>
     awt<T> join(hce::co<T> co) {
         HCE_HIGH_METHOD_ENTER("join",co);
 
         std::unique_lock<spinlock> lk(lk_);
-
         if(state_ == halted) { throw is_halted(this,"join()"); }
 
-        /// returned awaitable resumes when the coroutine handle is destroyed
-        auto awt = joinable_<T>(co);
-        schedule_(std::move(co));
-        lk.unlock();
-        return awt;
-    }
-
-    /**
-     @brief co<void> `join()` variant
-     */
-    inline awt<void> join(hce::co<void> co) {
-        HCE_HIGH_METHOD_ENTER("join",co);
-
-        std::unique_lock<spinlock> lk(lk_);
-
-        if(state_ == halted) { throw is_halted(this,"join()"); }
-
-        auto awt = joinable_<void>(co);
-        schedule_(std::move(co));
-        lk.unlock();
-        return awt;
+        return join_(co);
     }
 
     /**
      @brief join with all argument co<T>s
 
-     Functionally similar to `join()`, except it can join with any number of 
-     argument coroutines. 
+     Like `join()`, except it can join with any number of argument coroutines. 
 
      Unlike `join()` this method does not return the returned values of its 
      argument coroutines.
@@ -960,79 +712,102 @@ struct scheduler : public printable {
     hce::awt<void> scope(As&&... as) {
         // all arguments to scope should be coroutines, and therefore printable
         HCE_HIGH_METHOD_ENTER("scope",as...);
+
+        std::unique_lock<spinlock> lk(lk_);
+        if(state_ == halted) { throw is_halted(this,"scope()"); }
+
         std::unique_ptr<std::deque<hce::awt<void>>> dq(
                 new std::deque<hce::awt<void>>);
         assemble_scope_(*dq, std::forward<As>(as)...);
+
         return hce::awt<void>(new scoper(std::move(dq)));
     }
 
     /**
-     @brief join with all argument co<T>s
-     @param as all coroutines to join with
-     @return an awaitable which will not resume until all argument coroutines have been joined
+     @brief start a timer on this scheduler 
+
+     The returned awaitable will result in `true` if the timer timeout was 
+     reached, else `false` will be returned if it was cancelled early.
+
+     @param id a reference to an hce::id which will be set to the launched timer's id
+     @param as the remaining arguments which will be passed to `hce::chrono::to_time_point()`
+     @return an awaitable to join with the timer timing out or being cancelled
      */
     template <typename... As>
-    hce::awt<void> scope(As&&... as) {
-        // all arguments to scope should be coroutines, and therefore printable
-        HCE_HIGH_METHOD_ENTER("scope",as...);
-        std::unique_ptr<std::deque<hce::awt<void>>> dq(
-                new std::deque<hce::awt<void>>);
-        assemble_scope_(*dq, std::forward<As>(as)...);
-        return hce::awt<void>(new scoper(std::move(dq)));
-    }
-
-    /**
-     @brief create and join() a timer on this scheduler 
-     @param id an hce::id to set to the launched timer's id()
-     @param as the remaining arguments which will be passed to `hce::scheduler::timer::make()`
-     @return an awaitable to join with the timer timing out or being cancelled
-     */
-    template <typename As>
-    inline hcw::awt<bool> start(hce::id& id, As&&... as) {
+    inline hce::awt<bool> start(hce::id& id, As&&... as) {
         HCE_HIGH_METHOD_ENTER("start",id,as...);
-        auto t = hce::scheduler::timer::make(std::forward<As>(as)...);
-        id = t.id();
-        return join(std::move(t));
+        
+        std::unique_ptr<timer> t(new timer(
+            hce::chrono::to_time_point(std::forward<As>(as)...)));
+
+        // acquire the id of the constructed timer
+        id = t->id();
+
+        {
+            std::lock_guard<spinlock> lk(lk_);
+
+            if(state_ == halted) { 
+                // cancel the timer immediately
+                t->resume((void*)0); 
+            } else { insert_timer_(t); }
+        }
+
+        return hce::awt<bool>(t.release());
     }
 
     /**
-     @brief create and join() a timer on this scheduler 
+     @brief start a timer on this scheduler 
 
-     Abstracts away the timer entirely to block the awaiter for a time (no way 
-     to cancel this running timer without halting the scheduler).
+     Abstracts away the timer's id to block the awaiter for a time (no way to 
+     directly cancel this running timer).
 
-     @param as the arguments which will be passed to `hce::scheduler::timer::make()`
+     The returned awaitable will result in `true` if the timer timeout was 
+     reached, else `false` will be returned if it was cancelled early.
+
+     @param as the arguments will be passed to `hce::chrono::to_time_point()`
      @return an awaitable to join with the timer timing out or being cancelled
      */
-    template <typename As>
-    inline hcw::awt<bool> sleep(As&&... as) {
+    template <typename... As>
+    inline hce::awt<bool> sleep(As&&... as) {
         HCE_HIGH_METHOD_ENTER("sleep",as...);
-        return join(hce::scheduler::timer::make(std::forward<As>(as)...));
+        
+        std::unique_ptr<timer> t(
+            new timer(hce::chrono::to_time_point(std::forward<As>(as)...)));
+
+        {
+            std::lock_guard<spinlock> lk(lk_);
+
+            if(state_ == halted) { t->resume((void*)0); }
+            else { insert_timer_(t); }
+        }
+
+        return hce::awt<bool>(t.release());
     }
 
     /**
      @brief attempt to cancel a scheduled `hce::scheduler::timer`
 
-     The `hce::id` should be acquired from a call to the `hce::scheduler::timer::id()` 
-     method.
+     The `hce::id` should be acquired from a call to the 
+     `hce::scheduler::start()` method.
 
      @param id the hce::id associated with the timer to be cancelled
      @return true if cancelled timer successfully, false if timer already timed out or was never scheduled
      */
-    inline void cancel(const hce::id& id) {
+    inline bool cancel(const hce::id& id) {
         HCE_HIGH_METHOD_ENTER("cancel",id);
 
         if(id) {
             std::unique_lock<spinlock> lk(lk_);
+            if(state_ == halted) { return false; }
 
-            timer::manager* mgr = nullptr;
-            auto it = timer_managers_.begin();
-            auto end = timer_managers_.end();
+            timer* t = nullptr;
+            auto it = timers_.begin();
+            auto end = timers_.end();
 
             while(it!=end) {
-                if((*it)->id == id) {
-                    mgr = *it;
-                    timer_managers_.erase(it);
+                if((*it)->id() == id) {
+                    t = *it;
+                    timers_.erase(it);
                     break;
                 }
 
@@ -1041,11 +816,14 @@ struct scheduler : public printable {
 
             lk.unlock();
 
-            if(mgr) {
-                HCE_HIGH_METHOD_BODY("cancel","cancelled timer with id[",t->id(),"]");
-                delete mgr; // destructor calls cancel operation
+            if(t) {
+                HCE_HIGH_METHOD_BODY("cancel","cancelled timer with id:",t->id());
+                t->resume((void*)0);
+                return true;
+            } else {
+                return false;
             }
-        } 
+        } else { return false; }
     }
 
     /// return the count of scheduled coroutines
@@ -1115,6 +893,9 @@ private:
             awts_(std::move(awts))
         { }
 
+        inline const char* nspace() const { return "hce::scheduler"; }
+        inline const char* name() const { return "scoper"; }
+
         inline bool on_ready() { 
             scheduler::get().schedule(scoper::op(this, *awts_));
             return false;
@@ -1134,14 +915,76 @@ private:
             co_return;
         }
 
+    private:
         hce::spinlock lk_;
         std::unique_ptr<std::deque<awt<void>>> awts_;
     };
 
-    struct timer_data {
-        hce::id id;
-        std::unique_ptr<timer::manager> manager;
+    struct timer : 
+        public hce::scheduler::reschedule<
+            hce::awaitable::lockable<
+                hce::awt<bool>::interface,
+                hce::spinlock>>
+    {
+        timer(const hce::chrono::time_point& tp) : 
+            hce::scheduler::reschedule<
+                hce::awaitable::lockable<
+                    hce::awt<bool>::interface,
+                    hce::spinlock>>(slk_,false),
+            tp_(tp),
+            id_(std::make_shared<bool>()),
+            ready_(false),
+            result_(false),
+            parent_(*hce::detail::scheduler::tl_this_scheduler())
+        { }
+
+        inline const char* nspace() const { return "hce::scheduler"; }
+        inline const char* name() const { return "timer"; }
+
+        inline std::string content() const { 
+            std::stringstream ss;
+            ss << id_ << ", " << tp_;
+            return ss.str(); 
+        }
+
+        ~timer(){
+            if(!ready_) {
+                // need to cancel because the awaitable was not be awaited 
+                // properly...
+                auto parent = parent_.lock();
+                if(parent) { parent->cancel(id()); }
+            }
+        }
+
+        inline bool on_ready() { return ready_; }
+
+        inline void on_resume(void* m) { 
+            ready_ = true;
+            result_ = (bool)m; 
+        }
+
+        inline bool get_result() { return result_; }
+
+        inline const hce::chrono::time_point& timeout() const { return tp_; }
+        inline const hce::id& id() const { return id_; }
+
+    private:
+        hce::chrono::time_point tp_;
+        hce::id id_;
+        bool ready_; 
+        bool result_;
+        hce::spinlock slk_;
+        std::weak_ptr<scheduler> parent_;
     };
+
+    scheduler() : 
+            state_(ready), // state_ persists between suspends
+            coroutine_queue_(new std::deque<std::coroutine_handle<>>) { // persists as necessary
+        HCE_HIGH_CONSTRUCTOR();
+        reset_flags_(); // initialize flags
+    }
+    
+    static scheduler& global_();
 
     static inline co<void> co_set_log_level(int level) {
         hce::printable::thread_log_level(level);
@@ -1152,23 +995,25 @@ private:
         co_return hce::printable::thread_log_level();
     }
 
-    inline void assemble_scope_(hce::scheduler& sch, std::deque<hce::awt<void>>& dq) { 
-    }
+    inline void assemble_scope_(std::deque<hce::awt<void>>& dq) { }
 
     template <typename A, typename... As>
-    void assemble_scope_(hce::scheduler& sch, std::deque<hce::awt<void>>& dq, A&& a, As&&... as) {
-        detail::scheduler::assemble_joins_(dq, join(std::forward<A>(a)));
+    void assemble_scope_(
+            std::deque<hce::awt<void>>& dq, 
+            A&& a, 
+            As&&... as) 
+    {
+        detail::scheduler::assemble_joins_(dq, join_(std::forward<A>(a)));
         assemble_scope_(dq, std::forward<As>(as)...);
     }
 
-    scheduler() : 
-            state_(ready), // state_ persists between suspends
-            coroutine_queue_(new std::deque<std::coroutine_handle<>>) { // persists as necessary
-        HCE_HIGH_CONSTRUCTOR();
-        reset_flags_(); // initialize flags
+    inline void insert_timer_(std::unique_ptr<timer>& t) {
+        timers_.push_back(t.get());
+        timers_.sort([](timer* lhs, timer* rhs) {
+            // resort timers from soonest to latest
+            return lhs->timeout() < rhs->timeout();
+        });
     }
-    
-    static scheduler& global_();
 
     /*
      Coroutine to run the scheduler.
@@ -1200,7 +1045,7 @@ private:
         coroutine_queue local_queue(new std::deque<std::coroutine_handle<>>);
 
         // ready timer batch
-        std::deque<timer::manager*> ready_timer_managers;
+        std::deque<timer*> ready_timers;
 
         // Push any remaining coroutines back into the main queue. Lock must be 
         // held before this is called.
@@ -1242,16 +1087,16 @@ private:
                     }
 
                     // check for any ready timers 
-                    if(timer_managers_.size()) {
-                        auto now = timer::now();
-                        auto it = timer_managers_.begin();
-                        auto end = timer_managers_.end();
+                    if(timers_.size()) {
+                        auto now = hce::chrono::now();
+                        auto it = timers_.begin();
+                        auto end = timers_.end();
 
                         while(it!=end) {
                             // check if a timer is ready to timeout
-                            if((*it)->time_point() <= now) {
-                                ready_timer_managers.push_back(*it);
-                                it = timer_managers_.erase(it);
+                            if((*it)->timeout() <= now) {
+                                ready_timers.push_back(*it);
+                                it = timers_.erase(it);
                             } else {
                                 // no remaining ready timers, exit loop
                                 break;
@@ -1285,11 +1130,10 @@ private:
                     }
 
                     // reschedule any ready timers
-                    while(ready_timer_managers.size()) {
-                        auto mgr = ready_timer_managers.front();
-                        ready_timer_managers.pop_front();
-                        mgr->timeout();
-                        delete mgr;
+                    while(ready_timers.size()) {
+                        auto t = ready_timers.front();
+                        ready_timers.pop_front();
+                        t->resume((void*)1);
                     }
 
                     // reacquire lock
@@ -1302,7 +1146,7 @@ private:
                     // verify run state and block if necessary
                     if(coroutine_queue_->empty()) {
                         if(can_continue_()) {
-                            if(timer_managers_.empty()) {
+                            if(timers_.empty()) {
                                 // wait for more tasks
                                 waiting_for_tasks_ = true;
                                 tasks_available_cv_.wait(lk);
@@ -1312,7 +1156,7 @@ private:
                                 waiting_for_tasks_ = true;
                                 tasks_available_cv_.wait_until(
                                     lk,
-                                    timer_managers_.front()->time_point());
+                                    timers_.front()->timeout());
                             }
                         } else {
                             // break out of the evaluation loop
@@ -1386,7 +1230,7 @@ private:
      Halt the scheduler.
 
      This operation ends all current and future coroutine execution on the 
-     scheduler. `halt_()` can be called multipled times without error.
+     scheduler. 
 
      This operation also deletes any scheduled coroutines. Any coroutines
      scheduled on a halted scheduler are thrown out.
@@ -1424,25 +1268,14 @@ private:
         }
     }
 
-    /*
-     Return an awaitable which joins a coroutine and returns a constructed type 
-     `T`.
-
-     This mechanism does not schedule a coroutine, it is exposed to allow 
-     joining in cases where a coroutine is not able to be scheduled.
-
-     The returned awaitable does not need to be `co_await`ed immediately, the 
-     coroutine can be scheduled for execution first.
-
-     If argument is a reference to a `co<T>`, the awaitable will join 
-     with the coroutine completing. Otherwise the arguments are passed to the 
-     result `T`'s constructor and the awaitable resumes immediately.
-     */
-    template <typename T, typename... As>
-    hce::awt<T> joinable_(As&&... as) {
-        return hce::awt<T>::make(
+    template <typename T>
+    awt<T> join_(hce::co<T>& co) {
+        /// returned awaitable resumes when the coroutine handle is destroyed
+        auto awt = hce::awt<T>::make(
             new hce::scheduler::reschedule<
-                hce::detail::scheduler::joiner<T>>(std::forward<As>(as)...));
+                hce::detail::scheduler::joiner<T>>(co));
+        schedule_(std::move(co));
+        return awt;
     }
 
     // Reset scheduler state flags, etc. Does not reset scheduled coroutine
@@ -1466,9 +1299,9 @@ private:
             coroutine_queue_->pop_front();
         }
 
-        while(timer_managers_.size()) {
-            auto t = timer_managers_.front();
-            timer_managers_.pop_front();
+        while(timers_.size()) {
+            auto t = timers_.front();
+            timers_.pop_front();
             delete t; // destructor calls cancel operation
         }
     }
@@ -1525,23 +1358,6 @@ private:
     template <typename T>
     inline void schedule_coroutine_(co<T> c) {
         if(c) { schedule_coroutine_(c.release()); }
-    }
-   
-    // schedule a timer
-    template <typename T>
-    inline void schedule_coroutine_(timer t) {
-        if(t) { 
-            timer::manager* m = t.extract_manager().release();
-
-            if(t) {
-                timer_managers_.push_back(m);
-                timer_managers_.sort([](timer::manager* lhs, timer::manager* rhs) {
-                    // resort timers from soonest to latest
-                    return lhs->timeout() < rhs->timeout();
-                });
-                schedule_coroutine_(c.release()); 
-            }
-        }
     }
 
     // when all coroutines are scheduled, notify
@@ -1604,7 +1420,7 @@ private:
     // list holding scheduled timers. This will be regularly resorted from 
     // soonest to latest timeout. Timer pointers are allocated and must be 
     // deleted by this object when they go out of scope.
-    std::list<timer::manager*> timer_managers_;
+    std::list<timer*> timers_;
 
     friend struct lifecycle;
 };
