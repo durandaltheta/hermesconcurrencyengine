@@ -269,7 +269,7 @@ struct CustomObject {
     }
 
 private:
-    const int i_;
+    int i_;
 };
 
 // Provides a standard initialization API that enables template specialization
@@ -587,30 +587,87 @@ size_t join_T() {
     HCE_INFO_LOG("join_T<%s>",T_name.c_str());
     size_t success_count = 0;
 
-    // join  individually
+    // join individually
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
-        std::deque<hce::awt<int>> joins;
+        std::deque<hce::awt<T>> joins;
 
         joins.push_back(sch->join(
-            test::scheduler::co_return_T<int>(test::init<int>(3))));
+            test::scheduler::co_return_T<T>(test::init<T>(3))));
         joins.push_back(sch->join(
-            test::scheduler::co_return_T<int>(test::init<int>(2))));
+            test::scheduler::co_return_T<T>(test::init<T>(2))));
         joins.push_back(sch->join(
-            test::scheduler::co_return_T<int>(test::init<int>(1))));
+            test::scheduler::co_return_T<T>(test::init<T>(1))));
 
         try {
-            int result = joins.front();
+            T result = joins.front();
             joins.pop_front();
-            EXPECT_EQ((int)test::init<int>(3), result);
+            EXPECT_EQ((T)test::init<T>(3), result);
             result = joins.front();
             joins.pop_front();
-            EXPECT_EQ((int)test::init<int>(2), result);
+            EXPECT_EQ((T)test::init<T>(2), result);
             result = joins.front();
             joins.pop_front();
-            EXPECT_EQ((int)test::init<int>(1), result);
+            EXPECT_EQ((T)test::init<T>(1), result);
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    } 
+
+    // join individually in reverse order
+    {
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+        std::deque<hce::awt<T>> joins;
+
+        joins.push_back(sch->join(
+            test::scheduler::co_return_T<T>(test::init<T>(3))));
+        joins.push_back(sch->join(
+            test::scheduler::co_return_T<T>(test::init<T>(2))));
+        joins.push_back(sch->join(
+            test::scheduler::co_return_T<T>(test::init<T>(1))));
+
+        try {
+            T result = joins.back();
+            joins.pop_back();
+            EXPECT_EQ((T)test::init<T>(1), result);
+            result = joins.back();
+            joins.pop_back();
+            EXPECT_EQ((T)test::init<T>(2), result);
+            result = joins.back();
+            joins.pop_back();
+            EXPECT_EQ((T)test::init<T>(3), result);
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    }
+
+    // join void
+    {
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+        std::deque<hce::awt<void>> joins;
+
+        joins.push_back(sch->join(test::scheduler::co_void()));
+        joins.push_back(sch->join(test::scheduler::co_void()));
+        joins.push_back(sch->join(test::scheduler::co_void()));
+
+        try {
+            joins.pop_front();
+            joins.pop_front();
+            joins.pop_front();
 
             lf.reset();
             thd.join();
@@ -626,7 +683,7 @@ size_t join_T() {
 }
 
 TEST(scheduler, join) {
-    const size_t expected = 1;
+    const size_t expected = 3;
     EXPECT_EQ(expected, test::join_T<int>());
     EXPECT_EQ(expected, test::join_T<unsigned int>());
     EXPECT_EQ(expected, test::join_T<size_t>());
