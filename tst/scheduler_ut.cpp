@@ -250,6 +250,28 @@ TEST(scheduler, install) {
 
 namespace test {
 
+struct CustomObject {
+    CustomObject() : i_(0) {}
+    CustomObject(const CustomObject&) = default;
+    CustomObject(CustomObject&&) = default;
+
+    CustomObject(int i) : i_(i) {}
+
+    CustomObject& operator=(const CustomObject&) = default;
+    CustomObject& operator=(CustomObject&&) = default;
+
+    inline bool operator==(const CustomObject& rhs) const { 
+        return i_ == rhs.i_; 
+    }
+
+    inline bool operator!=(const CustomObject& rhs) const { 
+        return !(*this == rhs); 
+    }
+
+private:
+    const int i_;
+};
+
 // Provides a standard initialization API that enables template specialization
 template <typename T>
 struct init {
@@ -278,6 +300,13 @@ private:
 
 template <typename T>
 size_t schedule_T() {
+    std::string T_name = []() -> std::string {
+        std::stringstream ss;
+        ss << typeid(T).name();
+        return ss.str();
+    }();
+
+    HCE_INFO_LOG("schedule_T<%s>",T_name.c_str());
 
     size_t success_count = 0;
 
@@ -495,6 +524,7 @@ TEST(scheduler, schedule) {
     EXPECT_EQ(expected, test::schedule_T<size_t>());
     EXPECT_EQ(expected, test::schedule_T<double>());
     EXPECT_EQ(expected, test::schedule_T<std::string>());
+    EXPECT_EQ(expected, test::schedule_T<test::CustomObject>());
 }
 
 TEST(scheduler, schedule_and_thread_locals) {
@@ -532,6 +562,13 @@ namespace test {
 
 template <typename T>
 size_t join_T() {
+    std::string T_name = []() -> std::string {
+        std::stringstream ss;
+        ss << typeid(T).name();
+        return ss.str();
+    }();
+
+    HCE_INFO_LOG("join_T<%s>",T_name.c_str());
     size_t success_count = 0;
 
     // join  individually
@@ -578,4 +615,5 @@ TEST(scheduler, join) {
     EXPECT_EQ(expected, test::join_T<size_t>());
     EXPECT_EQ(expected, test::join_T<double>());
     EXPECT_EQ(expected, test::join_T<std::string>());
+    EXPECT_EQ(expected, test::join_T<test::CustomObject>());
 }
