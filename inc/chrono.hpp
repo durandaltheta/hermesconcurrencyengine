@@ -17,7 +17,7 @@ namespace detail {
  duration to stream implementation is needed;
  */
 template <typename Rep, typename Period>
-std::string duration_to_string(const std::chrono::duration<Rep, Period>& d) {
+std::string to_string(const std::chrono::duration<Rep, Period>& d) {
     std::stringstream ss;
     ss << d.count() << " ";
 
@@ -40,6 +40,11 @@ std::string duration_to_string(const std::chrono::duration<Rep, Period>& d) {
     return ss.str();
 }
 
+template <typename Rep, typename Period>
+std::string to_string(const std::chrono::time_point<Rep, Period>& t) {
+    return to_string(t.time_since_epoch());
+}
+
 }
 
 // project wide time units 
@@ -52,71 +57,73 @@ enum unit {
     nanosecond
 };
 
-/// project wide time_point type
-struct time_point : 
-        public std::chrono::steady_clock::time_point,
-        public hce::printable
-{
-    template <typename... As>
-    time_point(As&&... as) : 
-        std::chrono::steady_clock::time_point(as...)
-    { 
-        HCE_TRACE_CONSTRUCTOR(as...);
-    }
-
-    ~time_point() { HCE_TRACE_DESTRUCTOR(); }
-
-    inline std::string content() const {
-        return detail::duration_to_string(time_since_epoch());
-    }
-    
-    inline const char* nspace() const { return "hce"; }
-    inline const char* name() const { return "time_point"; }
-};
-
 /// project wide duration type
 struct duration : 
         public std::chrono::steady_clock::duration,
         public hce::printable
 {
-    template <typename... As>
-    duration(As&&... as) : 
-        std::chrono::steady_clock::duration(as...)
-    { 
-        HCE_TRACE_CONSTRUCTOR(as...);
+    duration() : std::chrono::steady_clock::duration() { 
+        HCE_TRACE_CONSTRUCTOR();
+    }
+
+    template <typename A>
+    duration(A&& a) : std::chrono::steady_clock::duration(a) { 
+        HCE_TRACE_CONSTRUCTOR(detail::to_string(a));
     }
 
     ~duration() { HCE_TRACE_DESTRUCTOR(); }
 
     inline std::string content() const {
-        return detail::duration_to_string(*this);
+        return detail::to_string(*this);
     }
     
     inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "duration"; }
 };
 
+/// project wide time_point type
+struct time_point : 
+        public std::chrono::steady_clock::time_point,
+        public hce::printable
+{
+    time_point() { HCE_TRACE_CONSTRUCTOR(); }
+
+    template <typename A>
+    time_point(A&& a) : std::chrono::steady_clock::time_point(a) { 
+        HCE_TRACE_CONSTRUCTOR(detail::to_string(a));
+    }
+
+    ~time_point() { HCE_TRACE_DESTRUCTOR(); }
+
+    inline std::string content() const {
+        return detail::to_string(time_since_epoch());
+    }
+    
+    inline const char* nspace() const { return "hce"; }
+    inline const char* name() const { return "time_point"; }
+};
+
 /// acquire the current time
 static inline hce::chrono::time_point now() {
-    HCE_TRACE_METHOD_ENTER("now");
-    return std::chrono::steady_clock::now();
+    HCE_TRACE_FUNCTION_ENTER("hce::now");
+    return { std::chrono::steady_clock::now() };
 }
 
 /// convert the time_point to a duration 
 static inline hce::chrono::duration to_duration(const hce::chrono::time_point& tp) {
-    HCE_TRACE_METHOD_ENTER("to_duration", tp);
+    HCE_TRACE_FUNCTION_ENTER("hce::to_duration", tp);
     return tp.time_since_epoch();
 }
 
 /// return the duration 
 static inline hce::chrono::duration to_duration(const hce::chrono::duration& dur) {
-    HCE_TRACE_METHOD_ENTER("to_duration", dur);
+    HCE_TRACE_FUNCTION_ENTER("hce::to_duration", dur);
     return dur;
 }
 
 /// return a duration equivalent to the count of units
 static inline hce::chrono::duration to_duration(unit u, size_t count) {
-    HCE_TRACE_METHOD_ENTER("to_duration", u, count);
+    HCE_TRACE_FUNCTION_ENTER("hce::to_duration", u, count);
 
     switch(u) {
         case unit::hour:
@@ -145,19 +152,19 @@ static inline hce::chrono::duration to_duration(unit u, size_t count) {
 
 /// return the time_point
 static inline hce::chrono::time_point to_time_point(const hce::chrono::time_point& tp) {
-    HCE_TRACE_METHOD_ENTER("to_time_point", tp);
+    HCE_TRACE_FUNCTION_ENTER("hce::to_time_point", tp);
     return tp;
 }
 
 /// convert the duration to a time_point
 static inline hce::chrono::time_point to_time_point(const hce::chrono::duration& dur) {
-    HCE_TRACE_METHOD_ENTER("to_time_point", dur);
+    HCE_TRACE_FUNCTION_ENTER("hce::to_time_point", dur);
     return hce::chrono::now() + dur;
 }
 
 /// return a time_point equivalent to the count of units in the future
 static inline hce::chrono::time_point to_time_point(unit u, size_t count) {
-    HCE_TRACE_METHOD_ENTER("to_time_point", u, count);
+    HCE_TRACE_FUNCTION_ENTER("hce::to_time_point", u, count);
     return hce::chrono::to_time_point(hce::chrono::to_duration(u,count));
 }
 

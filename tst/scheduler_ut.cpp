@@ -528,7 +528,6 @@ TEST(scheduler, schedule_and_thread_locals) {
     }
 }
 
-/*
 TEST(scheduler, join) {
     // join and return int
     {
@@ -537,9 +536,12 @@ TEST(scheduler, join) {
         std::thread thd([&]{ sch->install(); });
         std::deque<hce::awt<int>> joins;
 
-        joins.push_back(sch->join(test::scheduler::co_return_T<int>(test::init<int>(3))));
-        joins.push_back(sch->join(test::scheduler::co_return_T<int>(test::init<int>(2))));
-        joins.push_back(sch->join(test::scheduler::co_return_T<int>(test::init<int>(1))));
+        joins.push_back(sch->join(
+            test::scheduler::co_return_T<int>(test::init<int>(3))));
+        joins.push_back(sch->join(
+            test::scheduler::co_return_T<int>(test::init<int>(2))));
+        joins.push_back(sch->join(
+            test::scheduler::co_return_T<int>(test::init<int>(1))));
 
         try {
             int result = joins.front();
@@ -559,4 +561,3 @@ TEST(scheduler, join) {
         }
     }
 }
-*/

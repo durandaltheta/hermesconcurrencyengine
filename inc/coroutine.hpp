@@ -139,7 +139,7 @@ struct coroutine : public printable {
     /// return true if the coroutine is done, else false
     inline bool done() const { 
         bool d = handle_.done();
-        HCE_MIN_METHOD_BODY("done", d);
+        HCE_MIN_METHOD_BODY("done", std::boolalpha, d);
         return d; 
     }
 
@@ -387,11 +387,11 @@ private:
 
     template <typename LOCK>
     inline void block_(LOCK& lk) {
-        while(!(ready)) { cv.wait(lk); }
+        while(!ready) { cv.wait(lk); }
         ready = false;
     }
 
-    bool ready;
+    bool ready = false;
     std::condition_variable_any cv;
 };
 
@@ -556,10 +556,10 @@ struct awaitable : public printable {
         virtual ~interface() { 
             HCE_LOW_DESTRUCTOR();
 
-            if(handle_) {
+            if(this->handle_) {
                 // take care of destroying the handle by assigning it to a 
                 // managing coroutine
-                coroutine co(std::move(handle_));
+                coroutine co(std::move(this->handle_));
                 std::stringstream ss;
                 ss << *this
                    << " was not resumed before being destroyed; it held " 
@@ -571,7 +571,7 @@ struct awaitable : public printable {
         inline const char* nspace() const { return "hce::awaitable"; }
         inline const char* name() const { return "interface"; }
 
-        virtual inline bool awaited() final { return awaited_; }
+        virtual inline bool awaited() final { return this->awaited_; }
 
         virtual inline bool await_ready() final {
             HCE_LOW_METHOD_ENTER("await_ready");
@@ -580,19 +580,29 @@ struct awaitable : public printable {
             this->lock(); 
 
             // set awaited flag
-            awaited_ = true;
+            this->awaited_ = true;
 
             // call the ready code
-            return this->on_ready();
+            if(this->on_ready()) {
+                HCE_TRACE_METHOD_BODY("await_ready","ready immediately");
+                this->unlock();
+                return true;
+            } else {
+                HCE_TRACE_METHOD_BODY("await_ready","about to suspend");
+                return false;
+            }
         }
 
         /// called by awaitable's await_suspend()
         virtual inline void await_suspend(std::coroutine_handle<> h) final {
             HCE_LOW_METHOD_ENTER("await_suspend");
 
+            // still locked from await_ready()
+
             if(h) {
+                HCE_TRACE_METHOD_BODY("await_suspend","h:",h);
                 // assign the handle to our member
-                handle_ = h; 
+                this->handle_ = h; 
                 // the current coroutine no longer manages the handle
                 coroutine::local().release(); 
                 // unlock the lock before coroutine::resume() returns to the 
@@ -600,7 +610,8 @@ struct awaitable : public printable {
                 this->unlock();
             } else {
                 // block the calling thread using traditional mechanisms
-                atp_ = detail::coroutine::this_thread::get(); 
+                this->atp_ = detail::coroutine::this_thread::get(); 
+                HCE_TRACE_METHOD_BODY("await_suspend","atp_:",(void*)atp_);
                 detail::coroutine::this_thread::block(*this);
             }
         }
@@ -624,15 +635,21 @@ struct awaitable : public printable {
             // call the custom resumption code
             this->on_resume(m);
 
-            if(atp_) { 
+            if(this->atp_) { 
+                HCE_TRACE_METHOD_BODY("resume","unblock");
                 // unblock the suspended thread
-                atp_->unblock(*this); 
-            } else { 
+                this->atp_->unblock(*this); 
+            } else if(this->handle_) { 
+                HCE_TRACE_METHOD_BODY("resume","destination");
                 // unblock the suspended coroutine and push the handle to its 
                 // destination
                 this->unlock();
-                this->destination(handle_);
-                handle_ = std::coroutine_handle<>();
+                this->destination(this->handle_);
+                this->handle_ = std::coroutine_handle<>();
+            } else {
+                HCE_TRACE_METHOD_BODY("resume","not blocked");
+                // this was called before blocking occurred
+                this->unlock();
             }
         }
 
@@ -679,6 +696,8 @@ struct awaitable : public printable {
 
     /**
      @brief partial implementation of awaitable::interface for a templated LOCK
+
+     Enables std::unique_lock<LOCK>-like semantics.
      */
     template <typename INTERFACE, typename LOCK>
     struct lockable : public INTERFACE {
@@ -690,7 +709,7 @@ struct awaitable : public printable {
         { }
 
         /// ensure lock is unlocked when we go out of scope
-        virtual ~lockable() { unlock(); }
+        virtual ~lockable() { if(locked_){ unlock(); } }
 
         /// acquire the lock
         inline void lock() final { 

@@ -44,9 +44,9 @@ The generated `doc/` directory should contain both `html` and `rtf` generated do
 - `tex`
 
 ### Build and Run
-Execute all tests with:
+Execute all tests with (example with `gcc`):
 ```
-./script/validate
+./script/validate -cc=gcc -cxx=g++
 ```
 
 Print test help with:
@@ -70,11 +70,11 @@ Then the unit tests will be run "122" times.
 The goal of all this is to introduce timing differences and general processing jitter, to increase confidence that the feature logic of the project is correct. A successful default `validate` run should produce high confidence of this software's correctness for the runtime hardware with the specified compiler.
 
 ### Compiler options
-Compilers are set with the `-cc`/`--c-compiler` and `-cxx`/`-cxx-compiler` flags. They can be any compiler, in including cross compilers.
+Compilers are set with the `-cc`/`--c-compiler` and `-cxx`/`-cxx-compiler`. They can be any compiler, including cross compilers.
 
 The argument specified `cc`/`cxx` executable paths are provided to `script/validate` by searching the `PATH` (similar to how `linux` `which my-program` will return the path to the first found `my-program`). 
 
-Additionally, if cross compiling, the user will need to specify `-otc`/`--override-test-command` and `-omc`/`--override-memcheck-command` so that the compiled unit tests can run in the necessary virtual environment or on connected target hardware.
+Additionally, if cross compiling, the user will need to specify `-otc`/`--override-test-command` and `-omc`/`--override-memcheck-command` so that the compiled unit tests can run in the necessary virtual environment or on connected target hardware. It is up to the user to implement said scripts/commands in such a way that compiled unit tests get executed in the right environment.
 
 ## Scheduling
 

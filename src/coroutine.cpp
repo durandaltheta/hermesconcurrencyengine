@@ -1,9 +1,11 @@
 //SPDX-License-Identifier: Apache-2.0
 //Author: Blayne Dennis 
+#include <string>
+#include <sstream>
+
 #include "loguru.hpp"
 #include "utility.hpp"
 #include "coroutine.hpp"
-#include "scheduler.hpp"
 
 // test, only uncomment for development of this library
 //#include "dev_print.hpp"

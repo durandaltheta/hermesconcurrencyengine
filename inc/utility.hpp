@@ -351,9 +351,8 @@ struct printable {
         std::string c = this->content();
 
         if(!(c.empty())) { 
-            ss << "["
-               << c
-               << "]";
+            // put content in brackets to print like a container
+            ss << "[" << c << "]";
         }
 
         return ss.str();
@@ -520,6 +519,7 @@ private:
         ss << s;
     }
     
+    // catch any variant of `std::basic_string<>` (IE, `std::string`)
     template <typename CharT, typename Traits, typename Alloc>
     static void ingest_item_(
             std::stringstream& ss, 
@@ -527,6 +527,7 @@ private:
         ss << s;
     }
 
+    // disambiguate between containers and other printable items
     template <typename A>
     static void ingest_item_(std::stringstream& ss, A&& a) {
         ingest_item_disambiguation_(
@@ -535,27 +536,30 @@ private:
             std::forward<A>(a));
     }
 
-    static inline void ingest_continue_(std::stringstream& ss) { }
+    static inline void ingest_rest_of_args_(std::stringstream& ss) { }
 
+    // in argument lists, begin inserting "," between arguments
     template <typename A, typename... As>
-    static void ingest_continue_(std::stringstream& ss, A&& a, As&&... as) {
+    static void ingest_rest_of_args_(std::stringstream& ss, A&& a, As&&... as) {
         ss << ", "; 
         ingest_item_(ss,std::forward<A>(a));
-        ingest_continue_(ss, std::forward<As>(as)...);
+        ingest_rest_of_args_(ss, std::forward<As>(as)...);
     }
-    
+   
+    // final ingest
     static inline void ingest_args_(std::stringstream& ss) { }
 
-    // for ingesting a list of arguments
+    // for ingesting a list of function or method arguments
     template <typename A, typename... As>
     static void ingest_args_(std::stringstream& ss, A&& a, As&&... as) {
         ingest_item_(ss,std::forward<A>(a));
-        ingest_continue_(ss, std::forward<As>(as)...);
+        ingest_rest_of_args_(ss, std::forward<As>(as)...);
     }
     
+    // final ingest
     static inline void ingest_(std::stringstream& ss) { }
 
-    // for ingesting arbitrary data
+    // for ingesting arbitrary data into a logline
     template <typename A, typename... As>
     static void ingest_(std::stringstream& ss, A&& a, As&&... as) {
         ingest_item_(ss,std::forward<A>(a));
@@ -569,8 +573,7 @@ namespace detail {
 template <typename Callable>
 inline std::string callable_to_string(Callable& f) {
     std::stringstream ss;
-    ss << "function@"
-       << (void*)&f;
+    ss << "callable@" << (void*)&f;
     return ss.str();
 }
 
@@ -597,7 +600,7 @@ struct cleanup : public printable {
         HCE_MED_DESTRUCTOR();
 
         for(auto& hdl : handlers_) { 
-            HCE_MED_METHOD_BODY("~cleanup",detail::to_string(hdl));
+            HCE_MED_METHOD_BODY("~cleanup",detail::callable_to_string(hdl));
             hdl(t_); 
         } 
     }
@@ -608,13 +611,13 @@ struct cleanup : public printable {
     /// install handler taking no arguments
     inline void install(thunk th) { 
         handlers_.push_back(adaptor{ std::move(th) });
-        HCE_MED_METHOD_ENTER("install",detail::to_string(handlers_.back()));
+        HCE_MED_METHOD_ENTER("install",detail::callable_to_string(handlers_.back()));
     }
 
     /// install handler taking T as an argument
     inline void install(handler h) { 
         handlers_.push_back(std::move(h)); 
-        HCE_MED_METHOD_ENTER("install",detail::to_string(handlers_.back()));
+        HCE_MED_METHOD_ENTER("install",detail::callable_to_string(handlers_.back()));
     }
 
 private:

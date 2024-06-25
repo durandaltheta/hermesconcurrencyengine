@@ -101,6 +101,7 @@ private:
         inline bool on_ready() { return parent_->lock_(this); }
         inline void on_resume(void* m) { }
 
+    private:
         hce::mutex* parent_;
     };
 

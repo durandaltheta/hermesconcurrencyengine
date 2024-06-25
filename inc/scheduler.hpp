@@ -82,35 +82,39 @@ struct joiner :
 {
 
     /// resume immediately and return a constructed T
-    template <typename... As>
-    joiner(As&&... as) : 
-        hce::awaitable::lockable<
-            //awt<T>::interface,
-            awt_interface<T>,
-            hce::spinlock>(slk_,false),
-        ready_(true),
-        t_(std::forward<As>(as)...)
-    { }
+    //template <typename... As>
+    //joiner(As&&... as) : 
+        //hce::awaitable::lockable<
+            ////awt<T>::interface,
+            //awt_interface<T>,
+            //hce::spinlock>(slk_,false),
+        //ready_(true),
+        //t_(std::forward<As>(as)...)
+    //{ }
 
     joiner(hce::co<T>& co) :
         hce::awaitable::lockable<
-            //awt<T>::interface,
             awt_interface<T>,
             hce::spinlock>(slk_,false),
         ready_(false),
         address_(co.address())
     { 
+        HCE_TRACE_CONSTRUCTOR(co);
+
         // install a cleanup handler to resume the returned awaitable when 
         // the coroutine goes out of scope
         co.promise().install([self=this](hce::co<T>::promise_type& p){
             // get a copy of the handle to see if the coroutine completed 
             auto handle = 
-                std::coroutine_handle<typename hce::co<T>::promise_type>::from_promise(p);
+                std::coroutine_handle<
+                    typename hce::co<T>::promise_type>::from_promise(p);
 
             if(handle.done()) {
+                HCE_TRACE_FUNCTION_BODY("joiner::cleanup::install","done@",handle);
                 // resume the blocked awaitable
                 self->resume(&(p.result));
             } else {
+                HCE_ERROR_FUNCTION_BODY("joiner::cleanup::install","NOT done@",handle);
                 // resume with no result
                 self->resume(nullptr);
             }
@@ -121,6 +125,7 @@ struct joiner :
 
     inline void on_resume(void* m) { 
         ready_ = true;
+
         if(m) { 
             t_ = std::move(*((std::unique_ptr<T>*)m)); 
         };
@@ -146,21 +151,22 @@ struct joiner<void> :
         awt_interface<void>,
         hce::spinlock>
 {
-    joiner() : 
-        hce::awaitable::lockable<
-            //awt<void>::interface,
-            awt_interface<void>,
-            hce::spinlock>(slk_,false),
-        ready_(true)
-    { }
+    //joiner() : 
+        //hce::awaitable::lockable<
+            ////awt<void>::interface,
+            //awt_interface<void>,
+            //hce::spinlock>(slk_,false),
+        //ready_(true)
+    //{ }
 
     joiner(hce::co<void>& co) :
         hce::awaitable::lockable<
-            //awt<void>::interface,
             awt_interface<void>,
             hce::spinlock>(slk_,false),
         ready_(false)
     { 
+        HCE_TRACE_CONSTRUCTOR(co);
+
         // install a cleanup handler to resume the returned awaitable when 
         // the coroutine goes out of scope
         co.promise().install([self=this]() mutable { self->resume(nullptr); });
@@ -225,7 +231,7 @@ struct scheduler : public printable {
             auto d = destination_.lock();
 
             if(d) { 
-                HCE_LOW_METHOD_BODY("destination",*d);
+                HCE_LOW_METHOD_BODY("destination",*d,h);
                 d->schedule(std::move(h)); 
             }
         }
@@ -1108,25 +1114,28 @@ private:
                     lk.unlock();
 
                     size_t count = local_queue->size();
-                    coroutine co;
 
-                    // evaluate a batch of coroutines
-                    while(count) { 
-                        // decrement from our initial batch count
-                        --count;
+                    {
+                        coroutine co;
 
-                        // get a new task
-                        co.reset(local_queue->front());
-                        local_queue->pop_front();
+                        // evaluate a batch of coroutines
+                        while(count) { 
+                            // decrement from our initial batch count
+                            --count;
 
-                        // evaluate coroutine
-                        co.resume();
+                            // get a new task
+                            co.reset(local_queue->front());
+                            local_queue->pop_front();
 
-                        // check if the coroutine yielded
-                        if(co && !co.done()) {
-                            // re-enqueue coroutine 
-                            local_queue->push_back(co.release()); 
-                        } 
+                            // evaluate coroutine
+                            co.resume();
+
+                            // check if the coroutine yielded
+                            if(co && !co.done()) {
+                                // re-enqueue coroutine 
+                                local_queue->push_back(co.release()); 
+                            } 
+                        }
                     }
 
                     // reschedule any ready timers
@@ -1147,10 +1156,12 @@ private:
                     if(coroutine_queue_->empty()) {
                         if(can_continue_()) {
                             if(timers_.empty()) {
+                                HCE_TRACE_METHOD_BODY("run_","wait");
                                 // wait for more tasks
                                 waiting_for_tasks_ = true;
                                 tasks_available_cv_.wait(lk);
                             } else {
+                                HCE_TRACE_METHOD_BODY("run_","wait_until");
                                 // wait, at a maximum, till the next scheduled
                                 // timer timeout
                                 waiting_for_tasks_ = true;
@@ -1338,26 +1349,42 @@ private:
 
     // notify caller of run() that tasks are available
     inline void tasks_available_notify_() {
+        HCE_TRACE_METHOD_ENTER("tasks_available_notify_");
         // only do notify if necessary
         if(waiting_for_tasks_) {
+            HCE_TRACE_METHOD_BODY("tasks_available_notify_","notified");
             waiting_for_tasks_ = false;
             tasks_available_cv_.notify_one();
         }
     }
     
     inline void schedule_coroutine_(std::coroutine_handle<> h) {
-        if(!(h.done())) { coroutine_queue_->push_back(h); }
+        HCE_TRACE_METHOD_ENTER("schedule_coroutine_",h);
+
+        if(!(h.done())) { 
+            HCE_TRACE_METHOD_BODY("schedule_coroutine_","pushing onto queue");
+            coroutine_queue_->push_back(h); 
+        } 
     }
     
     // schedule an individual coroutine's handle
     inline void schedule_coroutine_(coroutine c) {
-        if(c) { schedule_coroutine_(c.release()); }
+        HCE_TRACE_METHOD_ENTER("schedule_coroutine_",c);
+
+        if(c) { 
+            HCE_TRACE_METHOD_BODY("schedule_coroutine_","extracting handle");
+            schedule_coroutine_(c.release()); 
+        }
     }
    
     // schedule an individual templated coroutine's handle
     template <typename T>
     inline void schedule_coroutine_(co<T> c) {
-        if(c) { schedule_coroutine_(c.release()); }
+        HCE_TRACE_METHOD_ENTER("schedule_coroutine_",c);
+
+        if(c) { 
+            schedule_coroutine_(c.release()); 
+        }
     }
 
     // when all coroutines are scheduled, notify

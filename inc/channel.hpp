@@ -313,9 +313,9 @@ struct channel : public printable {
                     sp_(sp)
                 { }
 
-                inline bool ready_interface() { return ready_; }
+                inline bool on_ready() { return ready_; }
 
-                inline void resume_interface(void* m) {
+                inline void on_resume(void* m) {
                     if(m) {
                         sp_.send(m);
                         success_ = true;
@@ -323,7 +323,7 @@ struct channel : public printable {
                     else{ success_ = false; }
                 }
 
-                inline bool result_interface() { return success_; }
+                inline bool get_result() { return success_; }
 
             private:
                 bool ready_;
@@ -542,9 +542,9 @@ struct channel : public printable {
                     sp_(sp)
                 { }
 
-                inline bool ready() { return ready_; }
+                inline bool on_ready() { return ready_; }
 
-                inline void resume(void* m) {
+                inline void on_resume(void* m) {
                     if(m) {
                         sp_.send(m);
                         success_ = true;
@@ -596,9 +596,9 @@ struct channel : public printable {
                     r_(r)
                 { }
 
-                inline bool ready() { return ready_; }
+                inline bool on_ready() { return ready_; }
 
-                inline void resume(void* m) {
+                inline void on_resume(void* m) {
                     if(m) {
                         auto b = (circular_buffer<T>*)m;
                         *((T*)r_) = std::move(b->front());
