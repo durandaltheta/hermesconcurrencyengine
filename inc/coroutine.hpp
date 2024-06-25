@@ -714,17 +714,15 @@ struct awaitable : public printable {
         /// acquire the lock
         inline void lock() final { 
             HCE_LOW_METHOD_ENTER("lock");
-            if(!locked_) {
-                locked_ = true;
-                lk_->lock(); 
-            }
+            lk_->lock(); 
+            locked_ = true;
         }
 
         /// release the lock
         inline void unlock() final { 
             HCE_LOW_METHOD_ENTER("unlock");
-            lk_->unlock(); 
             locked_ = false;
+            lk_->unlock(); 
         }
 
     private:
