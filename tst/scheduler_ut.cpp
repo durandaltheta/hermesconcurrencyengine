@@ -286,6 +286,18 @@ private:
     T t_;
 };
 
+// void* initialization specialization
+template <>
+struct init<void*> {
+    template <typename... As>
+    init(As&&... as) : t_(((void*)(size_t)as)...) { }
+
+    inline operator void*() { return std::move(t_); }
+
+private:
+    void* t_;
+};
+
 // std::string initialization specialization
 template <>
 struct init<std::string> {
@@ -521,8 +533,12 @@ TEST(scheduler, schedule) {
     // exceptions
     const size_t expected = 8;
     EXPECT_EQ(expected, test::schedule_T<int>());
+    EXPECT_EQ(expected, test::schedule_T<unsigned int>());
     EXPECT_EQ(expected, test::schedule_T<size_t>());
+    EXPECT_EQ(expected, test::schedule_T<float>());
     EXPECT_EQ(expected, test::schedule_T<double>());
+    EXPECT_EQ(expected, test::schedule_T<char>());
+    EXPECT_EQ(expected, test::schedule_T<void*>());
     EXPECT_EQ(expected, test::schedule_T<std::string>());
     EXPECT_EQ(expected, test::schedule_T<test::CustomObject>());
 }
@@ -612,8 +628,12 @@ size_t join_T() {
 TEST(scheduler, join) {
     const size_t expected = 1;
     EXPECT_EQ(expected, test::join_T<int>());
+    EXPECT_EQ(expected, test::join_T<unsigned int>());
     EXPECT_EQ(expected, test::join_T<size_t>());
+    EXPECT_EQ(expected, test::join_T<float>());
     EXPECT_EQ(expected, test::join_T<double>());
+    EXPECT_EQ(expected, test::join_T<char>());
+    EXPECT_EQ(expected, test::join_T<void*>());
     EXPECT_EQ(expected, test::join_T<std::string>());
     EXPECT_EQ(expected, test::join_T<test::CustomObject>());
 }
