@@ -528,8 +528,13 @@ TEST(scheduler, schedule_and_thread_locals) {
     }
 }
 
-TEST(scheduler, join) {
-    // join and return int
+namespace test {
+
+template <typename T>
+size_t join_T() {
+    size_t success_count = 0;
+
+    // join  individually
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
@@ -556,8 +561,21 @@ TEST(scheduler, join) {
 
             lf.reset();
             thd.join();
+            ++success_count;
         } catch(const std::exception& e) {
             LOG_F(ERROR, e.what());
         }
     }
+
+    return success_count;
+}
+
+}
+
+TEST(scheduler, join) {
+    const size_t expected = 1;
+    EXPECT_EQ(expected, test::join_T<int>());
+    EXPECT_EQ(expected, test::join_T<size_t>());
+    EXPECT_EQ(expected, test::join_T<double>());
+    EXPECT_EQ(expected, test::join_T<std::string>());
 }
