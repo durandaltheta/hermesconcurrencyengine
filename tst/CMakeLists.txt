@@ -15,9 +15,9 @@ endif()
 add_subdirectory(googletest)
 
 add_executable(hce_ut 
-    #atomic_ut.cpp 
-    #circular_buffer_ut.cpp
-    #coroutine_ut.cpp
+    atomic_ut.cpp 
+    circular_buffer_ut.cpp
+    coroutine_ut.cpp
     scheduler_ut.cpp
 )
 

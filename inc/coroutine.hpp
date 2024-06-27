@@ -84,7 +84,7 @@ struct coroutine : public printable {
         return *this;
     }
 
-    virtual ~coroutine() { 
+    ~coroutine() { 
         HCE_MED_DESTRUCTOR();
         reset(); 
     }
@@ -189,6 +189,8 @@ struct coroutine : public printable {
             tl_co = parent_co;
             std::rethrow_exception(std::current_exception());
         }
+
+        tl_co = parent_co;
     }
 
     /**
@@ -763,6 +765,8 @@ struct awaitable : public printable {
     inline std::string content() const {
         return impl_ ? impl_->to_string() : std::string();
     }
+    
+    inline void* address() const { return impl_.get(); }
 
     /**
      Can't use conversion `operator bool()` because descendant awaitables are 

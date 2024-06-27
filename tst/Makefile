@@ -175,6 +175,78 @@ hce_ut/fast:
 	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/build
 .PHONY : hce_ut/fast
 
+atomic_ut.o: atomic_ut.cpp.o
+.PHONY : atomic_ut.o
+
+# target to build an object file
+atomic_ut.cpp.o:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/atomic_ut.cpp.o
+.PHONY : atomic_ut.cpp.o
+
+atomic_ut.i: atomic_ut.cpp.i
+.PHONY : atomic_ut.i
+
+# target to preprocess a source file
+atomic_ut.cpp.i:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/atomic_ut.cpp.i
+.PHONY : atomic_ut.cpp.i
+
+atomic_ut.s: atomic_ut.cpp.s
+.PHONY : atomic_ut.s
+
+# target to generate assembly for a file
+atomic_ut.cpp.s:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/atomic_ut.cpp.s
+.PHONY : atomic_ut.cpp.s
+
+circular_buffer_ut.o: circular_buffer_ut.cpp.o
+.PHONY : circular_buffer_ut.o
+
+# target to build an object file
+circular_buffer_ut.cpp.o:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/circular_buffer_ut.cpp.o
+.PHONY : circular_buffer_ut.cpp.o
+
+circular_buffer_ut.i: circular_buffer_ut.cpp.i
+.PHONY : circular_buffer_ut.i
+
+# target to preprocess a source file
+circular_buffer_ut.cpp.i:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/circular_buffer_ut.cpp.i
+.PHONY : circular_buffer_ut.cpp.i
+
+circular_buffer_ut.s: circular_buffer_ut.cpp.s
+.PHONY : circular_buffer_ut.s
+
+# target to generate assembly for a file
+circular_buffer_ut.cpp.s:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/circular_buffer_ut.cpp.s
+.PHONY : circular_buffer_ut.cpp.s
+
+coroutine_ut.o: coroutine_ut.cpp.o
+.PHONY : coroutine_ut.o
+
+# target to build an object file
+coroutine_ut.cpp.o:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/coroutine_ut.cpp.o
+.PHONY : coroutine_ut.cpp.o
+
+coroutine_ut.i: coroutine_ut.cpp.i
+.PHONY : coroutine_ut.i
+
+# target to preprocess a source file
+coroutine_ut.cpp.i:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/coroutine_ut.cpp.i
+.PHONY : coroutine_ut.cpp.i
+
+coroutine_ut.s: coroutine_ut.cpp.s
+.PHONY : coroutine_ut.s
+
+# target to generate assembly for a file
+coroutine_ut.cpp.s:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/coroutine_ut.cpp.s
+.PHONY : coroutine_ut.cpp.s
+
 scheduler_ut.o: scheduler_ut.cpp.o
 .PHONY : scheduler_ut.o
 
@@ -212,6 +284,15 @@ help:
 	@echo "... list_install_components"
 	@echo "... rebuild_cache"
 	@echo "... hce_ut"
+	@echo "... atomic_ut.o"
+	@echo "... atomic_ut.i"
+	@echo "... atomic_ut.s"
+	@echo "... circular_buffer_ut.o"
+	@echo "... circular_buffer_ut.i"
+	@echo "... circular_buffer_ut.s"
+	@echo "... coroutine_ut.o"
+	@echo "... coroutine_ut.i"
+	@echo "... coroutine_ut.s"
 	@echo "... scheduler_ut.o"
 	@echo "... scheduler_ut.i"
 	@echo "... scheduler_ut.s"
