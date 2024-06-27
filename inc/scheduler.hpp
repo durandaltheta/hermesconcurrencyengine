@@ -726,7 +726,7 @@ struct scheduler : public printable {
                 new std::deque<hce::awt<void>>);
         assemble_scope_(*dq, std::forward<As>(as)...);
 
-        return hce::awt<void>(new scoper(std::move(dq)));
+        return hce::awt<void>::make(new scoper(std::move(dq)));
     }
 
     /**
@@ -899,11 +899,13 @@ private:
             awts_(std::move(awts))
         { }
 
+        virtual ~scoper() { }
+
         inline const char* nspace() const { return "hce::scheduler"; }
         inline const char* name() const { return "scoper"; }
 
         inline bool on_ready() { 
-            scheduler::get().schedule(scoper::op(this, *awts_));
+            scheduler::get().schedule(scoper::op(this, awts_.get()));
             return false;
         }
 
@@ -911,12 +913,13 @@ private:
 
         static inline co<void> op(
                 scoper* sa, 
-                std::deque<hce::awt<void>>& awts) {
+                std::deque<hce::awt<void>>* awts) {
 
-            for(auto& awt : awts) {
+            for(auto& awt : *awts) {
                 co_await hce::awt<void>(std::move(awt));
             }
 
+            // once all awaitables in the scope are joined, return
             sa->resume(nullptr);
             co_return;
         }
@@ -944,6 +947,15 @@ private:
             parent_(*hce::detail::scheduler::tl_this_scheduler())
         { }
 
+        virtual ~timer(){
+            if(!ready_) {
+                // need to cancel because the awaitable was not be awaited 
+                // properly...
+                auto parent = parent_.lock();
+                if(parent) { parent->cancel(id()); }
+            }
+        }
+
         inline const char* nspace() const { return "hce::scheduler"; }
         inline const char* name() const { return "timer"; }
 
@@ -951,15 +963,6 @@ private:
             std::stringstream ss;
             ss << id_ << ", " << tp_;
             return ss.str(); 
-        }
-
-        ~timer(){
-            if(!ready_) {
-                // need to cancel because the awaitable was not be awaited 
-                // properly...
-                auto parent = parent_.lock();
-                if(parent) { parent->cancel(id()); }
-            }
         }
 
         inline bool on_ready() { return ready_; }
@@ -1009,7 +1012,7 @@ private:
             A&& a, 
             As&&... as) 
     {
-        detail::scheduler::assemble_joins_(dq, join_(std::forward<A>(a)));
+        detail::scheduler::assemble_joins_(dq, join_(a));
         assemble_scope_(dq, std::forward<As>(as)...);
     }
 

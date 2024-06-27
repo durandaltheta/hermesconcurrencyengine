@@ -42,6 +42,11 @@ struct queue {
         return res;
     }
 
+    size_t size() {
+        std::lock_guard<hce::spinlock> lk(slk);
+        return vals.size();
+    }
+
 private:
     hce::spinlock slk;
     std::condition_variable_any cv;
@@ -62,7 +67,7 @@ inline hce::co<T> co_return_T(T t) {
 }
 
 template <typename T>
-hce::co<T> co_push_T_ret_T(queue<T>& q, T t) {
+hce::co<T> co_push_T_return_T(queue<T>& q, T t) {
     q.push(t);
     co_return t;
 }
@@ -403,7 +408,7 @@ size_t schedule_T() {
 
         sch->schedule(test::scheduler::co_push_T<T>(q,init<T>(3)),
                       hce::coroutine(test::scheduler::co_push_T<T>(q,init<T>(2))),
-                      test::scheduler::co_push_T_ret_T<T>(q,init<T>(1)));
+                      test::scheduler::co_push_T_return_T<T>(q,init<T>(1)));
 
         try {
             EXPECT_EQ((T)init<T>(3), q.pop());
@@ -693,4 +698,395 @@ TEST(scheduler, join) {
     EXPECT_EQ(expected, test::join_T<void*>());
     EXPECT_EQ(expected, test::join_T<std::string>());
     EXPECT_EQ(expected, test::join_T<test::CustomObject>());
+}
+
+namespace test {
+
+template <typename T>
+size_t scope_T() {
+    std::string T_name = []() -> std::string {
+        std::stringstream ss;
+        ss << typeid(T).name();
+        return ss.str();
+    }();
+
+    HCE_INFO_LOG("scope_T<%s>",T_name.c_str());
+    size_t success_count = 0;
+
+    // scope void individually
+    {
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+        std::deque<hce::awt<void>> scopes;
+
+        scopes.push_back(sch->scope(
+            test::scheduler::co_void()));
+        scopes.push_back(sch->scope(
+            test::scheduler::co_void()));
+        scopes.push_back(sch->scope(
+            test::scheduler::co_void()));
+
+        try {
+            scopes.front();
+            scopes.pop_front();
+            scopes.front();
+            scopes.pop_front();
+            scopes.front();
+            scopes.pop_front();
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    } 
+
+    // scope void ran successfully
+    {
+        test::scheduler::queue<T> q;
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+        std::deque<hce::awt<void>> scopes;
+
+        scopes.push_back(sch->scope(
+            test::scheduler::co_push_T<T>(q,test::init<T>(3))));
+        scopes.push_back(sch->scope(
+            test::scheduler::co_push_T<T>(q,test::init<T>(2))));
+        scopes.push_back(sch->scope(
+            test::scheduler::co_push_T<T>(q,test::init<T>(1))));
+
+        try {
+            scopes.front();
+            scopes.pop_front();
+            scopes.front();
+            scopes.pop_front();
+            scopes.front();
+            scopes.pop_front();
+
+            EXPECT_EQ(3,q.size());
+            EXPECT_EQ((T)test::init<T>(3),q.pop());
+            EXPECT_EQ((T)test::init<T>(2),q.pop());
+            EXPECT_EQ((T)test::init<T>(1),q.pop());
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    } 
+
+    // scope void group
+    {
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+        std::deque<hce::awt<void>> scopes;
+
+        scopes.push_back(sch->scope(
+            test::scheduler::co_void(),
+            test::scheduler::co_void(),
+            test::scheduler::co_void()));
+
+        try {
+            scopes.front();
+            scopes.pop_front();
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    } 
+
+    // scope void group ran successfully
+    {
+        test::scheduler::queue<T> q;
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+        std::deque<hce::awt<void>> scopes;
+
+        scopes.push_back(sch->scope(
+            test::scheduler::co_push_T<T>(q,test::init<T>(3)),
+            test::scheduler::co_push_T<T>(q,test::init<T>(2)),
+            test::scheduler::co_push_T<T>(q,test::init<T>(1))));
+
+        try {
+            scopes.front();
+            scopes.pop_front();
+
+            EXPECT_EQ(3,q.size());
+            EXPECT_EQ((T)test::init<T>(3),q.pop());
+            EXPECT_EQ((T)test::init<T>(2),q.pop());
+            EXPECT_EQ((T)test::init<T>(1),q.pop());
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    } 
+
+    // scope void mixed
+    {
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+        std::deque<hce::awt<void>> scopes;
+
+        scopes.push_back(sch->scope(
+            test::scheduler::co_void()));
+        scopes.push_back(sch->scope(
+            test::scheduler::co_void(),
+            test::scheduler::co_void()));
+
+        try {
+            scopes.front();
+            scopes.pop_front();
+            scopes.front();
+            scopes.pop_front();
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    } 
+
+    // scope void mixed ran successfully
+    {
+        test::scheduler::queue<T> q;
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+        std::deque<hce::awt<void>> scopes;
+
+        scopes.push_back(sch->scope(
+            test::scheduler::co_push_T<T>(q,test::init<T>(3))));
+        scopes.push_back(sch->scope(
+            test::scheduler::co_push_T<T>(q,test::init<T>(2)),
+            test::scheduler::co_push_T<T>(q,test::init<T>(1))));
+
+        try {
+            scopes.front();
+            scopes.pop_front();
+            scopes.front();
+            scopes.pop_front();
+
+            EXPECT_EQ(3,q.size());
+            EXPECT_EQ((T)test::init<T>(3),q.pop());
+            EXPECT_EQ((T)test::init<T>(2),q.pop());
+            EXPECT_EQ((T)test::init<T>(1),q.pop());
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    } 
+
+    // scope T individually
+    {
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+        std::deque<hce::awt<void>> scopes;
+
+        scopes.push_back(sch->scope(
+            test::scheduler::co_return_T<T>(test::init<T>(3))));
+        scopes.push_back(sch->scope(
+            test::scheduler::co_return_T<T>(test::init<T>(2))));
+        scopes.push_back(sch->scope(
+            test::scheduler::co_return_T<T>(test::init<T>(1))));
+
+        try {
+            scopes.front();
+            scopes.pop_front();
+            scopes.front();
+            scopes.pop_front();
+            scopes.front();
+            scopes.pop_front();
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    } 
+
+    // scope T individually ran successfully
+    {
+        test::scheduler::queue<T> q;
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+        std::deque<hce::awt<void>> scopes;
+
+        scopes.push_back(sch->scope(
+            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(3))));
+        scopes.push_back(sch->scope(
+            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(2))));
+        scopes.push_back(sch->scope(
+            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(1))));
+
+        try {
+            scopes.front();
+            scopes.pop_front();
+            scopes.front();
+            scopes.pop_front();
+            scopes.front();
+            scopes.pop_front();
+
+            EXPECT_EQ(3,q.size());
+            EXPECT_EQ((T)test::init<T>(3),q.pop());
+            EXPECT_EQ((T)test::init<T>(2),q.pop());
+            EXPECT_EQ((T)test::init<T>(1),q.pop());
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    } 
+
+    // scope T group
+    {
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+        std::deque<hce::awt<void>> scopes;
+
+        scopes.push_back(sch->scope(
+            test::scheduler::co_return_T<T>(test::init<T>(3)),
+            test::scheduler::co_return_T<T>(test::init<T>(2)),
+            test::scheduler::co_return_T<T>(test::init<T>(1))));
+
+        try {
+            scopes.front();
+            scopes.pop_front();
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    } 
+
+    // scope T group ran successfully
+    {
+        test::scheduler::queue<T> q;
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+        std::deque<hce::awt<void>> scopes;
+
+        scopes.push_back(sch->scope(
+            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(3)),
+            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(2)),
+            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(1))));
+
+        try {
+            scopes.front();
+            scopes.pop_front();
+
+            EXPECT_EQ(3,q.size());
+            EXPECT_EQ((T)test::init<T>(3),q.pop());
+            EXPECT_EQ((T)test::init<T>(2),q.pop());
+            EXPECT_EQ((T)test::init<T>(1),q.pop());
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    } 
+
+    // scope T mixed
+    {
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+        std::deque<hce::awt<void>> scopes;
+
+        scopes.push_back(sch->scope(
+            test::scheduler::co_return_T<T>(test::init<T>(3))));
+        scopes.push_back(sch->scope(
+            test::scheduler::co_return_T<T>(test::init<T>(2)),
+            test::scheduler::co_return_T<T>(test::init<T>(1))));
+
+        try {
+            scopes.front();
+            scopes.pop_front();
+            scopes.front();
+            scopes.pop_front();
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    } 
+
+    // scope T mixed ran successfully
+    {
+        test::scheduler::queue<T> q;
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+        std::deque<hce::awt<void>> scopes;
+
+        scopes.push_back(sch->scope(
+            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(3))));
+        scopes.push_back(sch->scope(
+            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(2)),
+            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(1))));
+
+        try {
+            scopes.front();
+            scopes.pop_front();
+            scopes.front();
+            scopes.pop_front();
+
+            EXPECT_EQ(3,q.size());
+            EXPECT_EQ((T)test::init<T>(3),q.pop());
+            EXPECT_EQ((T)test::init<T>(2),q.pop());
+            EXPECT_EQ((T)test::init<T>(1),q.pop());
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    } 
+
+    return success_count;
+}
+
+}
+
+TEST(scheduler, scope) {
+    const size_t expected = 12;
+    EXPECT_EQ(expected, test::scope_T<int>());
+    EXPECT_EQ(expected, test::scope_T<unsigned int>());
+    EXPECT_EQ(expected, test::scope_T<size_t>());
+    EXPECT_EQ(expected, test::scope_T<float>());
+    EXPECT_EQ(expected, test::scope_T<double>());
+    EXPECT_EQ(expected, test::scope_T<char>());
+    EXPECT_EQ(expected, test::scope_T<void*>());
+    EXPECT_EQ(expected, test::scope_T<std::string>());
+    EXPECT_EQ(expected, test::scope_T<test::CustomObject>());
 }

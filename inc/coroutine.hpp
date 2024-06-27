@@ -764,22 +764,26 @@ struct awaitable : public printable {
         return impl_ ? impl_->to_string() : std::string();
     }
 
-    /// return the address of the implementation
-    inline void* address() const { return impl_.get(); }
+    /**
+     Can't use conversion `operator bool()` because descendant awaitables are 
+     implicitly convertable to a type `T`, and some fundamental types can 
+     conflict with a boolean conversion. Better to have an explicity function.
 
-    /// release control of the underlying pointer
-    inline interface* release() { return impl_.release(); }
+     @return true if the awaitable manages an implementation, else false
+     */
+    inline bool valid() const { return (bool)impl_; }
 
     /// return a reference to the implementation
     inline interface& implementation() { return *impl_; }
+
+    /// release control of the underlying pointer
+    inline interface* release() { return impl_.release(); }
 
     /**
      Immediately called by `co_await` keyword. If it returns `true`, 
      `await_ready()` is immediately called.
      */
-    inline bool await_ready() { 
-        return impl_->await_ready(); 
-    }
+    inline bool await_ready() { return impl_->await_ready(); }
 
     /**
      When using the `co_await` keyword, if `await_ready() == false`, this 
@@ -890,7 +894,8 @@ struct awt : public awaitable {
      Return the final result of `awt<T>`
      */
     inline T await_resume(){ 
-        return dynamic_cast<awt<T>::interface&>(this->implementation()).get_result();
+        return dynamic_cast<awt<T>::interface&>(
+            this->implementation()).get_result();
     }
 
     /**
