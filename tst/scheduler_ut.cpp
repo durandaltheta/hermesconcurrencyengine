@@ -72,6 +72,19 @@ hce::co<T> co_push_T_return_T(queue<T>& q, T t) {
     co_return t;
 }
 
+template <typename T>
+hce::co<T> co_push_T_yield_void_and_return_T(queue<T>& q, T t) {
+    q.push(t);
+    co_await hce::yield<void>();
+    co_return t;
+}
+
+template <typename T>
+hce::co<T> co_push_T_yield_T_and_return_T(queue<T>& q, T t) {
+    q.push(t);
+    co_return co_await hce::yield<T>(t);
+}
+
 inline hce::co<void> co_scheduler_in_check(queue<void*>& q) { 
     q.push(hce::scheduler::in() ? (void*)1 : (void*)0);
     co_return;
@@ -254,6 +267,7 @@ TEST(scheduler, install) {
 }
 
 namespace test {
+namespace scheduler {
 
 struct CustomObject {
     CustomObject() : i_(0) {}
@@ -316,7 +330,7 @@ private:
 };
 
 template <typename T>
-size_t schedule_T() {
+size_t schedule_T(std::function<hce::co<T>(queue<T>& q, T t)> Coroutine) {
     std::string T_name = []() -> std::string {
         std::stringstream ss;
         ss << typeid(T).name();
@@ -334,9 +348,9 @@ size_t schedule_T() {
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
 
-        sch->schedule(test::scheduler::co_push_T<T>(q,init<T>(3)));
-        sch->schedule(test::scheduler::co_push_T<T>(q,init<T>(2)));
-        sch->schedule(test::scheduler::co_push_T<T>(q,init<T>(1)));
+        sch->schedule(Coroutine(q,init<T>(3)));
+        sch->schedule(Coroutine(q,init<T>(2)));
+        sch->schedule(Coroutine(q,init<T>(1)));
 
         try {
             EXPECT_EQ((T)init<T>(3), q.pop());
@@ -358,9 +372,9 @@ size_t schedule_T() {
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
 
-        sch->schedule(test::scheduler::co_push_T<T>(q,init<T>(3)),
-                      test::scheduler::co_push_T<T>(q,init<T>(2)),
-                      test::scheduler::co_push_T<T>(q,init<T>(1)));
+        sch->schedule(Coroutine(q,init<T>(3)),
+                      Coroutine(q,init<T>(2)),
+                      Coroutine(q,init<T>(1)));
 
         try {
             EXPECT_EQ((T)init<T>(3), q.pop());
@@ -382,9 +396,9 @@ size_t schedule_T() {
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
 
-        sch->schedule(hce::coroutine(test::scheduler::co_push_T<T>(q,init<T>(3))),
-                      hce::coroutine(test::scheduler::co_push_T<T>(q,init<T>(2))),
-                      hce::coroutine(test::scheduler::co_push_T<T>(q,init<T>(1))));
+        sch->schedule(hce::coroutine(Coroutine(q,init<T>(3))),
+                      hce::coroutine(Coroutine(q,init<T>(2))),
+                      hce::coroutine(Coroutine(q,init<T>(1))));
 
         try {
             EXPECT_EQ((T)init<T>(3), q.pop());
@@ -406,8 +420,8 @@ size_t schedule_T() {
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
 
-        sch->schedule(test::scheduler::co_push_T<T>(q,init<T>(3)),
-                      hce::coroutine(test::scheduler::co_push_T<T>(q,init<T>(2))),
+        sch->schedule(Coroutine(q,init<T>(3)),
+                      hce::coroutine(Coroutine(q,init<T>(2))),
                       test::scheduler::co_push_T_return_T<T>(q,init<T>(1)));
 
         try {
@@ -430,9 +444,9 @@ size_t schedule_T() {
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
 
-        sch->schedule(test::scheduler::co_push_T<T>(q,init<T>(3)),
-                      test::scheduler::co_push_T<T>(q,init<T>(2)));
-        sch->schedule(test::scheduler::co_push_T<T>(q,init<T>(1)));
+        sch->schedule(Coroutine(q,init<T>(3)),
+                      Coroutine(q,init<T>(2)));
+        sch->schedule(Coroutine(q,init<T>(1)));
 
         try {
             EXPECT_EQ((T)init<T>(3), q.pop());
@@ -455,9 +469,9 @@ size_t schedule_T() {
         std::thread thd([&]{ sch->install(); });
 
         std::vector<hce::co<void>> cos;
-        cos.push_back(test::scheduler::co_push_T<T>(q,init<T>(3)));
-        cos.push_back(test::scheduler::co_push_T<T>(q,init<T>(2)));
-        cos.push_back(test::scheduler::co_push_T<T>(q,init<T>(1)));
+        cos.push_back(Coroutine(q,init<T>(3)));
+        cos.push_back(Coroutine(q,init<T>(2)));
+        cos.push_back(Coroutine(q,init<T>(1)));
 
         try {
             sch->schedule(std::move(cos));
@@ -482,9 +496,9 @@ size_t schedule_T() {
         std::thread thd([&]{ sch->install(); });
 
         std::list<hce::co<void>> cos;
-        cos.push_back(test::scheduler::co_push_T<T>(q,init<T>(3)));
-        cos.push_back(test::scheduler::co_push_T<T>(q,init<T>(2)));
-        cos.push_back(test::scheduler::co_push_T<T>(q,init<T>(1)));
+        cos.push_back(Coroutine(q,init<T>(3)));
+        cos.push_back(Coroutine(q,init<T>(2)));
+        cos.push_back(Coroutine(q,init<T>(1)));
 
         try {
             sch->schedule(std::move(cos));
@@ -509,9 +523,9 @@ size_t schedule_T() {
         std::thread thd([&]{ sch->install(); });
 
         std::forward_list<hce::co<void>> cos;
-        cos.push_front(test::scheduler::co_push_T<T>(q,init<T>(3)));
-        cos.push_front(test::scheduler::co_push_T<T>(q,init<T>(2)));
-        cos.push_front(test::scheduler::co_push_T<T>(q,init<T>(1)));
+        cos.push_front(Coroutine(q,init<T>(3)));
+        cos.push_front(Coroutine(q,init<T>(2)));
+        cos.push_front(Coroutine(q,init<T>(1)));
 
         try {
             sch->schedule(std::move(cos));
@@ -532,20 +546,57 @@ size_t schedule_T() {
 }
 
 }
+}
 
 TEST(scheduler, schedule) {
     // the count of schedule subtests we expect to complete without throwing 
     // exceptions
     const size_t expected = 8;
-    EXPECT_EQ(expected, test::schedule_T<int>());
-    EXPECT_EQ(expected, test::schedule_T<unsigned int>());
-    EXPECT_EQ(expected, test::schedule_T<size_t>());
-    EXPECT_EQ(expected, test::schedule_T<float>());
-    EXPECT_EQ(expected, test::schedule_T<double>());
-    EXPECT_EQ(expected, test::schedule_T<char>());
-    EXPECT_EQ(expected, test::schedule_T<void*>());
-    EXPECT_EQ(expected, test::schedule_T<std::string>());
-    EXPECT_EQ(expected, test::schedule_T<test::CustomObject>());
+    EXPECT_EQ(expected, test::scheduler::schedule_T<int>(test::scheduler::co_push_T<int>));
+    EXPECT_EQ(expected, test::scheduler::schedule_T<unsigned int>(test::scheduler::co_push_T<unsigned int>));
+    EXPECT_EQ(expected, test::scheduler::schedule_T<size_t>(test::scheduler::co_push_T<size_t>));
+    EXPECT_EQ(expected, test::scheduler::schedule_T<float>(test::scheduler::co_push_T<float>));
+    EXPECT_EQ(expected, test::scheduler::schedule_T<double>(test::scheduler::co_push_T<double>));
+    EXPECT_EQ(expected, test::scheduler::schedule_T<char>(test::scheduler::co_push_T<char>));
+    EXPECT_EQ(expected, test::scheduler::schedule_T<void*>(test::scheduler::co_push_T<void*>));
+    EXPECT_EQ(expected, test::scheduler::schedule_T<std::string>(test::scheduler::co_push_T<std::string>));
+    EXPECT_EQ(expected, test::scheduler::schedule_T<test::scheduler::CustomObject>(test::scheduler::co_push_T<test::scheduler::CustomObject>));
+}
+
+/*
+test::scheduler::co_push_T_yield_void_and_return_T
+test::scheduler::co_push_T_yield_T_and_return_T
+*/
+TEST(scheduler, schedule_yield) {
+    // the count of schedule subtests we expect to complete without throwing 
+    // exceptions
+    const size_t expected = 8;
+
+    // yield then return
+    {
+        EXPECT_EQ(expected, test::scheduler::schedule_T<int>(test::scheduler::co_push_T_yield_void_and_return_T<int>));
+        EXPECT_EQ(expected, test::scheduler::schedule_T<unsigned int>(test::scheduler::co_push_T_yield_void_and_return_T<unsigned int>));
+        EXPECT_EQ(expected, test::scheduler::schedule_T<size_t>(test::scheduler::co_push_T_yield_void_and_return_T<size_t>));
+        EXPECT_EQ(expected, test::scheduler::schedule_T<float>(test::scheduler::co_push_T_yield_void_and_return_T<float>));
+        EXPECT_EQ(expected, test::scheduler::schedule_T<double>(test::scheduler::co_push_T_yield_void_and_return_T<double>));
+        EXPECT_EQ(expected, test::scheduler::schedule_T<char>(test::scheduler::co_push_T_yield_void_and_return_T<char>));
+        EXPECT_EQ(expected, test::scheduler::schedule_T<void*>(test::scheduler::co_push_T_yield_void_and_return_T<void*>));
+        EXPECT_EQ(expected, test::scheduler::schedule_T<std::string>(test::scheduler::co_push_T_yield_void_and_return_T<std::string>));
+        EXPECT_EQ(expected, test::scheduler::schedule_T<test::scheduler::CustomObject>(test::scheduler::co_push_T_yield_void_and_return_T<test::scheduler::CustomObject>));
+    }
+
+    // yield *into* a return
+    {
+        EXPECT_EQ(expected, test::scheduler::schedule_T<int>(test::scheduler::co_push_T_yield_T_and_return_T<int>));
+        EXPECT_EQ(expected, test::scheduler::schedule_T<unsigned int>(test::scheduler::co_push_T_yield_T_and_return_T<unsigned int>));
+        EXPECT_EQ(expected, test::scheduler::schedule_T<size_t>(test::scheduler::co_push_T_yield_T_and_return_T<size_t>));
+        EXPECT_EQ(expected, test::scheduler::schedule_T<float>(test::scheduler::co_push_T_yield_T_and_return_T<float>));
+        EXPECT_EQ(expected, test::scheduler::schedule_T<double>(test::scheduler::co_push_T_yield_T_and_return_T<double>));
+        EXPECT_EQ(expected, test::scheduler::schedule_T<char>(test::scheduler::co_push_T_yield_T_and_return_T<char>));
+        EXPECT_EQ(expected, test::scheduler::schedule_T<void*>(test::scheduler::co_push_T_yield_T_and_return_T<void*>));
+        EXPECT_EQ(expected, test::scheduler::schedule_T<std::string>(test::scheduler::co_push_T_yield_T_and_return_T<std::string>));
+        EXPECT_EQ(expected, test::scheduler::schedule_T<test::scheduler::CustomObject>(test::scheduler::co_push_T_yield_T_and_return_T<test::scheduler::CustomObject>));
+    }
 }
 
 TEST(scheduler, schedule_and_thread_locals) {
@@ -580,6 +631,7 @@ TEST(scheduler, schedule_and_thread_locals) {
 }
 
 namespace test {
+namespace scheduler {
 
 template <typename T>
 size_t join_T() {
@@ -600,22 +652,22 @@ size_t join_T() {
         std::deque<hce::awt<T>> joins;
 
         joins.push_back(sch->join(
-            test::scheduler::co_return_T<T>(test::init<T>(3))));
+            co_return_T<T>(init<T>(3))));
         joins.push_back(sch->join(
-            test::scheduler::co_return_T<T>(test::init<T>(2))));
+            co_return_T<T>(init<T>(2))));
         joins.push_back(sch->join(
-            test::scheduler::co_return_T<T>(test::init<T>(1))));
+            co_return_T<T>(init<T>(1))));
 
         try {
             T result = joins.front();
             joins.pop_front();
-            EXPECT_EQ((T)test::init<T>(3), result);
+            EXPECT_EQ((T)init<T>(3), result);
             result = joins.front();
             joins.pop_front();
-            EXPECT_EQ((T)test::init<T>(2), result);
+            EXPECT_EQ((T)init<T>(2), result);
             result = joins.front();
             joins.pop_front();
-            EXPECT_EQ((T)test::init<T>(1), result);
+            EXPECT_EQ((T)init<T>(1), result);
 
             lf.reset();
             thd.join();
@@ -632,23 +684,20 @@ size_t join_T() {
         std::thread thd([&]{ sch->install(); });
         std::deque<hce::awt<T>> joins;
 
-        joins.push_back(sch->join(
-            test::scheduler::co_return_T<T>(test::init<T>(3))));
-        joins.push_back(sch->join(
-            test::scheduler::co_return_T<T>(test::init<T>(2))));
-        joins.push_back(sch->join(
-            test::scheduler::co_return_T<T>(test::init<T>(1))));
+        joins.push_back(sch->join(co_return_T<T>(init<T>(3))));
+        joins.push_back(sch->join(co_return_T<T>(init<T>(2))));
+        joins.push_back(sch->join(co_return_T<T>(init<T>(1))));
 
         try {
             T result = joins.back();
             joins.pop_back();
-            EXPECT_EQ((T)test::init<T>(1), result);
+            EXPECT_EQ((T)init<T>(1), result);
             result = joins.back();
             joins.pop_back();
-            EXPECT_EQ((T)test::init<T>(2), result);
+            EXPECT_EQ((T)init<T>(2), result);
             result = joins.back();
             joins.pop_back();
-            EXPECT_EQ((T)test::init<T>(3), result);
+            EXPECT_EQ((T)init<T>(3), result);
 
             lf.reset();
             thd.join();
@@ -665,9 +714,9 @@ size_t join_T() {
         std::thread thd([&]{ sch->install(); });
         std::deque<hce::awt<void>> joins;
 
-        joins.push_back(sch->join(test::scheduler::co_void()));
-        joins.push_back(sch->join(test::scheduler::co_void()));
-        joins.push_back(sch->join(test::scheduler::co_void()));
+        joins.push_back(sch->join(co_void()));
+        joins.push_back(sch->join(co_void()));
+        joins.push_back(sch->join(co_void()));
 
         try {
             joins.pop_front();
@@ -686,21 +735,23 @@ size_t join_T() {
 }
 
 }
+}
 
 TEST(scheduler, join) {
     const size_t expected = 3;
-    EXPECT_EQ(expected, test::join_T<int>());
-    EXPECT_EQ(expected, test::join_T<unsigned int>());
-    EXPECT_EQ(expected, test::join_T<size_t>());
-    EXPECT_EQ(expected, test::join_T<float>());
-    EXPECT_EQ(expected, test::join_T<double>());
-    EXPECT_EQ(expected, test::join_T<char>());
-    EXPECT_EQ(expected, test::join_T<void*>());
-    EXPECT_EQ(expected, test::join_T<std::string>());
-    EXPECT_EQ(expected, test::join_T<test::CustomObject>());
+    EXPECT_EQ(expected, test::scheduler::join_T<int>());
+    EXPECT_EQ(expected, test::scheduler::join_T<unsigned int>());
+    EXPECT_EQ(expected, test::scheduler::join_T<size_t>());
+    EXPECT_EQ(expected, test::scheduler::join_T<float>());
+    EXPECT_EQ(expected, test::scheduler::join_T<double>());
+    EXPECT_EQ(expected, test::scheduler::join_T<char>());
+    EXPECT_EQ(expected, test::scheduler::join_T<void*>());
+    EXPECT_EQ(expected, test::scheduler::join_T<std::string>());
+    EXPECT_EQ(expected, test::scheduler::join_T<test::scheduler::CustomObject>());
 }
 
 namespace test {
+namespace scheduler {
 
 template <typename T>
 size_t scope_T() {
@@ -720,12 +771,9 @@ size_t scope_T() {
         std::thread thd([&]{ sch->install(); });
         std::deque<hce::awt<void>> scopes;
 
-        scopes.push_back(sch->scope(
-            test::scheduler::co_void()));
-        scopes.push_back(sch->scope(
-            test::scheduler::co_void()));
-        scopes.push_back(sch->scope(
-            test::scheduler::co_void()));
+        scopes.push_back(sch->scope(co_void()));
+        scopes.push_back(sch->scope(co_void()));
+        scopes.push_back(sch->scope(co_void()));
 
         try {
             scopes.front();
@@ -745,18 +793,15 @@ size_t scope_T() {
 
     // scope void ran successfully
     {
-        test::scheduler::queue<T> q;
+        scheduler::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
         std::deque<hce::awt<void>> scopes;
 
-        scopes.push_back(sch->scope(
-            test::scheduler::co_push_T<T>(q,test::init<T>(3))));
-        scopes.push_back(sch->scope(
-            test::scheduler::co_push_T<T>(q,test::init<T>(2))));
-        scopes.push_back(sch->scope(
-            test::scheduler::co_push_T<T>(q,test::init<T>(1))));
+        scopes.push_back(sch->scope(co_push_T<T>(q,init<T>(3))));
+        scopes.push_back(sch->scope(co_push_T<T>(q,init<T>(2))));
+        scopes.push_back(sch->scope(co_push_T<T>(q,init<T>(1))));
 
         try {
             scopes.front();
@@ -767,9 +812,9 @@ size_t scope_T() {
             scopes.pop_front();
 
             EXPECT_EQ(3,q.size());
-            EXPECT_EQ((T)test::init<T>(3),q.pop());
-            EXPECT_EQ((T)test::init<T>(2),q.pop());
-            EXPECT_EQ((T)test::init<T>(1),q.pop());
+            EXPECT_EQ((T)init<T>(3),q.pop());
+            EXPECT_EQ((T)init<T>(2),q.pop());
+            EXPECT_EQ((T)init<T>(1),q.pop());
 
             lf.reset();
             thd.join();
@@ -787,9 +832,9 @@ size_t scope_T() {
         std::deque<hce::awt<void>> scopes;
 
         scopes.push_back(sch->scope(
-            test::scheduler::co_void(),
-            test::scheduler::co_void(),
-            test::scheduler::co_void()));
+            co_void(),
+            co_void(),
+            co_void()));
 
         try {
             scopes.front();
@@ -805,25 +850,25 @@ size_t scope_T() {
 
     // scope void group ran successfully
     {
-        test::scheduler::queue<T> q;
+        scheduler::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
         std::deque<hce::awt<void>> scopes;
 
         scopes.push_back(sch->scope(
-            test::scheduler::co_push_T<T>(q,test::init<T>(3)),
-            test::scheduler::co_push_T<T>(q,test::init<T>(2)),
-            test::scheduler::co_push_T<T>(q,test::init<T>(1))));
+            co_push_T<T>(q,init<T>(3)),
+            co_push_T<T>(q,init<T>(2)),
+            co_push_T<T>(q,init<T>(1))));
 
         try {
             scopes.front();
             scopes.pop_front();
 
             EXPECT_EQ(3,q.size());
-            EXPECT_EQ((T)test::init<T>(3),q.pop());
-            EXPECT_EQ((T)test::init<T>(2),q.pop());
-            EXPECT_EQ((T)test::init<T>(1),q.pop());
+            EXPECT_EQ((T)init<T>(3),q.pop());
+            EXPECT_EQ((T)init<T>(2),q.pop());
+            EXPECT_EQ((T)init<T>(1),q.pop());
 
             lf.reset();
             thd.join();
@@ -841,10 +886,10 @@ size_t scope_T() {
         std::deque<hce::awt<void>> scopes;
 
         scopes.push_back(sch->scope(
-            test::scheduler::co_void()));
+            co_void()));
         scopes.push_back(sch->scope(
-            test::scheduler::co_void(),
-            test::scheduler::co_void()));
+            co_void(),
+            co_void()));
 
         try {
             scopes.front();
@@ -862,17 +907,16 @@ size_t scope_T() {
 
     // scope void mixed ran successfully
     {
-        test::scheduler::queue<T> q;
+        scheduler::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
         std::deque<hce::awt<void>> scopes;
 
+        scopes.push_back(sch->scope(co_push_T<T>(q,init<T>(3))));
         scopes.push_back(sch->scope(
-            test::scheduler::co_push_T<T>(q,test::init<T>(3))));
-        scopes.push_back(sch->scope(
-            test::scheduler::co_push_T<T>(q,test::init<T>(2)),
-            test::scheduler::co_push_T<T>(q,test::init<T>(1))));
+            co_push_T<T>(q,init<T>(2)),
+            co_push_T<T>(q,init<T>(1))));
 
         try {
             scopes.front();
@@ -881,9 +925,9 @@ size_t scope_T() {
             scopes.pop_front();
 
             EXPECT_EQ(3,q.size());
-            EXPECT_EQ((T)test::init<T>(3),q.pop());
-            EXPECT_EQ((T)test::init<T>(2),q.pop());
-            EXPECT_EQ((T)test::init<T>(1),q.pop());
+            EXPECT_EQ((T)init<T>(3),q.pop());
+            EXPECT_EQ((T)init<T>(2),q.pop());
+            EXPECT_EQ((T)init<T>(1),q.pop());
 
             lf.reset();
             thd.join();
@@ -900,12 +944,9 @@ size_t scope_T() {
         std::thread thd([&]{ sch->install(); });
         std::deque<hce::awt<void>> scopes;
 
-        scopes.push_back(sch->scope(
-            test::scheduler::co_return_T<T>(test::init<T>(3))));
-        scopes.push_back(sch->scope(
-            test::scheduler::co_return_T<T>(test::init<T>(2))));
-        scopes.push_back(sch->scope(
-            test::scheduler::co_return_T<T>(test::init<T>(1))));
+        scopes.push_back(sch->scope(co_return_T<T>(init<T>(3))));
+        scopes.push_back(sch->scope(co_return_T<T>(init<T>(2))));
+        scopes.push_back(sch->scope(co_return_T<T>(init<T>(1))));
 
         try {
             scopes.front();
@@ -925,18 +966,15 @@ size_t scope_T() {
 
     // scope T individually ran successfully
     {
-        test::scheduler::queue<T> q;
+        scheduler::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
         std::deque<hce::awt<void>> scopes;
 
-        scopes.push_back(sch->scope(
-            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(3))));
-        scopes.push_back(sch->scope(
-            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(2))));
-        scopes.push_back(sch->scope(
-            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(1))));
+        scopes.push_back(sch->scope(co_push_T_return_T<T>(q,init<T>(3))));
+        scopes.push_back(sch->scope(co_push_T_return_T<T>(q,init<T>(2))));
+        scopes.push_back(sch->scope(co_push_T_return_T<T>(q,init<T>(1))));
 
         try {
             scopes.front();
@@ -947,9 +985,9 @@ size_t scope_T() {
             scopes.pop_front();
 
             EXPECT_EQ(3,q.size());
-            EXPECT_EQ((T)test::init<T>(3),q.pop());
-            EXPECT_EQ((T)test::init<T>(2),q.pop());
-            EXPECT_EQ((T)test::init<T>(1),q.pop());
+            EXPECT_EQ((T)init<T>(3),q.pop());
+            EXPECT_EQ((T)init<T>(2),q.pop());
+            EXPECT_EQ((T)init<T>(1),q.pop());
 
             lf.reset();
             thd.join();
@@ -967,9 +1005,9 @@ size_t scope_T() {
         std::deque<hce::awt<void>> scopes;
 
         scopes.push_back(sch->scope(
-            test::scheduler::co_return_T<T>(test::init<T>(3)),
-            test::scheduler::co_return_T<T>(test::init<T>(2)),
-            test::scheduler::co_return_T<T>(test::init<T>(1))));
+            co_return_T<T>(init<T>(3)),
+            co_return_T<T>(init<T>(2)),
+            co_return_T<T>(init<T>(1))));
 
         try {
             scopes.front();
@@ -985,25 +1023,25 @@ size_t scope_T() {
 
     // scope T group ran successfully
     {
-        test::scheduler::queue<T> q;
+        scheduler::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
         std::deque<hce::awt<void>> scopes;
 
         scopes.push_back(sch->scope(
-            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(3)),
-            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(2)),
-            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(1))));
+            co_push_T_return_T<T>(q,init<T>(3)),
+            co_push_T_return_T<T>(q,init<T>(2)),
+            co_push_T_return_T<T>(q,init<T>(1))));
 
         try {
             scopes.front();
             scopes.pop_front();
 
             EXPECT_EQ(3,q.size());
-            EXPECT_EQ((T)test::init<T>(3),q.pop());
-            EXPECT_EQ((T)test::init<T>(2),q.pop());
-            EXPECT_EQ((T)test::init<T>(1),q.pop());
+            EXPECT_EQ((T)init<T>(3),q.pop());
+            EXPECT_EQ((T)init<T>(2),q.pop());
+            EXPECT_EQ((T)init<T>(1),q.pop());
 
             lf.reset();
             thd.join();
@@ -1020,11 +1058,10 @@ size_t scope_T() {
         std::thread thd([&]{ sch->install(); });
         std::deque<hce::awt<void>> scopes;
 
+        scopes.push_back(sch->scope(co_return_T<T>(init<T>(3))));
         scopes.push_back(sch->scope(
-            test::scheduler::co_return_T<T>(test::init<T>(3))));
-        scopes.push_back(sch->scope(
-            test::scheduler::co_return_T<T>(test::init<T>(2)),
-            test::scheduler::co_return_T<T>(test::init<T>(1))));
+            co_return_T<T>(init<T>(2)),
+            co_return_T<T>(init<T>(1))));
 
         try {
             scopes.front();
@@ -1042,17 +1079,16 @@ size_t scope_T() {
 
     // scope T mixed ran successfully
     {
-        test::scheduler::queue<T> q;
+        scheduler::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
         std::deque<hce::awt<void>> scopes;
 
+        scopes.push_back(sch->scope(co_push_T_return_T<T>(q,init<T>(3))));
         scopes.push_back(sch->scope(
-            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(3))));
-        scopes.push_back(sch->scope(
-            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(2)),
-            test::scheduler::co_push_T_return_T<T>(q,test::init<T>(1))));
+            co_push_T_return_T<T>(q,init<T>(2)),
+            co_push_T_return_T<T>(q,init<T>(1))));
 
         try {
             scopes.front();
@@ -1061,9 +1097,9 @@ size_t scope_T() {
             scopes.pop_front();
 
             EXPECT_EQ(3,q.size());
-            EXPECT_EQ((T)test::init<T>(3),q.pop());
-            EXPECT_EQ((T)test::init<T>(2),q.pop());
-            EXPECT_EQ((T)test::init<T>(1),q.pop());
+            EXPECT_EQ((T)init<T>(3),q.pop());
+            EXPECT_EQ((T)init<T>(2),q.pop());
+            EXPECT_EQ((T)init<T>(1),q.pop());
 
             lf.reset();
             thd.join();
@@ -1077,16 +1113,17 @@ size_t scope_T() {
 }
 
 }
+}
 
 TEST(scheduler, scope) {
     const size_t expected = 12;
-    EXPECT_EQ(expected, test::scope_T<int>());
-    EXPECT_EQ(expected, test::scope_T<unsigned int>());
-    EXPECT_EQ(expected, test::scope_T<size_t>());
-    EXPECT_EQ(expected, test::scope_T<float>());
-    EXPECT_EQ(expected, test::scope_T<double>());
-    EXPECT_EQ(expected, test::scope_T<char>());
-    EXPECT_EQ(expected, test::scope_T<void*>());
-    EXPECT_EQ(expected, test::scope_T<std::string>());
-    EXPECT_EQ(expected, test::scope_T<test::CustomObject>());
+    EXPECT_EQ(expected, test::scheduler::scope_T<int>());
+    EXPECT_EQ(expected, test::scheduler::scope_T<unsigned int>());
+    EXPECT_EQ(expected, test::scheduler::scope_T<size_t>());
+    EXPECT_EQ(expected, test::scheduler::scope_T<float>());
+    EXPECT_EQ(expected, test::scheduler::scope_T<double>());
+    EXPECT_EQ(expected, test::scheduler::scope_T<char>());
+    EXPECT_EQ(expected, test::scheduler::scope_T<void*>());
+    EXPECT_EQ(expected, test::scheduler::scope_T<std::string>());
+    EXPECT_EQ(expected, test::scheduler::scope_T<test::scheduler::CustomObject>());
 }

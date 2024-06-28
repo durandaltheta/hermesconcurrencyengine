@@ -65,9 +65,6 @@ hce::scheduler*& tl_this_scheduler();
  */ 
 hce::scheduler*& tl_this_scheduler_redirect();
 
-template <typename T>
-using awt_interface = hce::awt<T>::interface;
-
 /*
  An implementation of hce::awt<T>::interface capable of joining a coroutine 
 

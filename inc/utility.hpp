@@ -665,6 +665,12 @@ inline std::ostream& operator<<(std::ostream& out, const hce::printable& p) {
     return out;
 }
 
+inline std::ostream& operator<<(std::ostream& out, const hce::printable* p) {
+    if(p) { out << *p; } 
+    else { out << "hce::printable[nullptr]"; }
+    return out;
+}
+
 /// :: ostream writing for generic coroutine_handle
 inline std::ostream& operator<<(std::ostream& out, const std::coroutine_handle<>& h) {
     out << "std::coroutine_handle@" << h.address();

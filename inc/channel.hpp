@@ -7,6 +7,7 @@
 #include <typeinfo>
 #include <deque>
 #include <mutex>
+#include <iterator>
 
 // local
 #include "atomic.hpp"
@@ -16,23 +17,22 @@
 
 namespace hce {
 
+/// result of a channel try operation
+enum result {
+    closed = 0, /// channel is closed
+    failure, /// channel operation failed
+    success /// channel operation succeeded
+};
+
 /** 
-A communication object which can represent any object which implements 
-channel<T>::interface interface.
+ @brief communication object which can represent any object which implements channel<T>::interface interface.
 */
 template <typename T>
 struct channel : public printable {
     /// template type for channel
     typedef T value_type;
 
-    /// result of a channel try operation
-    enum result {
-        closed = 0, /// channel is closed
-        failure, /// channel operation failed
-        success /// channel operation succeeded
-    };
-
-    /// interface for a channel implmentation
+    /// interface for a channel implementation
     struct interface : public printable {
         virtual ~interface(){}
 
@@ -42,7 +42,7 @@ struct channel : public printable {
         /**
          @brief maximum capacity of stored value cache 
 
-        Typically:
+        Typical implementation expectations:
         >0 == cache of a specific maximum size
         0 == cache of no size (direct point to point data transfer)
         <0 == cache of unlimited size
@@ -77,133 +77,7 @@ struct channel : public printable {
         virtual hce::yield<result> try_recv(T& t) = 0;
     };
 
-    inline const char* nspace() const { return "hce"; }
-    inline const char* name() const { return "channel"; }
-    inline std::string content() const { return context ? *context : ""; }
-
-    /// string conversion, overrides printable::str()
-    inline const std::string& str() const override {
-        // because coroutine represents a coroutine handle (the 'this' pointer 
-        // is not important for printing) we have to potentially update the 
-        // string with a new memory address
-        return str(context.get());
-    }
-
-    /**
-     @brief construct a channel with an unbuffered implementation
-
-     Specify a LOCK type of `hce::lockfree` to make the implementation lockfree 
-     (only safe when all instances of the channel are used from the same system 
-     thread). Lockfree channels are a very fast way to communicate between two 
-     coroutines running on the same scheduler.
-     */
-    template <typename LOCK=hce::spinlock>
-    inline channel<T>& construct() {
-        context = std::make_shared<interface>(
-            static_cast<interface*>(
-                new unbuffered<LOCK>()));
-
-        return *this;
-    }
-
-    /**
-     @brief construct a channel with an buffered implementation
-     */
-    template <typename LOCK=hce::spinlock>
-    inline channel<T>& construct(int sz) {
-        context = std::make_shared<interface>(
-            static_cast<interface*>(
-                new buffered<LOCK>(sz)))
-
-        return *this;
-    }
-
-    /**
-     @brief construct a channel with a custom implementation
-     */
-    inline channel<T>& construct(std::shared_ptr<interface> i) {
-        context = std::move(i);
-        return *this;
-    }
-
-    template <typename LOCK=hce::spinlock>
-    static inline channel make(int sz = 0) {
-        return channel<T>().construct<LOCK>(sz);
-    }
-
-    channel() = default;
-    channel(const channel<T>& rhs) = default;
-    channel(channel<T>&& rhs) = default;
-
-    channel<T>& operator=(const channel<T>& rhs) = default;
-    channel<T>& operator=(channel<T>&& rhs) = default;
-       
-    /// retrieve the implementation's actual std::type_info
-    inline const std::type_info& type_info() const { 
-        return context->type_info(); 
-    }
-
-    /// return the maximum buffer size
-    inline int capacity() const { return context->capacity(); }
-
-    /// return the number of values in the buffer
-    inline int size() const { return context->size(); }
-
-    /// return if channel is closed
-    inline bool closed() const { return context->closed(); }
-
-    /// close channel
-    inline void close() { return context->close(); }
-
-    /// `co_await`able send operation 
-    template <typename T2>
-    inline hce::awt<bool> send(T2&& s) {
-        return context->send(std::forward<T2>(s)); 
-    }
-
-    /// `co_await`able recv operation
-    inline hce::awt<bool> recv(T& r) {
-        return context->recv(r); 
-    }
-
-    /// `co_await`able try_send operation
-    template <typename T2>
-    inline hce::awt<bool> try_send(T2&& s) {
-        return context->try_send(std::forward<T2>(s));
-    }
-
-    /// `co_await`able try_recv operation
-    inline hce::yield<result> try_recv(T& r) {
-        return context->try_recv(r);
-    }
-
-    /// return whether channel has a shared get pointer
-    inline explicit operator bool() const { return (bool)(context.get()); }
-
-    inline bool operator==(const channel<T>& rhs) const {
-        return context.get() == rhs.context.get();
-    }
-
-    inline bool operator!=(const channel<T>& rhs) const {
-        return !(*this == rhs);
-    }
-
-    inline bool operator<(const channel<T>& rhs) const {
-        return context.get() < rhs.context.get();
-    }
-
-    inline bool operator<=(const channel<T>& rhs) const {
-        return context.get() < rhs.context.get();
-    }
-
-    inline bool operator>(const channel<T>& rhs) const {
-        return context.get() > rhs.context.get();
-    }
-
-    inline bool operator>=(const channel<T>& rhs) const {
-        return context.get() > rhs.context.get();
-    }
-
+    /// unbuffered interface implementation
     template <typename LOCK>
     struct unbuffered : public interface {
         unbuffered() : closed_flag_(false) { HCE_LOW_CONSTRUCTOR(); }
@@ -243,7 +117,7 @@ struct channel : public printable {
                 for(auto& p : parked_send_) { p->resume(nullptr); }
                 for(auto& p : parked_recv_) { p->resume(nullptr); }
                 parked_send_.clear();
-                parked_recv_.clear()
+                parked_recv_.clear();
             }
         }
 
@@ -302,10 +176,8 @@ struct channel : public printable {
         inline hce::awt<bool> send_(void* s, bool is_rvalue) {
             struct send_interface : 
                 public hce::scheduler::reschedule<
-                    hce::awaitable::lockable::lockfree<
-                        hce::awt<bool>::interface 
-                    >
-                >
+                    hce::awaitable::lockfree<
+                        hce::awt_interface<bool>>>
             {
                 send_interface(bool ready, bool success, send_pair sp) :
                     ready_(ready),
@@ -355,12 +227,10 @@ struct channel : public printable {
         inline hce::awt<bool> recv_(void* r) {
             struct recv_interface : 
                 public hce::scheduler::reschedule<
-                    hce::awaitable::lockable::lockfree<
-                        hce::awt<bool>::interface 
-                    >
-                >
+                    hce::awaitable::lockfree<
+                        hce::awt<bool>::interface>>
             {
-                send_interface(bool ready, bool success, void* r) :
+                recv_interface(bool ready, bool success, void* r) :
                     ready_(ready),
                     success_(success),
                     r_(r)
@@ -433,6 +303,7 @@ struct channel : public printable {
         std::deque<awt<bool>::interface*> parked_recv_;
     };
 
+    /// buffered interface implementation
     template <typename LOCK>
     struct buffered : public interface {
         buffered() { HCE_LOW_CONSTRUCTOR(); }
@@ -682,8 +553,168 @@ struct channel : public printable {
         std::deque<awt<bool>::interface*> parked_recv_;
     };
 
+    channel() = default;
+    channel(const channel<T>& rhs) = default;
+    channel(channel<T>&& rhs) = default;
+
+    channel<T>& operator=(const channel<T>& rhs) = default;
+    channel<T>& operator=(channel<T>&& rhs) = default;
+
+    inline const char* nspace() const { return "hce"; }
+    inline const char* name() const { return "channel"; }
+
+    inline std::string content() const { 
+        return context_ ? *context_ : std::string(); 
+    }
+
+    /**
+     @brief construct a channel inline 
+     @return the constructed channel
+     */
+    template <typename LOCK=hce::spinlock, typename A>
+    static inline channel make(A&& a) {
+        HCE_MIN_METHOD_ENTER("make", a);
+        return channel<T>().construct<LOCK>(std::forward<A>(a));
+    }
+
+    /**
+     @brief construct a channel with a custom implementation
+     */
+    inline channel<T>& construct(std::shared_ptr<interface> i) {
+        HCE_MIN_METHOD_ENTER("construct", (hce::printable*)(i.get()));
+        context_ = std::move(i);
+        return *this;
+    }
+
+    /**
+     @brief construct a channel with an unbuffered implementation
+
+     Specify a LOCK type of `hce::lockfree` to make the implementation lockfree 
+     (only safe when all instances of the channel are used from the same system 
+     thread). Lockfree channels are a very fast way to communicate between two 
+     coroutines running on the same scheduler.
+     */
+    template <typename LOCK=hce::spinlock>
+    inline channel<T>& construct() {
+        HCE_MIN_METHOD_ENTER("construct");
+        return construct(std::make_shared<interface>(
+            static_cast<interface*>(
+                new unbuffered<LOCK>())));
+    }
+
+    /**
+     @brief construct a channel with an buffered implementation 
+     @param sz the size of the buffer
+     */
+    template <typename LOCK=hce::spinlock>
+    inline channel<T>& construct(int sz) {
+        HCE_MIN_METHOD_ENTER("construct",sz);
+        return construct(std::make_shared<interface>(
+            static_cast<interface*>(
+                new buffered<LOCK>(sz))));
+    }
+
+    /// retrieve a copy of the shared context
+    inline std::shared_ptr<interface> context() { 
+        HCE_TRACE_METHOD_ENTER("context");
+        return context_; 
+    }
+       
+    /// retrieve the implementation's actual std::type_info
+    inline const std::type_info& type_info() const { 
+        HCE_TRACE_METHOD_ENTER("type_info");
+        return context_->type_info(); 
+    }
+
+    /// return the maximum buffer size
+    inline int capacity() const { 
+        HCE_TRACE_METHOD_ENTER("capacity");
+        return context_->capacity(); 
+    }
+
+    /// return the number of values in the buffer
+    inline int size() const { 
+        HCE_TRACE_METHOD_ENTER("size");
+        return context_->size(); 
+    }
+
+    /// return if channel is closed
+    inline bool closed() const { 
+        HCE_TRACE_METHOD_ENTER("closed");
+        return context_->closed(); 
+    }
+
+    /// close channel
+    inline void close() { 
+        HCE_MIN_METHOD_ENTER("close");
+        return context_->close(); 
+    }
+
+    /// `co_await`able send operation 
+    template <typename T2>
+    inline hce::awt<bool> send(T2&& s) {
+        HCE_MIN_METHOD_ENTER("send");
+        return context_->send(std::forward<T2>(s)); 
+    }
+
+    /// `co_await`able recv operation
+    inline hce::awt<bool> recv(T& r) {
+        HCE_MIN_METHOD_ENTER("recv");
+        return context_->recv(r); 
+    }
+
+    /// `co_await`able try_send operation
+    template <typename T2>
+    inline hce::awt<bool> try_send(T2&& s) {
+        HCE_MIN_METHOD_ENTER("try_send");
+        return context_->try_send(std::forward<T2>(s));
+    }
+
+    /// `co_await`able try_recv operation
+    inline hce::yield<result> try_recv(T& r) {
+        HCE_MIN_METHOD_ENTER("try_recv");
+        return context_->try_recv(r);
+    }
+
+    /// return whether channel has a shared get pointer
+    inline explicit operator bool() const { 
+        HCE_TRACE_METHOD_ENTER("operator bool");
+        return (bool)(context_); 
+    }
+
+    /// context address comparison
+    inline bool operator==(const channel<T>& rhs) const {
+        HCE_TRACE_METHOD_ENTER("operator ==");
+        return context_.get() == rhs.context_.get();
+    }
+
+    inline bool operator!=(const channel<T>& rhs) const {
+        HCE_TRACE_METHOD_ENTER("operator !=");
+        return !(*this == rhs);
+    }
+
+    inline bool operator<(const channel<T>& rhs) const {
+        HCE_TRACE_METHOD_ENTER("operator <");
+        return context_.get() < rhs.context_.get();
+    }
+
+    inline bool operator<=(const channel<T>& rhs) const {
+        HCE_TRACE_METHOD_ENTER("operator <=");
+        return context_.get() <= rhs.context_.get();
+    }
+
+    inline bool operator>(const channel<T>& rhs) const {
+        HCE_TRACE_METHOD_ENTER("operator >");
+        return context_.get() > rhs.context_.get();
+    }
+
+    inline bool operator>=(const channel<T>& rhs) const {
+        HCE_TRACE_METHOD_ENTER("operator >=");
+        return context_.get() >= rhs.context_.get();
+    }
+
 private:
-    std::shared_ptr<interface> context;
+    std::shared_ptr<interface> context_;
 };
 
 }

@@ -971,6 +971,10 @@ private:
     { }
 };
 
+// for some reason templates sometimes need this derived template to function
+template <typename T>
+using awt_interface = hce::awt<T>::interface;
+
 }
 
 #endif
