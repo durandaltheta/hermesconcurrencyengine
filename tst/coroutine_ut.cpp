@@ -504,16 +504,15 @@ void co_await_yield_T(const int init) {
 }
 
 TEST(coroutine, co_await_yield) {
-        test::coroutine::co_await_yield_T<int>(1);
-    //for(int i=0; i<100; ++i) {
-        //test::coroutine::co_await_yield_T<int>(i);
-        //test::coroutine::co_await_yield_T<unsigned int>(i);
-        //test::coroutine::co_await_yield_T<size_t>(i);
-        //test::coroutine::co_await_yield_T<float>(i);
-        //test::coroutine::co_await_yield_T<double>(i);
-        //test::coroutine::co_await_yield_T<char>(i);
-        //test::coroutine::co_await_yield_T<void*>(i);
-        //test::coroutine::co_await_yield_T<std::string>(i);
-        //test::coroutine::co_await_yield_T<test::CustomObject>(i);
-    //}
+    for(int i=0; i<5; ++i) {
+        test::coroutine::co_await_yield_T<int>(i);
+        test::coroutine::co_await_yield_T<unsigned int>(i);
+        test::coroutine::co_await_yield_T<size_t>(i);
+        test::coroutine::co_await_yield_T<float>(i);
+        test::coroutine::co_await_yield_T<double>(i);
+        test::coroutine::co_await_yield_T<char>(i);
+        test::coroutine::co_await_yield_T<void*>(i);
+        test::coroutine::co_await_yield_T<std::string>(i);
+        test::coroutine::co_await_yield_T<test::CustomObject>(i);
+    }
 }
