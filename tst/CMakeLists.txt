@@ -15,11 +15,12 @@ endif()
 add_subdirectory(googletest)
 
 add_executable(hce_ut 
+    test_helpers.hpp
     #atomic_ut.cpp 
     #circular_buffer_ut.cpp
-    #coroutine_ut.cpp
-    scheduler_ut.cpp
-    #channel_ut.cpp
+    coroutine_ut.cpp
+    #scheduler_ut.cpp
+    #channel_ut.cpp 
 )
 
 target_include_directories(hce_ut PUBLIC ${HCE_INCLUDE_DIR} PRIVATE ${LOG_SOURCE_DIR})

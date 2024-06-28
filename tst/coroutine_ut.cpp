@@ -10,6 +10,7 @@
 #include <exception>
 
 #include <gtest/gtest.h>  
+#include "test_helpers.hpp"
 
 namespace test {
 namespace coroutine {
@@ -433,4 +434,86 @@ TEST(coroutine, co_await_string) {
         EXPECT_TRUE(co.done());
         EXPECT_FALSE(flag);
     }
+}
+
+namespace test {
+namespace coroutine {
+
+template <typename T>
+hce::co<void> co_yield_void_and_return_void(T& t, T value) {
+    co_await hce::yield<void>();
+    t = value;
+    co_return;
+}
+
+template <typename T>
+hce::co<void> co_yield_T_and_return_void(T& t, T value) {
+    t = co_await hce::yield<T>(value);
+    co_return;
+}
+
+template <typename T>
+void co_await_yield_T(const int init) {
+    // yield void
+    {
+        const int value = init + 1;
+        T i = test::init<T>(init);
+        hce::co<void> co(
+            test::coroutine::co_yield_void_and_return_void(i,(T)test::init<T>(value)));
+
+        // expect unrun state
+        EXPECT_FALSE(co.done());
+        EXPECT_EQ((T)test::init<T>(init),i);
+        co.resume();
+
+        // expect yielded state
+        EXPECT_FALSE(co.done());
+        EXPECT_EQ((T)test::init<T>(init),i);
+        co.resume();
+
+        // expect completed state
+        EXPECT_TRUE(co.done());
+        EXPECT_EQ((T)test::init<T>(value),i);
+    }
+
+    // yield T
+    {
+        const int value = init + 1;
+        T i = test::init<T>(init);
+        hce::co<void> co(
+            test::coroutine::co_yield_T_and_return_void(i,(T)test::init<T>(value)));
+
+        // expect unrun state
+        EXPECT_FALSE(co.done());
+        EXPECT_EQ((T)test::init<T>(init),i);
+        co.resume();
+
+        // expect yielded state
+        EXPECT_FALSE(co.done());
+        EXPECT_EQ((T)test::init<T>(init),i);
+        co.resume();
+
+        // expect completed state
+        EXPECT_TRUE(co.done());
+        EXPECT_EQ((T)test::init<T>(value),i);
+    }
+}
+
+}
+
+}
+
+TEST(coroutine, co_await_yield) {
+        test::coroutine::co_await_yield_T<int>(1);
+    //for(int i=0; i<100; ++i) {
+        //test::coroutine::co_await_yield_T<int>(i);
+        //test::coroutine::co_await_yield_T<unsigned int>(i);
+        //test::coroutine::co_await_yield_T<size_t>(i);
+        //test::coroutine::co_await_yield_T<float>(i);
+        //test::coroutine::co_await_yield_T<double>(i);
+        //test::coroutine::co_await_yield_T<char>(i);
+        //test::coroutine::co_await_yield_T<void*>(i);
+        //test::coroutine::co_await_yield_T<std::string>(i);
+        //test::coroutine::co_await_yield_T<test::CustomObject>(i);
+    //}
 }

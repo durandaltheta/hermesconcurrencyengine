@@ -175,29 +175,29 @@ hce_ut/fast:
 	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/build
 .PHONY : hce_ut/fast
 
-scheduler_ut.o: scheduler_ut.cpp.o
-.PHONY : scheduler_ut.o
+coroutine_ut.o: coroutine_ut.cpp.o
+.PHONY : coroutine_ut.o
 
 # target to build an object file
-scheduler_ut.cpp.o:
-	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/scheduler_ut.cpp.o
-.PHONY : scheduler_ut.cpp.o
+coroutine_ut.cpp.o:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/coroutine_ut.cpp.o
+.PHONY : coroutine_ut.cpp.o
 
-scheduler_ut.i: scheduler_ut.cpp.i
-.PHONY : scheduler_ut.i
+coroutine_ut.i: coroutine_ut.cpp.i
+.PHONY : coroutine_ut.i
 
 # target to preprocess a source file
-scheduler_ut.cpp.i:
-	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/scheduler_ut.cpp.i
-.PHONY : scheduler_ut.cpp.i
+coroutine_ut.cpp.i:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/coroutine_ut.cpp.i
+.PHONY : coroutine_ut.cpp.i
 
-scheduler_ut.s: scheduler_ut.cpp.s
-.PHONY : scheduler_ut.s
+coroutine_ut.s: coroutine_ut.cpp.s
+.PHONY : coroutine_ut.s
 
 # target to generate assembly for a file
-scheduler_ut.cpp.s:
-	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/scheduler_ut.cpp.s
-.PHONY : scheduler_ut.cpp.s
+coroutine_ut.cpp.s:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/coroutine_ut.cpp.s
+.PHONY : coroutine_ut.cpp.s
 
 # Help Target
 help:
@@ -212,9 +212,9 @@ help:
 	@echo "... list_install_components"
 	@echo "... rebuild_cache"
 	@echo "... hce_ut"
-	@echo "... scheduler_ut.o"
-	@echo "... scheduler_ut.i"
-	@echo "... scheduler_ut.s"
+	@echo "... coroutine_ut.o"
+	@echo "... coroutine_ut.i"
+	@echo "... coroutine_ut.s"
 .PHONY : help
 
 
