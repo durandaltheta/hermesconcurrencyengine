@@ -175,29 +175,29 @@ hce_ut/fast:
 	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/build
 .PHONY : hce_ut/fast
 
-coroutine_ut.o: coroutine_ut.cpp.o
-.PHONY : coroutine_ut.o
+channel_ut.o: channel_ut.cpp.o
+.PHONY : channel_ut.o
 
 # target to build an object file
-coroutine_ut.cpp.o:
-	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/coroutine_ut.cpp.o
-.PHONY : coroutine_ut.cpp.o
+channel_ut.cpp.o:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/channel_ut.cpp.o
+.PHONY : channel_ut.cpp.o
 
-coroutine_ut.i: coroutine_ut.cpp.i
-.PHONY : coroutine_ut.i
+channel_ut.i: channel_ut.cpp.i
+.PHONY : channel_ut.i
 
 # target to preprocess a source file
-coroutine_ut.cpp.i:
-	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/coroutine_ut.cpp.i
-.PHONY : coroutine_ut.cpp.i
+channel_ut.cpp.i:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/channel_ut.cpp.i
+.PHONY : channel_ut.cpp.i
 
-coroutine_ut.s: coroutine_ut.cpp.s
-.PHONY : coroutine_ut.s
+channel_ut.s: channel_ut.cpp.s
+.PHONY : channel_ut.s
 
 # target to generate assembly for a file
-coroutine_ut.cpp.s:
-	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/coroutine_ut.cpp.s
-.PHONY : coroutine_ut.cpp.s
+channel_ut.cpp.s:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/channel_ut.cpp.s
+.PHONY : channel_ut.cpp.s
 
 # Help Target
 help:
@@ -212,9 +212,9 @@ help:
 	@echo "... list_install_components"
 	@echo "... rebuild_cache"
 	@echo "... hce_ut"
-	@echo "... coroutine_ut.o"
-	@echo "... coroutine_ut.i"
-	@echo "... coroutine_ut.s"
+	@echo "... channel_ut.o"
+	@echo "... channel_ut.i"
+	@echo "... channel_ut.s"
 .PHONY : help
 
 

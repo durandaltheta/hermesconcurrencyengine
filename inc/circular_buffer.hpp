@@ -62,31 +62,31 @@ struct circular_buffer : public printable {
     inline const char* name() const { return "circular_buffer"; }
 
     /// return the maximum size of the buffer 
-    inline size_t capacity() { 
+    inline size_t capacity() const { 
         HCE_MIN_METHOD_ENTER("capacity");
         return buffer_.size(); 
     }
 
     /// return the current size of the buffer
-    inline size_t size() { 
+    inline size_t size() const { 
         HCE_MIN_METHOD_ENTER("size");
         return size_; 
     }
 
     /// return the available slots in the buffer
-    inline size_t remaining() { 
+    inline size_t remaining() const { 
         HCE_MIN_METHOD_ENTER("remaining");
         return capacity() - size(); 
     }
 
     /// return true if the buffer is empty, else false
-    inline bool empty() { 
+    inline bool empty() const { 
         HCE_MIN_METHOD_ENTER("empty");
         return 0 == size(); 
     }
     
     /// return true if the buffer is full, else false
-    inline bool full() { 
+    inline bool full() const { 
         HCE_MIN_METHOD_ENTER("full");
         return capacity() == size(); 
     }

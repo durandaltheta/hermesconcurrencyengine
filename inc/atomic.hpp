@@ -47,6 +47,9 @@ struct lockfree : public printable {
     lockfree() { HCE_MIN_CONSTRUCTOR(); }
     ~lockfree() { HCE_MIN_DESTRUCTOR(); }
 
+    inline const char* nspace() const { return "hce"; }
+    inline const char* name() const { return "lockfree"; }
+
     inline void lock() { HCE_MIN_METHOD_ENTER("lock"); }
 
     inline bool try_lock() { 

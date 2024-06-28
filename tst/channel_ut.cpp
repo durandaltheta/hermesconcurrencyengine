@@ -16,7 +16,7 @@ TEST(channel, construct) {
     {
         hce::channel<int> ch; 
         EXPECT_FALSE(ch);
-        auto ctx = std::shared_ptr<hce::channel<int>::unbuffered<hce::spinlock>>::make();
+        auto ctx = std::make_shared<hce::channel<int>::unbuffered<hce::spinlock>>();
         ch.construct(ctx);
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::channel<int>::unbuffered<hce::spinlock>));
@@ -27,7 +27,7 @@ TEST(channel, construct) {
     {
         hce::channel<int> ch; 
         EXPECT_FALSE(ch);
-        auto ctx = std::shared_ptr<hce::channel<int>::unbuffered<hce::lockfree>>::make();
+        auto ctx = std::make_shared<hce::channel<int>::unbuffered<hce::lockfree>>();
         ch.construct(ctx);
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::channel<int>::unbuffered<hce::lockfree>));
@@ -38,7 +38,7 @@ TEST(channel, construct) {
     {
         hce::channel<int> ch; 
         EXPECT_FALSE(ch);
-        auto ctx = std::shared_ptr<hce::channel<int>::buffered<hce::spinlock>>::make(1);
+        auto ctx = std::make_shared<hce::channel<int>::buffered<hce::spinlock>>(1);
         ch.construct(ctx);
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::channel<int>::buffered<hce::spinlock>));
@@ -49,7 +49,7 @@ TEST(channel, construct) {
     {
         hce::channel<int> ch; 
         EXPECT_FALSE(ch);
-        auto ctx = std::shared_ptr<hce::channel<int>::buffered<hce::lockfree>>::make(1);
+        auto ctx = std::make_shared<hce::channel<int>::buffered<hce::lockfree>>(1);
         ch.construct(ctx);
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::channel<int>::buffered<hce::lockfree>));
@@ -60,7 +60,7 @@ TEST(channel, construct) {
     {
         hce::channel<int> ch; 
         EXPECT_FALSE(ch);
-        auto ctx = std::shared_ptr<hce::channel<int>::buffered<hce::spinlock>>::make(1337);
+        auto ctx = std::make_shared<hce::channel<int>::buffered<hce::spinlock>>(1337);
         ch.construct(ctx);
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::channel<int>::buffered<hce::spinlock>));
@@ -71,7 +71,7 @@ TEST(channel, construct) {
     {
         hce::channel<int> ch; 
         EXPECT_FALSE(ch);
-        auto ctx = std::shared_ptr<hce::channel<int>::buffered<hce::lockfree>>::make(1337);
+        auto ctx = std::make_shared<hce::channel<int>::buffered<hce::lockfree>>(1337);
         ch.construct(ctx);
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::channel<int>::buffered<hce::lockfree>));
