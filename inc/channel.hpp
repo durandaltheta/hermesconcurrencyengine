@@ -607,10 +607,12 @@ struct channel : public printable {
      @brief construct a channel inline 
      @return the constructed channel
      */
-    template <typename LOCK=hce::spinlock, typename A>
-    static inline channel make(A&& a) {
-        HCE_MIN_METHOD_ENTER("make", a);
-        return channel<T>().construct<LOCK>(std::forward<A>(a));
+    template <typename LOCK=hce::spinlock, typename... As>
+    static inline channel<T> make(As&&... as) {
+        HCE_MIN_METHOD_ENTER("make", as...);
+        channel<T> ch;
+        ch.construct<LOCK>(std::forward<As>(as)...);
+        return ch;
     }
 
     /**
@@ -633,7 +635,7 @@ struct channel : public printable {
     template <typename LOCK=hce::spinlock>
     inline channel<T>& construct() {
         HCE_MIN_METHOD_ENTER("construct");
-        return construct(std::make_shared<interface>(
+        return construct(std::shared_ptr<interface>(
             static_cast<interface*>(
                 new unbuffered<LOCK>())));
     }
@@ -645,7 +647,7 @@ struct channel : public printable {
     template <typename LOCK=hce::spinlock>
     inline channel<T>& construct(int sz) {
         HCE_MIN_METHOD_ENTER("construct",sz);
-        return construct(std::make_shared<interface>(
+        return construct(std::shared_ptr<interface>(
             static_cast<interface*>(
                 new buffered<LOCK>(sz))));
     }

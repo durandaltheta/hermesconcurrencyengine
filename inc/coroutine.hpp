@@ -578,8 +578,9 @@ struct awaitable : public printable {
         virtual inline bool await_ready() final {
             HCE_LOW_METHOD_ENTER("await_ready");
 
-            // acquire the lock 
-            this->lock(); 
+            // acquire the lock if implementation was not constructed with 
+            // ownership
+            if(!(this->owned())) { this->lock(); }
 
             // set awaited flag
             this->awaited_ = true;
@@ -631,7 +632,7 @@ struct awaitable : public printable {
         virtual inline void resume(void* m) final {
             HCE_LOW_METHOD_ENTER("resume");
 
-            // re-acquire the lock 
+            // acquire the lock
             this->lock();
 
             // call the custom resumption code
@@ -654,6 +655,14 @@ struct awaitable : public printable {
                 this->unlock();
             }
         }
+       
+        /**
+         This value is necessary to introspect when determining if lock() needs
+         to be called initially by the `co_await`er.
+
+         @return true of the implementation is constructed locked, else false
+         */
+        virtual bool owned() const = 0;
 
         /**
          @brief acquire the awaitable's lock
@@ -704,23 +713,27 @@ struct awaitable : public printable {
     template <typename INTERFACE, typename LOCK>
     struct lockable : public INTERFACE {
         template <typename... As>
-        lockable(LOCK& lk, bool locked, As&&... as) : 
+        lockable(LOCK& lk, const bool owned, As&&... as) : 
             INTERFACE(std::forward<As>(as)...),
             lk_(&lk), 
-            locked_(locked) 
+            owned_(owned),
+            locked_(owned)
         { }
 
-        /// ensure lock is unlocked when we go out of scope
+        // ensure lock is unlocked when we go out of scope
         virtual ~lockable() { if(locked_){ unlock(); } }
 
-        /// acquire the lock
+        inline bool owned() const final { 
+            HCE_LOW_METHOD_ENTER("owned");
+            return owned_; 
+        }
+
         inline void lock() final { 
             HCE_LOW_METHOD_ENTER("lock");
             lk_->lock(); 
             locked_ = true;
         }
 
-        /// release the lock
         inline void unlock() final { 
             HCE_LOW_METHOD_ENTER("unlock");
             locked_ = false;
@@ -729,23 +742,8 @@ struct awaitable : public printable {
 
     private:
         LOCK* lk_;
+        const bool owned_;
         bool locked_;
-    };
-
-    /**
-     @brief lockfree partial implementation of awaitable::interface
-     */
-    template <typename INTERFACE>
-    struct lockfree : public INTERFACE {
-        template <typename... As>
-        lockfree(As&&... as) : 
-            INTERFACE(std::forward<As>(as)...)
-        { }
-
-        virtual ~lockfree() { }
-
-        inline void lock() final { HCE_LOW_METHOD_ENTER("lock"); }
-        inline void unlock() final { HCE_LOW_METHOD_ENTER("unlock"); }
     };
 
     awaitable() = delete;
@@ -765,13 +763,12 @@ struct awaitable : public printable {
     inline std::string content() const {
         return impl_ ? impl_->to_string() : std::string();
     }
-    
-    inline void* address() const { return impl_.get(); }
 
     /**
      Can't use conversion `operator bool()` because descendant awaitables are 
      implicitly convertable to a type `T`, and some fundamental types can 
-     conflict with a boolean conversion. Better to have an explicity function.
+     conflict with a boolean conversion. Better to have an explicit function to 
+     check if the awaitable contains an implementation.
 
      @return true if the awaitable manages an implementation, else false
      */
@@ -780,7 +777,7 @@ struct awaitable : public printable {
     /// return a reference to the implementation
     inline interface& implementation() { return *impl_; }
 
-    /// release control of the underlying pointer
+    /// release control of the underlying implementation pointer
     inline interface* release() { return impl_.release(); }
 
     /**
@@ -806,18 +803,16 @@ struct awaitable : public printable {
 
     // ensure logic completes before awaitable goes out of scope
     inline void finalize() {
-        if(impl_) {
-            if(!(impl_->awaited())) {
-                if(coroutine::in()) { 
-                    // coroutine failed to `co_await` the awaitable
-                    detail::coroutine::coroutine_did_not_co_await(this); 
-                } else if(!await_ready()) { 
-                    // if we're here, this awaitable is operating without the 
-                    // `co_await` keyword, and needs to operate as a regular system 
-                    // thread blocking call, not a coroutine suspend.
-                    await_suspend(std::coroutine_handle<>()); 
-                }
-            } 
+        if(impl_ && !(impl_->awaited())) {
+            if(coroutine::in()) { 
+                // coroutine failed to `co_await` the awaitable
+                detail::coroutine::coroutine_did_not_co_await(this); 
+            } else if(!await_ready()) { 
+                // if we're here, this awaitable is operating without the 
+                // `co_await` keyword, and needs to operate as a regular system 
+                // thread blocking call, not a coroutine suspend.
+                await_suspend(std::coroutine_handle<>()); 
+            }
         }
     }
 
@@ -847,9 +842,9 @@ private:
  type `T` or the object being destroyed will block the thread until the 
  operation completes. 
 
- Likewise, when a coroutine `co_await`s on this object it will suspend until the 
- operation completes. If a coroutine fails to `co_await` the object an exception 
- will be thrown.
+ Likewise, when a coroutine `co_await`s on this object the coroutine will 
+ suspend until the operation completes. If a coroutine fails to `co_await` the 
+ object an exception will be thrown.
 
  The result of the awaitable operation is of type `T`, which will be returned 
  to a coroutine from the `co_await` expression or can be converted directly to 

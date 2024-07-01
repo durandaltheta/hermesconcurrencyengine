@@ -191,7 +191,7 @@ TEST(coroutine, co_await_void) {
             static inline hce::co<void>op1(std::vector<ai*> as) {
                 for(auto& a : as) {
                     hce::awt<void> awt = hce::awt<void>::make(a);
-                    EXPECT_NE(nullptr, awt.address());
+                    EXPECT_TRUE(awt.valid());
                     co_await std::move(awt);
                 }
             }
@@ -276,7 +276,7 @@ TEST(coroutine, co_await_int) {
                 int i=0;
                 for(auto& a : as) {
                     hce::awt<int> awt = hce::awt<int>::make(a);
-                    EXPECT_NE(nullptr, awt.address());
+                    EXPECT_TRUE(awt.valid());
                     int result_i = co_await std::move(awt);
                     EXPECT_EQ(i, result_i);
                     ++i;
@@ -366,7 +366,7 @@ TEST(coroutine, co_await_string) {
                 int i=0;
                 for(auto& a : as) {
                     hce::awt<std::string> awt = hce::awt<std::string>::make(a);
-                    EXPECT_NE(nullptr,awt.address());
+                    EXPECT_TRUE(awt.valid());
                     std::string result_i = co_await std::move(awt);
                     EXPECT_EQ(std::to_string(i), result_i);
                     ++i;
@@ -500,7 +500,6 @@ void co_await_yield_T(const int init) {
 }
 
 }
-
 }
 
 TEST(coroutine, co_await_yield) {
