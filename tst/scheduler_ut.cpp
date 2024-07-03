@@ -17,47 +17,10 @@
 namespace test {
 namespace scheduler {
 
-/*
- Test only replacement for something like a channel. Synchronizes sends and 
- receives between a thread and a thread or a thread and a coroutine
- */
-template <typename T>
-struct queue {
-    template <typename TSHADOW>
-    void push(TSHADOW&& t) {
-        {
-            std::lock_guard<hce::spinlock> lk(slk);
-            vals.push_back(std::forward<TSHADOW>(t));
-        }
-        cv.notify_one();
-    }
-
-    T pop() {
-        std::unique_lock<hce::spinlock> lk(slk);
-        while(!vals.size()) {
-            cv.wait(lk);
-        }
-
-        T res = std::move(vals.front());
-        vals.pop_front();
-        return res;
-    }
-
-    size_t size() {
-        std::lock_guard<hce::spinlock> lk(slk);
-        return vals.size();
-    }
-
-private:
-    hce::spinlock slk;
-    std::condition_variable_any cv;
-    std::deque<T> vals;
-};
-
 inline hce::co<void> co_void() { co_return; }
 
 template <typename T>
-hce::co<void> co_push_T(queue<T>& q, T t) {
+hce::co<void> co_push_T(test::queue<T>& q, T t) {
     q.push(t);
     co_return;
 }
@@ -68,35 +31,35 @@ inline hce::co<T> co_return_T(T t) {
 }
 
 template <typename T>
-hce::co<T> co_push_T_return_T(queue<T>& q, T t) {
+hce::co<T> co_push_T_return_T(test::queue<T>& q, T t) {
     q.push(t);
     co_return t;
 }
 
 template <typename T>
-hce::co<T> co_push_T_yield_void_and_return_T(queue<T>& q, T t) {
+hce::co<T> co_push_T_yield_void_and_return_T(test::queue<T>& q, T t) {
     q.push(t);
     co_await hce::yield<void>();
     co_return t;
 }
 
 template <typename T>
-hce::co<T> co_push_T_yield_T_and_return_T(queue<T>& q, T t) {
+hce::co<T> co_push_T_yield_T_and_return_T(test::queue<T>& q, T t) {
     q.push(t);
     co_return co_await hce::yield<T>(t);
 }
 
-inline hce::co<void> co_scheduler_in_check(queue<void*>& q) { 
+inline hce::co<void> co_scheduler_in_check(test::queue<void*>& q) { 
     q.push(hce::scheduler::in() ? (void*)1 : (void*)0);
     co_return;
 }
 
-inline hce::co<void> co_scheduler_local_check(queue<void*>& q) { 
+inline hce::co<void> co_scheduler_local_check(test::queue<void*>& q) { 
     q.push(&(hce::scheduler::local()));
     co_return;
 }
 
-inline hce::co<void> co_scheduler_global_check(queue<void*>& q) { 
+inline hce::co<void> co_scheduler_global_check(test::queue<void*>& q) { 
     q.push(&(hce::scheduler::global()));
     co_return;
 }
@@ -168,7 +131,7 @@ TEST(scheduler, install) {
 
     // halt during suspend
     {
-        test::scheduler::queue<hce::scheduler::state> state_q;
+        test::queue<hce::scheduler::state> state_q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         auto config = hce::scheduler::config::make();
@@ -220,7 +183,7 @@ TEST(scheduler, install) {
 
     // halt during run
     {
-        test::scheduler::queue<hce::scheduler::state> state_q;
+        test::queue<hce::scheduler::state> state_q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         auto config = hce::scheduler::config::make();
@@ -271,7 +234,7 @@ namespace test {
 namespace scheduler {
 
 template <typename T>
-size_t schedule_T(std::function<hce::co<T>(queue<T>& q, T t)> Coroutine) {
+size_t schedule_T(std::function<hce::co<T>(test::queue<T>& q, T t)> Coroutine) {
     std::string T_name = []() -> std::string {
         std::stringstream ss;
         ss << typeid(T).name();
@@ -284,7 +247,7 @@ size_t schedule_T(std::function<hce::co<T>(queue<T>& q, T t)> Coroutine) {
 
     // schedule individually
     {
-        test::scheduler::queue<T> q;
+        test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
@@ -308,7 +271,7 @@ size_t schedule_T(std::function<hce::co<T>(queue<T>& q, T t)> Coroutine) {
 
     // schedule group
     {
-        test::scheduler::queue<T> q;
+        test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
@@ -332,7 +295,7 @@ size_t schedule_T(std::function<hce::co<T>(queue<T>& q, T t)> Coroutine) {
 
     // schedule group of base hce::coroutines
     {
-        test::scheduler::queue<T> q;
+        test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
@@ -356,7 +319,7 @@ size_t schedule_T(std::function<hce::co<T>(queue<T>& q, T t)> Coroutine) {
 
     // schedule group of different coroutine signatures
     {
-        test::scheduler::queue<T> q;
+        test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
@@ -380,7 +343,7 @@ size_t schedule_T(std::function<hce::co<T>(queue<T>& q, T t)> Coroutine) {
 
     // schedule group and single
     {
-        test::scheduler::queue<T> q;
+        test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
@@ -404,7 +367,7 @@ size_t schedule_T(std::function<hce::co<T>(queue<T>& q, T t)> Coroutine) {
 
     // schedule in a vector
     {
-        test::scheduler::queue<T> q;
+        test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
@@ -431,7 +394,7 @@ size_t schedule_T(std::function<hce::co<T>(queue<T>& q, T t)> Coroutine) {
 
     // schedule in a list
     {
-        test::scheduler::queue<T> q;
+        test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
@@ -458,7 +421,7 @@ size_t schedule_T(std::function<hce::co<T>(queue<T>& q, T t)> Coroutine) {
 
     // schedule in a forward_list
     {
-        test::scheduler::queue<T> q;
+        test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
@@ -542,7 +505,7 @@ TEST(scheduler, schedule_yield) {
 
 TEST(scheduler, schedule_and_thread_locals) {
     {
-        test::scheduler::queue<void*> sch_q;
+        test::queue<void*> sch_q;
         hce::scheduler* global_sch = &(hce::scheduler::global());
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);

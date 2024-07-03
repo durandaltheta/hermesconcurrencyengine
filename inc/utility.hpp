@@ -596,7 +596,7 @@ struct cleanup : public printable {
     }
 
     /// destructor calls all handlers with T
-    ~cleanup() { 
+    virtual ~cleanup() { 
         HCE_MED_DESTRUCTOR();
 
         for(auto& hdl : handlers_) { 
@@ -672,7 +672,8 @@ inline std::ostream& operator<<(std::ostream& out, const hce::printable* p) {
 }
 
 /// :: ostream writing for generic coroutine_handle
-inline std::ostream& operator<<(std::ostream& out, const std::coroutine_handle<>& h) {
+template <typename PROMISE>
+std::ostream& operator<<(std::ostream& out, const std::coroutine_handle<PROMISE>& h) {
     out << "std::coroutine_handle@" << h.address();
     return out;
 }

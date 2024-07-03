@@ -31,7 +31,10 @@ struct done : public
         hce::scheduler::reschedule<
             hce::awaitable::lockable<
                 awt_interface<T>,
-                hce::lockfree>>(lf_,true),
+                hce::lockfree>>(
+                    lf_,
+                    hce::awaitable::await::policy::adopt,
+                    hce::awaitable::resume::policy::no_lock),
         t_(std::forward<As>(as)...) { }
 
     inline bool on_ready() { return true; }
@@ -54,7 +57,10 @@ struct done<void> : public
         hce::scheduler::reschedule<
             hce::awaitable::lockable<
                 awt_interface<void>,
-                hce::lockfree>>(lf_,true)
+                hce::lockfree>>(
+                    lf_,
+                    hce::awaitable::await::policy::adopt,
+                    hce::awaitable::resume::policy::no_lock)
     { }
 
     inline bool on_ready() { return true; }
@@ -63,34 +69,6 @@ struct done<void> : public
 private:
     hce::lockfree lf_;
 };
-
-/*
-template <typename T>
-struct done : public hce::scheduler::reschedule<
-                      hce::awaitable::lockable<
-                          awt_interface<T>,
-                          hce::lockfree>> {
-    template <typename... As>
-    done(As&&... as) : t_(std::forward<As>(as)...) { }
-
-    inline bool on_ready() { return true; }
-    inline void on_resume(void* m) { }
-    inline T get_result() { return std::move(t_); }
-
-private:
-    T t_;
-};
-
-template <>
-struct done<void> : public hce::scheduler::reschedule<
-                          hce::awaitable::lockfree<
-                              awt_interface<void>>> {
-    done() { }
-
-    inline bool on_ready() { return true; }
-    inline void on_resume(void* m) { }
-};
-*/
 
 }
 }

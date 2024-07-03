@@ -42,8 +42,8 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/coroutine.hpp
     ${HCE_INCLUDE_DIR}/scheduler.hpp
     ${HCE_INCLUDE_DIR}/block.hpp
-    ${HCE_INCLUDE_DIR}/mutex.hpp
-    ${HCE_INCLUDE_DIR}/condition_variable.hpp
+    #${HCE_INCLUDE_DIR}/mutex.hpp
+    #${HCE_INCLUDE_DIR}/condition_variable.hpp
     ${HCE_INCLUDE_DIR}/channel.hpp
     ${HCE_INCLUDE_DIR}/hce.hpp)
 

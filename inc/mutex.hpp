@@ -94,7 +94,10 @@ private:
         acquire(hce::mutex* parent) : 
             hce::awaitable::lockable<
                 hce::awt<void>::interface,
-                hce::spinlock>(parent->slk_,false),
+                hce::spinlock>(
+                    parent->slk_,
+                    hce::awaitable::await::policy::defer,
+                    hce::awaitable::resume::policy::no_lock),
             parent_(parent) 
         { }
 

@@ -77,22 +77,13 @@ struct joiner :
         awt_interface<T>,
         hce::spinlock>
 {
-
-    /// resume immediately and return a constructed T
-    //template <typename... As>
-    //joiner(As&&... as) : 
-        //hce::awaitable::lockable<
-            ////awt<T>::interface,
-            //awt_interface<T>,
-            //hce::spinlock>(slk_,false),
-        //ready_(true),
-        //t_(std::forward<As>(as)...)
-    //{ }
-
     joiner(hce::co<T>& co) :
         hce::awaitable::lockable<
             awt_interface<T>,
-            hce::spinlock>(slk_,false),
+            hce::spinlock>(
+                slk_,
+                hce::awaitable::await::policy::defer,
+                hce::awaitable::resume::policy::lock),
         ready_(false),
         address_(co.address())
     { 
@@ -100,7 +91,7 @@ struct joiner :
 
         // install a cleanup handler to resume the returned awaitable when 
         // the coroutine goes out of scope
-        co.promise().install([self=this](hce::co<T>::promise_type& p){
+        co.promise().install([self=this](typename hce::co<T>::promise_type& p){
             // get a copy of the handle to see if the coroutine completed 
             auto handle = 
                 std::coroutine_handle<
@@ -148,18 +139,13 @@ struct joiner<void> :
         awt_interface<void>,
         hce::spinlock>
 {
-    //joiner() : 
-        //hce::awaitable::lockable<
-            ////awt<void>::interface,
-            //awt_interface<void>,
-            //hce::spinlock>(slk_,false),
-        //ready_(true)
-    //{ }
-
     joiner(hce::co<void>& co) :
         hce::awaitable::lockable<
             awt_interface<void>,
-            hce::spinlock>(slk_,false),
+            hce::spinlock>(
+                slk_,
+                hce::awaitable::await::policy::defer,
+                hce::awaitable::resume::policy::lock),
         ready_(false)
     { 
         HCE_TRACE_CONSTRUCTOR(co);
@@ -421,7 +407,7 @@ struct scheduler : public printable {
         struct handlers : public printable {
             handlers() { HCE_HIGH_CONSTRUCTOR(); }
 
-            ~handlers() {
+            virtual ~handlers() {
                 HCE_HIGH_DESTRUCTOR();
                 // clear handlers in reverse install order
                 while(hdls_.size()) { hdls_.pop_back(); }
@@ -456,7 +442,7 @@ struct scheduler : public printable {
             std::list<handler> hdls_;
         };
 
-        ~config() { HCE_HIGH_DESTRUCTOR(); }
+        virtual ~config() { HCE_HIGH_DESTRUCTOR(); }
 
         /// return an allocated and constructed config
         static inline std::unique_ptr<config> make() { 
@@ -488,7 +474,7 @@ struct scheduler : public printable {
         config(){ HCE_HIGH_CONSTRUCTOR(); }
     };
 
-    ~scheduler() {
+    virtual ~scheduler() {
         HCE_HIGH_CONSTRUCTOR();
         halt_();
         // ensure all tasks are manually deleted
@@ -755,7 +741,7 @@ struct scheduler : public printable {
             } else { insert_timer_(t); }
         }
 
-        return hce::awt<bool>(t.release());
+        return hce::awt<bool>::make(t.release());
     }
 
     /**
@@ -784,7 +770,7 @@ struct scheduler : public printable {
             else { insert_timer_(t); }
         }
 
-        return hce::awt<bool>(t.release());
+        return hce::awt<bool>::make(t.release());
     }
 
     /**
@@ -859,31 +845,9 @@ struct scheduler : public printable {
 private:
     typedef std::unique_ptr<std::deque<std::coroutine_handle<>>> coroutine_queue;
 
-    // simple awaitable condition
-    struct condition :
-        public reschedule<
-            awaitable::lockable<
-                awt<void>::interface, 
-                hce::spinlock>>
-    {
-        condition(hce::spinlock& slk) :
-            reschedule<
-                awaitable::lockable<
-                    awt<void>::interface, 
-                    hce::spinlock>>(slk, true),
-            ready_(false)
-        { }
-
-        inline bool on_ready() { return ready_; }
-        inline void on_resume(void* m) { ready_ = true; }
-
-    private:
-        bool ready_;
-    };
-
     struct scoper :
         public reschedule<
-            awaitable::lockable<
+            hce::awaitable::lockable<
                 awt<void>::interface, 
                 hce::spinlock>>
     {
@@ -892,7 +856,10 @@ private:
             reschedule<
                 awaitable::lockable<
                     awt<void>::interface, 
-                    hce::spinlock>>(lk_,false),
+                    hce::spinlock>>(
+                        lk_,
+                        hce::awaitable::await::policy::defer,
+                        hce::awaitable::resume::policy::lock),
             awts_(std::move(awts))
         { }
 
@@ -936,7 +903,10 @@ private:
             hce::scheduler::reschedule<
                 hce::awaitable::lockable<
                     hce::awt<bool>::interface,
-                    hce::spinlock>>(slk_,false),
+                    hce::spinlock>>(
+                        slk_,
+                        hce::awaitable::await::defer,
+                        hce::awaitable::resume::lock),
             tp_(tp),
             id_(std::make_shared<bool>()),
             ready_(false),

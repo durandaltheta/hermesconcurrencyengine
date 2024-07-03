@@ -284,6 +284,8 @@ struct co : public coroutine {
     co(const co<T>&) = delete;
     co(co<T>&& rhs) = default;
 
+    virtual ~co(){}
+
     inline co<T>& operator=(const co<T>&) = delete;
     inline co<T>& operator=(co<T>&& rhs) = default;
 
@@ -341,6 +343,8 @@ struct co<void> : public coroutine {
     co(const co<void>&) = delete;
     co(co<void>&& rhs) = default;
 
+    virtual ~co(){}
+
     inline co<void>& operator=(const co<void>&) = delete;
     inline co<void>& operator=(co<void>&& rhs) = default;
 
@@ -373,6 +377,13 @@ struct this_thread {
         auto tt = this_thread::get();
         HCE_TRACE_LOG("hce::this_thread@%p::block(LOCK&)",tt);
         tt->block_(lk);
+    }
+    
+    // unblock an arbitrary this_thread
+    inline void unblock() {
+        HCE_TRACE_LOG("hce::this_thread@%p::unblock()",this);
+        ready = true;
+        cv.notify_one();
     }
 
     // unblock an arbitrary this_thread
@@ -412,7 +423,7 @@ void coroutine_did_not_co_await(void* awt);
 
 }
 
-struct yield : public printable {
+struct yield : public hce::printable {
     yield() { HCE_LOW_CONSTRUCTOR(); }
 
     virtual ~yield() {
@@ -546,6 +557,23 @@ struct yield<void> : public detail::yield {
  most user needs without requiring additional implementations.
  */
 struct awaitable : public printable { 
+    struct await {
+        /// determines how locking is accomplished by an awaiter of an awaitable
+        enum policy {
+            adopt, //< assume the lock as locked during construction
+            defer //< assume the lock as unlocked but lock it when necessary
+        };
+    };
+
+    struct resume {
+        /// determines how locking is accomplished by a resumer of an awaitable
+        enum policy {
+            adopt, //< assume lock is held during resume(), unlocking when done
+            lock, //< lock during resume(), unlocking when done
+            no_lock //< neither lock nor unlock during resume()
+        };
+    };
+
     /**
      @brief pure virtual interface for an awaitable's implementation 
 
@@ -580,7 +608,7 @@ struct awaitable : public printable {
 
             // acquire the lock if implementation was not constructed with 
             // ownership
-            if(!(this->owned())) { this->lock(); }
+            if(this->await_policy() == await::policy::defer) { this->lock(); }
 
             // set awaited flag
             this->awaited_ = true;
@@ -632,27 +660,30 @@ struct awaitable : public printable {
         virtual inline void resume(void* m) final {
             HCE_LOW_METHOD_ENTER("resume");
 
+            auto rp = this->resume_policy();
+
             // acquire the lock
-            this->lock();
+            if(rp == resume::policy::lock){ this->lock(); }
 
             // call the custom resumption code
-            this->on_resume(m);
+            this->on_resume(m); 
 
             if(this->atp_) { 
                 HCE_TRACE_METHOD_BODY("resume","unblock");
-                // unblock the suspended thread
-                this->atp_->unblock(*this); 
+                // unblock the suspended thread 
+                if(rp == resume::policy::no_lock) { this->atp_->unblock(); }
+                else { this->atp_->unblock(*this); }
             } else if(this->handle_) { 
                 HCE_TRACE_METHOD_BODY("resume","destination");
                 // unblock the suspended coroutine and push the handle to its 
                 // destination
-                this->unlock();
+                if(rp != resume::policy::no_lock) { this->unlock(); }
                 this->destination(this->handle_);
                 this->handle_ = std::coroutine_handle<>();
             } else {
                 HCE_TRACE_METHOD_BODY("resume","not blocked");
                 // this was called before blocking occurred
-                this->unlock();
+                if(rp != resume::policy::no_lock) { this->unlock(); }
             }
         }
        
@@ -662,14 +693,19 @@ struct awaitable : public printable {
 
          @return true of the implementation is constructed locked, else false
          */
-        virtual bool owned() const = 0;
+        virtual await::policy await_policy() const = 0;
+
+        /**
+         @return true if calls to resume() require a lock synchronization
+         */
+        virtual resume::policy resume_policy() const = 0;
 
         /**
          @brief acquire the awaitable's lock
          
          The implementation *MUST* use proper state tracking to only *actually* 
          lock() the underlying synchronization primative if it is not already 
-         owned by the implementation.
+         synchronize_await by the implementation.
          */
         virtual void lock() = 0;
 
@@ -706,26 +742,38 @@ struct awaitable : public printable {
     };
 
     /**
-     @brief partial implementation of awaitable::interface for a templated LOCK
+     @brief partial implementation of awaitable::interface for a templated LOCK 
+
+     For 'lockfree' semantics, template the object to `hce::lockfree` and pass 
+     an `hce::lockfree` reference to the constructor.
 
      Enables std::unique_lock<LOCK>-like semantics.
      */
     template <typename INTERFACE, typename LOCK>
     struct lockable : public INTERFACE {
         template <typename... As>
-        lockable(LOCK& lk, const bool owned, As&&... as) : 
+        lockable(LOCK& lk, 
+                 await::policy ap, 
+                 resume::policy rp, 
+                 As&&... as) :
             INTERFACE(std::forward<As>(as)...),
-            lk_(&lk), 
-            owned_(owned),
-            locked_(owned)
+            lk_(&lk),
+            await_policy_(ap),
+            resume_policy_(rp),
+            locked_(ap == await::policy::adopt)
         { }
 
         // ensure lock is unlocked when we go out of scope
         virtual ~lockable() { if(locked_){ unlock(); } }
 
-        inline bool owned() const final { 
-            HCE_LOW_METHOD_ENTER("owned");
-            return owned_; 
+        inline await::policy await_policy() const { 
+            HCE_TRACE_METHOD_BODY("await_policy",await_policy_);
+            return await_policy_; 
+        }
+
+        inline resume::policy resume_policy() const { 
+            HCE_TRACE_METHOD_BODY("resume_policy",resume_policy_);
+            return resume_policy_; 
         }
 
         inline void lock() final { 
@@ -742,7 +790,8 @@ struct awaitable : public printable {
 
     private:
         LOCK* lk_;
-        const bool owned_;
+        const await::policy await_policy_;
+        const resume::policy resume_policy_;
         bool locked_;
     };
 
@@ -753,9 +802,7 @@ struct awaitable : public printable {
     inline awaitable& operator=(const awaitable&) = delete;
     inline awaitable& operator=(awaitable&& rhs) = default;
     
-    virtual inline ~awaitable() { 
-        finalize(); 
-    }
+    virtual inline ~awaitable() { finalize(); }
     
     inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "awaitable"; }
@@ -788,14 +835,13 @@ struct awaitable : public printable {
 
     /**
      When using the `co_await` keyword, if `await_ready() == false`, this 
-     function is called by the compiler with a new coroutine handler capable 
-     of resuming where we suspended.
-
-     Store the new coroutine handle so we can resume later, and call the 
-     `suspend` operation.
+     function is called by the compiler with a coroutine handler capable of 
+     resuming where the coroutine was suspended. Store the coroutine handle so 
+     we can resume later.
 
      If the argument handle does not represent a coroutine (`handle == false`), 
-     then the operation is on a system thread and will block the calling thread.
+     then the operation is on a system thread and will block the calling thread 
+     instead of simply returning.
      */
     inline void await_suspend(std::coroutine_handle<> h) { 
         impl_->await_suspend(h); 
@@ -968,7 +1014,7 @@ private:
 
 // for some reason templates sometimes need this derived template to function
 template <typename T>
-using awt_interface = hce::awt<T>::interface;
+using awt_interface = typename hce::awt<T>::interface;
 
 }
 
