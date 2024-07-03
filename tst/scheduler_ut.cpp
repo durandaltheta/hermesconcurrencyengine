@@ -697,7 +697,7 @@ size_t scope_T() {
 
     // scope void ran successfully
     {
-        scheduler::queue<T> q;
+        test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
@@ -754,7 +754,7 @@ size_t scope_T() {
 
     // scope void group ran successfully
     {
-        scheduler::queue<T> q;
+        test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
@@ -811,7 +811,7 @@ size_t scope_T() {
 
     // scope void mixed ran successfully
     {
-        scheduler::queue<T> q;
+        test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
@@ -870,7 +870,7 @@ size_t scope_T() {
 
     // scope T individually ran successfully
     {
-        scheduler::queue<T> q;
+        test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
@@ -927,7 +927,7 @@ size_t scope_T() {
 
     // scope T group ran successfully
     {
-        scheduler::queue<T> q;
+        test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
@@ -983,7 +983,7 @@ size_t scope_T() {
 
     // scope T mixed ran successfully
     {
-        scheduler::queue<T> q;
+        test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
