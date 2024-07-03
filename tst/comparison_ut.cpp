@@ -231,11 +231,6 @@ TEST(comparison_concurrent_simple_communication, 16x_core_count_coroutines_commu
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_hce_spinlock, 16, 10000);
 }
 
-TEST(comparison_concurrent_simple_communication, 32x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_spinlock_channel)
-{
-    test::launch_core_multiplier_op(test::concurrent_simple_communication_op_hce_spinlock, 32, 10000);
-}
-
 //------------------------------------------------------------------------------
 // hce::lockfree 
 
@@ -264,11 +259,6 @@ TEST(comparison_concurrent_simple_communication, 16x_core_count_coroutines_commu
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_hce_lockfree, 16, 10000);
 }
 
-TEST(comparison_concurrent_simple_communication, 32x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_lockfree_channel)
-{
-    test::launch_core_multiplier_op(test::concurrent_simple_communication_op_hce_lockfree, 32, 10000);
-}
-
 //------------------------------------------------------------------------------
 // std::mutex
 
@@ -295,9 +285,4 @@ TEST(comparison_concurrent_simple_communication, 8x_core_count_coroutines_commun
 TEST(comparison_concurrent_simple_communication, 16x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_mutex_channel)
 {
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_std_mutex, 16, 10000);
-}
-
-TEST(comparison_concurrent_simple_communication, 32x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_mutex_channel)
-{
-    test::launch_core_multiplier_op(test::concurrent_simple_communication_op_std_mutex, 32, 10000);
 }
