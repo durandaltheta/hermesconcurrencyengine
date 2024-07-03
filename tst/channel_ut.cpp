@@ -299,7 +299,6 @@ hce::co<void> co_send_count_and_close_return_void(hce::channel<T> ch, size_t cou
     ch.close();
 }
 
-
 template <typename T>
 size_t send_recv_close_T(const size_t count) {
     size_t success_count=0;
@@ -442,6 +441,277 @@ size_t send_recv_close_T(const size_t count) {
     return success_count;
 }
 
+template <typename T>
+hce::co<void> co_store_recv_interrupt_with_close_return_void(hce::channel<T> ch, test::queue<T>& q) {
+    q.push((T)test::init<T>(0));
+
+    T t;
+    while(co_await ch.recv(t)) { 
+        q.push((T)test::init<T>(1));
+    }
+
+    q.push((T)test::init<T>(2));
+}
+
+template <typename T>
+hce::co<void> co_send_count_interrupt_with_close_return_void(hce::channel<T> ch) {
+    ch.close();
+    co_return;
+}
+
+template <typename T>
+size_t send_recv_interrupt_with_close_T(const size_t count) {
+    size_t success_count=0;
+
+    // thread to thread
+    {
+        auto test = [&](hce::channel<T> ch) {
+            test::queue<T> q;
+
+            std::thread thd([](hce::channel<T> ch, test::queue<T>& q){
+                T t;
+                q.push((T)test::init<T>(0));
+
+                while(ch.recv(t)) {
+                    q.push((T)test::init<T>(1)); 
+                }
+
+                q.push((T)test::init<T>(2));
+            },ch,std::ref(q));
+
+            ch.close();
+
+            EXPECT_EQ((T)test::init<T>(0), q.pop());
+            EXPECT_EQ((T)test::init<T>(2), q.pop());
+
+            ch.close();
+            thd.join();
+        };
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::make());
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::make(1));
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::make(count));
+        }
+
+        ++success_count;
+
+        // std::mutex
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::template make<std::mutex>());
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::template make<std::mutex>(1));
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::template make<std::mutex>(count));
+        }
+
+        ++success_count;
+    }
+
+    // thread to coroutine 
+    {
+        auto test = [&](hce::channel<T> ch) {
+            test::queue<T> q;
+            std::unique_ptr<hce::scheduler::lifecycle> lf;
+            auto sch = hce::scheduler::make(lf);
+            std::thread thd([&]{ sch->install(); });
+            sch->schedule(test::channel::co_store_recv_interrupt_with_close_return_void(ch,q));
+
+            ch.close();
+
+            EXPECT_EQ((T)test::init<T>(0), q.pop());
+            EXPECT_EQ((T)test::init<T>(2), q.pop());
+
+            lf.reset();
+            thd.join();
+        };
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::make());
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::make(1));
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::make(count));
+        }
+
+        ++success_count;
+
+        // std::mutex
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::template make<std::mutex>());
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::template make<std::mutex>(1));
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::template make<std::mutex>(count));
+        }
+
+        ++success_count;
+    }
+
+    // coroutine to thread
+    {
+        auto test = [&](hce::channel<T> ch){
+            std::unique_ptr<hce::scheduler::lifecycle> lf;
+            auto sch = hce::scheduler::make(lf);
+            std::thread thd([&]{ sch->install(); });
+            sch->schedule(test::channel::co_send_count_interrupt_with_close_return_void(ch));
+
+            T t;
+            EXPECT_FALSE((bool)ch.recv(t));
+
+            lf.reset();
+            thd.join();
+        };
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::make());
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::make(1));
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::make(count));
+        }
+
+        ++success_count;
+
+        // std::mutex
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::template make<std::mutex>());
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::template make<std::mutex>(1));
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::template make<std::mutex>(count));
+        }
+
+        ++success_count;
+    }
+
+    // coroutine to coroutine 
+    {
+        auto test = [&](hce::channel<T> ch){
+            test::queue<T> q;
+            std::unique_ptr<hce::scheduler::lifecycle> lf;
+            auto sch = hce::scheduler::make(lf);
+            std::thread thd([&]{ sch->install(); });
+            sch->schedule(test::channel::co_store_recv_interrupt_with_close_return_void(ch,q));
+            sch->schedule(test::channel::co_send_count_interrupt_with_close_return_void(ch));
+
+            EXPECT_EQ((T)test::init<T>(0), q.pop());
+            EXPECT_EQ((T)test::init<T>(2), q.pop());
+
+            lf.reset();
+            thd.join();
+        };
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::make());
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::make(1));
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::make(count));
+        }
+
+        ++success_count;
+
+        // lockfree 
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::template make<hce::lockfree>());
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::template make<hce::lockfree>(1));
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::template make<hce::lockfree>(count));
+        }
+
+        ++success_count;
+
+        // std::mutex
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::template make<std::mutex>());
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::template make<std::mutex>(1));
+        }
+
+        ++success_count;
+
+        for(size_t i=count; i>0; --i) {
+            test(hce::channel<T>::template make<std::mutex>(count));
+        }
+
+        ++success_count;
+    }
+
+    return success_count;
+}
+
 }
 }
 
@@ -468,6 +738,32 @@ TEST(channel, send_recv_close) {
     test(10);
     test(100);
     test(1000);
+    EXPECT_EQ(5,success_count);
+}
+
+TEST(channel, send_recv_interrupt_close) {
+    size_t success_count = 0;
+    const size_t expected = 27;
+
+    // count of sends and receives
+    auto test = [&](const size_t count) {
+        EXPECT_EQ(expected, test::channel::send_recv_interrupt_with_close_T<int>(count));
+        EXPECT_EQ(expected, test::channel::send_recv_interrupt_with_close_T<unsigned int>(count));
+        EXPECT_EQ(expected, test::channel::send_recv_interrupt_with_close_T<size_t>(count));
+        EXPECT_EQ(expected, test::channel::send_recv_interrupt_with_close_T<float>(count));
+        EXPECT_EQ(expected, test::channel::send_recv_interrupt_with_close_T<double>(count));
+        EXPECT_EQ(expected, test::channel::send_recv_interrupt_with_close_T<char>(count));
+        EXPECT_EQ(expected, test::channel::send_recv_interrupt_with_close_T<void*>(count));
+        EXPECT_EQ(expected, test::channel::send_recv_interrupt_with_close_T<std::string>(count));
+        EXPECT_EQ(expected, test::channel::send_recv_interrupt_with_close_T<test::CustomObject>(count));
+        ++success_count;
+    };
+
+    test(0);
+    test(1);
+    test(5);
+    test(10);
+    test(15);
     EXPECT_EQ(5,success_count);
 }
 

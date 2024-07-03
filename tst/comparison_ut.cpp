@@ -206,83 +206,68 @@ void concurrent_simple_communication_op_std_mutex(
 //------------------------------------------------------------------------------
 // hce::spinlock 
 
-TEST(comparison_concurrent_simple_communication, 1x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_spinlock_channel)
-{
+TEST(comparison_concurrent_simple_communication, 1x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_spinlock_channel) {
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_hce_spinlock, 1, 10000);
 }
 
-TEST(comparison_concurrent_simple_communication, 2x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_spinlock_channel)
-{
+TEST(comparison_concurrent_simple_communication, 2x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_spinlock_channel) {
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_hce_spinlock, 2, 10000);
 }
 
-TEST(comparison_concurrent_simple_communication, 4x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_spinlock_channel)
-{
+TEST(comparison_concurrent_simple_communication, 4x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_spinlock_channel) {
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_hce_spinlock, 4, 10000);
 }
 
-TEST(comparison_concurrent_simple_communication, 8x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_spinlock_channel)
-{
+TEST(comparison_concurrent_simple_communication, 8x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_spinlock_channel) {
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_hce_spinlock, 8, 10000);
 }
 
-TEST(comparison_concurrent_simple_communication, 16x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_spinlock_channel)
-{
+TEST(comparison_concurrent_simple_communication, 16x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_spinlock_channel) {
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_hce_spinlock, 16, 10000);
 }
 
 //------------------------------------------------------------------------------
 // hce::lockfree 
 
-TEST(comparison_concurrent_simple_communication, 1x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_lockfree_channel)
-{
+TEST(comparison_concurrent_simple_communication, 1x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_lockfree_channel) {
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_hce_lockfree, 1, 10000);
 }
 
-TEST(comparison_concurrent_simple_communication, 2x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_lockfree_channel)
-{
+TEST(comparison_concurrent_simple_communication, 2x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_lockfree_channel) {
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_hce_lockfree, 2, 10000);
 }
 
-TEST(comparison_concurrent_simple_communication, 4x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_lockfree_channel)
-{
+TEST(comparison_concurrent_simple_communication, 4x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_lockfree_channel) {
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_hce_lockfree, 4, 10000);
 }
 
-TEST(comparison_concurrent_simple_communication, 8x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_lockfree_channel)
-{
+TEST(comparison_concurrent_simple_communication, 8x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_lockfree_channel) {
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_hce_lockfree, 8, 10000);
 }
 
-TEST(comparison_concurrent_simple_communication, 16x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_lockfree_channel)
-{
+TEST(comparison_concurrent_simple_communication, 16x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_lockfree_channel) {
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_hce_lockfree, 16, 10000);
 }
 
 //------------------------------------------------------------------------------
 // std::mutex
 
-TEST(comparison_concurrent_simple_communication, 1x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_mutex_channel)
-{
+TEST(comparison_concurrent_simple_communication, 1x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_mutex_channel) {
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_std_mutex, 1, 10000);
 }
 
-TEST(comparison_concurrent_simple_communication, 2x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_mutex_channel)
-{
+TEST(comparison_concurrent_simple_communication, 2x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_mutex_channel) {
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_std_mutex, 2, 10000);
 }
 
-TEST(comparison_concurrent_simple_communication, 4x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_mutex_channel)
-{
+TEST(comparison_concurrent_simple_communication, 4x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_mutex_channel) {
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_std_mutex, 4, 10000);
 }
 
-TEST(comparison_concurrent_simple_communication, 8x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_mutex_channel)
-{
+TEST(comparison_concurrent_simple_communication, 8x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_mutex_channel) {
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_std_mutex, 8, 10000);
 }
 
-TEST(comparison_concurrent_simple_communication, 16x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_mutex_channel)
-{
+TEST(comparison_concurrent_simple_communication, 16x_core_count_coroutines_communicating_in_pairs_10000_msgs_sent_per_coroutine_over_mutex_channel) {
     test::launch_core_multiplier_op(test::concurrent_simple_communication_op_std_mutex, 16, 10000);
 }
