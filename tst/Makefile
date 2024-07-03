@@ -175,29 +175,29 @@ hce_ut/fast:
 	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/build
 .PHONY : hce_ut/fast
 
-channel_ut.o: channel_ut.cpp.o
-.PHONY : channel_ut.o
+comparison_ut.o: comparison_ut.cpp.o
+.PHONY : comparison_ut.o
 
 # target to build an object file
-channel_ut.cpp.o:
-	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/channel_ut.cpp.o
-.PHONY : channel_ut.cpp.o
+comparison_ut.cpp.o:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/comparison_ut.cpp.o
+.PHONY : comparison_ut.cpp.o
 
-channel_ut.i: channel_ut.cpp.i
-.PHONY : channel_ut.i
+comparison_ut.i: comparison_ut.cpp.i
+.PHONY : comparison_ut.i
 
 # target to preprocess a source file
-channel_ut.cpp.i:
-	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/channel_ut.cpp.i
-.PHONY : channel_ut.cpp.i
+comparison_ut.cpp.i:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/comparison_ut.cpp.i
+.PHONY : comparison_ut.cpp.i
 
-channel_ut.s: channel_ut.cpp.s
-.PHONY : channel_ut.s
+comparison_ut.s: comparison_ut.cpp.s
+.PHONY : comparison_ut.s
 
 # target to generate assembly for a file
-channel_ut.cpp.s:
-	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/channel_ut.cpp.s
-.PHONY : channel_ut.cpp.s
+comparison_ut.cpp.s:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/comparison_ut.cpp.s
+.PHONY : comparison_ut.cpp.s
 
 # Help Target
 help:
@@ -212,9 +212,9 @@ help:
 	@echo "... list_install_components"
 	@echo "... rebuild_cache"
 	@echo "... hce_ut"
-	@echo "... channel_ut.o"
-	@echo "... channel_ut.i"
-	@echo "... channel_ut.s"
+	@echo "... comparison_ut.o"
+	@echo "... comparison_ut.i"
+	@echo "... comparison_ut.s"
 .PHONY : help
 
 
