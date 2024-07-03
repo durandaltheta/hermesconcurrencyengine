@@ -107,28 +107,22 @@ struct unbuffered : public interface<T> {
     inline void close() {
         HCE_LOW_METHOD_ENTER("close");
 
-        std::deque<awt<bool>::interface*> parked_send;
-        std::deque<awt<bool>::interface*> parked_recv;
+        std::lock_guard<LOCK> lk(lk_);
+        if(!closed_flag_) {
+            closed_flag_ = true;
 
-        {
-            std::lock_guard<LOCK> lk(lk_);
-            if(!closed_flag_) {
-                closed_flag_ = true;
-                parked_send = std::move(parked_send_);
-                parked_recv = std::move(parked_recv_);
-                parked_send_.clear();
-                parked_recv_.clear();
+            for(auto& p : parked_send_) { 
+                HCE_TRACE_METHOD_BODY("close","closing parked send:",p);
+                p->resume(nullptr); 
             }
-        }
 
-        for(auto& p : parked_send) { 
-            HCE_TRACE_METHOD_BODY("close","closing parked send:",p);
-            p->resume(nullptr); 
-        }
+            for(auto& p : parked_recv_) { 
+                HCE_TRACE_METHOD_BODY("close","closing parked recv:",p);
+                p->resume(nullptr); 
+            }
 
-        for(auto& p : parked_recv) { 
-            HCE_TRACE_METHOD_BODY("close","closing parked recv:",p);
-            p->resume(nullptr); 
+            parked_send_.clear();
+            parked_recv_.clear();
         }
     }
 
@@ -297,6 +291,7 @@ private:
         } else if(parked_send_.size()) {
             HCE_TRACE_METHOD_BODY("recv_","resume sender");
             parked_send_.front()->resume(r);
+            parked_send_.pop_front();
 
             // return an awaitable which immediately returns true
             return hce::awt<bool>::make(new recv_interface(lk, true, true, nullptr));
@@ -345,14 +340,17 @@ private:
 /// buffered interface implementation
 template <typename T, typename LOCK>
 struct buffered : public interface<T> {
-    buffered() { HCE_LOW_CONSTRUCTOR(); }
+    buffered(int sz) : 
+        closed_flag_(false),
+        buf_(sz < 0 ? (size_t)1 : (size_t)sz)
+    { 
+        HCE_LOW_CONSTRUCTOR();
+    }
 
     virtual ~buffered(){ HCE_LOW_DESTRUCTOR(); }
 
     inline const char* nspace() const { return "hce::channel"; }
     inline const char* name() const { return "buffered"; }
-
-    buffered(int sz) : buf_(sz < 0 ? (size_t)1 : (size_t)sz) { }
 
     inline const std::type_info& type_info() const {
         return typeid(buffered); 
@@ -382,28 +380,22 @@ struct buffered : public interface<T> {
     inline void close() {
         HCE_LOW_METHOD_ENTER("close");
 
-        std::deque<awt<bool>::interface*> parked_send;
-        std::deque<awt<bool>::interface*> parked_recv;
+        std::lock_guard<LOCK> lk(lk_);
+        if(!closed_flag_) {
+            closed_flag_ = true;
 
-        {
-            std::lock_guard<LOCK> lk(lk_);
-            if(!closed_flag_) {
-                closed_flag_ = true;
-                parked_send = std::move(parked_send_);
-                parked_recv = std::move(parked_recv_);
-                parked_send_.clear();
-                parked_recv_.clear();
+            for(auto& p : parked_send_) { 
+                HCE_TRACE_METHOD_BODY("close","closing parked send:",p);
+                p->resume(nullptr); 
             }
-        }
 
-        for(auto& p : parked_send) { 
-            HCE_TRACE_METHOD_BODY("close","closing parked send:",p);
-            p->resume(nullptr); 
-        }
+            for(auto& p : parked_recv_) { 
+                HCE_TRACE_METHOD_BODY("close","closing parked recv:",p);
+                p->resume(nullptr); 
+            }
 
-        for(auto& p : parked_recv) { 
-            HCE_TRACE_METHOD_BODY("close","closing parked recv:",p);
-            p->resume(nullptr); 
+            parked_send_.clear();
+            parked_recv_.clear();
         }
     }
 
@@ -462,6 +454,8 @@ private:
     };
 
     inline hce::awt<bool> send_(void* s, bool is_rvalue) {
+        HCE_TRACE_METHOD_ENTER("send_",s,is_rvalue);
+
         struct send_interface : 
             public hce::scheduler::reschedule<
                 hce::awaitable::lockable<
@@ -507,12 +501,15 @@ private:
         std::unique_lock<LOCK> lk(lk_);
 
         if(closed_flag_) {
+            HCE_TRACE_METHOD_BODY("send_","closed");
             return hce::awt<bool>::make(new send_interface(lk, true, false));
         } else if(buf_.full()) {
+            HCE_TRACE_METHOD_BODY("send_","blocked");
             auto ai = new send_interface(lk, false, true, { s, is_rvalue});
             parked_send_.push_back(ai);
             return hce::awt<bool>::make(ai);
         } else {
+            HCE_TRACE_METHOD_BODY("send_","done");
             send_pair sp{s,is_rvalue};
             sp.send((void*)&buf_);
 
@@ -528,6 +525,8 @@ private:
 
     /// stackless `co_await`able recv operation
     inline hce::awt<bool> recv_(void* r) {
+        HCE_TRACE_METHOD_ENTER("recv_",r);
+
         struct recv_interface : 
             public hce::scheduler::reschedule<
                 hce::awaitable::lockable<
@@ -577,13 +576,16 @@ private:
 
         if(buf_.empty()) {
             if(closed_flag_ ) {
+                HCE_TRACE_METHOD_BODY("recv_","closed");
                 return hce::awt<bool>::make(new recv_interface(lk, true, true, false, nullptr));
             } else {
+                HCE_TRACE_METHOD_BODY("recv_","blocked");
                 auto ai = new recv_interface(lk, true, false, true, r);
                 parked_recv_.push_back(ai);
                 return hce::awt<bool>::make(ai);
             }
         } else {
+            HCE_TRACE_METHOD_BODY("recv_","done");
             *((T*)r) = std::move(buf_.front());
             buf_.pop();
 
@@ -598,10 +600,15 @@ private:
     }
     
     inline hce::yield<hce::result> try_send_(void* s, bool is_rvalue) {
+        HCE_TRACE_METHOD_ENTER("try_send_",s,is_rvalue);
+
         std::unique_lock<LOCK> lk(lk_);
 
-        if(closed_flag_) { return { hce::result::closed }; }
-        else if(!buf_.full()) {
+        if(closed_flag_) { 
+            HCE_TRACE_METHOD_BODY("try_send_","closed");
+            return { hce::result::closed }; 
+        } else if(!buf_.full()) {
+            HCE_TRACE_METHOD_BODY("try_send_","done");
             send_pair sp(s,is_rvalue);
             sp.send((void*)&buf_);
 
@@ -613,16 +620,27 @@ private:
             // return an awaitable which immediately returns true
             return { hce::result::success }; 
         }
-        else { return { hce::result::failure }; }
+        else { 
+            HCE_TRACE_METHOD_BODY("try_send_","failed");
+            return { hce::result::failure }; 
+        }
     }
     
     inline hce::yield<hce::result> try_recv_(void* r) {
+        HCE_TRACE_METHOD_ENTER("try_recv_",r);
+
         std::unique_lock<LOCK> lk(lk_);
 
         if(buf_.empty()) {
-            if(closed_flag_) { return { hce::result::closed }; }
-            else { return { hce::result::failure }; }
+            if(closed_flag_) { 
+                HCE_TRACE_METHOD_BODY("try_recv_","closed");
+                return { hce::result::closed }; 
+            } else { 
+                HCE_TRACE_METHOD_BODY("try_recv_","failed");
+                return { hce::result::failure }; 
+            }
         } else {
+            HCE_TRACE_METHOD_BODY("try_recv_","done");
             *((T*)r) = std::move(buf_.front());
             buf_.pop();
 

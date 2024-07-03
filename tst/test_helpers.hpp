@@ -14,14 +14,17 @@ template <typename T>
 struct queue {
     template <typename TSHADOW>
     void push(TSHADOW&& t) {
+        HCE_INFO_LOG("test::queue<T>::push()+");
         {
             std::lock_guard<hce::spinlock> lk(slk);
             vals.push_back(std::forward<TSHADOW>(t));
         }
         cv.notify_one();
+        HCE_INFO_LOG("test::queue<T>::push()-");
     }
 
     T pop() {
+        HCE_INFO_LOG("test::queue<T>::pop()+");
         std::unique_lock<hce::spinlock> lk(slk);
         while(!vals.size()) {
             cv.wait(lk);
@@ -29,11 +32,14 @@ struct queue {
 
         T res = std::move(vals.front());
         vals.pop_front();
+        HCE_INFO_LOG("test::queue<T>::pop()-");
         return res;
     }
 
     size_t size() {
+        HCE_INFO_LOG("test::queue<T>::size()+");
         std::lock_guard<hce::spinlock> lk(slk);
+        HCE_INFO_LOG("test::queue<T>::size()-");
         return vals.size();
     }
 

@@ -339,14 +339,13 @@ struct printable {
     virtual std::string content() const { return {}; }
 
     /// string conversion
-    virtual inline std::string to_string() const final { 
+    inline std::string to_string() const { 
         std::stringstream ss;
         ss << this->nspace()
            << "::"
            << this->name()
            << "@" 
            << (void*)this;
-
 
         std::string c = this->content();
 
