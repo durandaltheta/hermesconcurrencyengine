@@ -3,6 +3,12 @@
 #ifndef __HCE_COROUTINE_ENGINE_TEST_HELPERS__
 #define __HCE_COROUTINE_ENGINE_TEST_HELPERS__
 
+#include <deque>
+#include <mutex>
+#include <condition_variable>
+
+#include "atomic.hpp"
+
 namespace test {
 
 /*

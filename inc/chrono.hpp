@@ -49,12 +49,12 @@ std::string to_string(const std::chrono::time_point<Rep, Period>& t) {
 
 // project wide time units 
 enum unit {
-    hour,
-    minute,
-    second,
-    millisecond,
-    microsecond,
-    nanosecond
+    hours,
+    minutes,
+    seconds,
+    milliseconds,
+    microseconds,
+    nanoseconds
 };
 
 /// project wide duration type
@@ -126,22 +126,22 @@ static inline hce::chrono::duration to_duration(unit u, size_t count) {
     HCE_TRACE_FUNCTION_ENTER("hce::to_duration", u, count);
 
     switch(u) {
-        case unit::hour:
+        case unit::hours:
             return std::chrono::hours(count);
             break;
-        case unit::minute:
+        case unit::minutes:
             return std::chrono::minutes(count);
             break;
-        case unit::second:
+        case unit::seconds:
             return std::chrono::seconds(count);
             break;
-        case unit::millisecond:
+        case unit::milliseconds:
             return std::chrono::milliseconds(count);
             break;
-        case unit::microsecond:
+        case unit::microseconds:
             return std::chrono::microseconds(count);
             break;
-        case unit::nanosecond:
+        case unit::nanoseconds:
             return std::chrono::nanoseconds(count);
             break;
         default:
@@ -156,7 +156,7 @@ static inline hce::chrono::time_point to_time_point(const hce::chrono::time_poin
     return tp;
 }
 
-/// convert the duration to a time_point
+/// add the duration to the current time to get the future time_point
 static inline hce::chrono::time_point to_time_point(const hce::chrono::duration& dur) {
     HCE_TRACE_FUNCTION_ENTER("hce::to_time_point", dur);
     return hce::chrono::now() + dur;
