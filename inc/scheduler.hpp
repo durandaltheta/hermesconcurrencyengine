@@ -719,15 +719,17 @@ struct scheduler : public printable {
      reached, else `false` will be returned if it was cancelled early.
 
      @param id a reference to an hce::id which will be set to the launched timer's id
-     @param as the remaining arguments which will be passed to `hce::chrono::to_time_point()`
+     @param as the remaining arguments which will be passed to `hce::chrono::duration()`
      @return an awaitable to join with the timer timing out or being cancelled
      */
     template <typename... As>
     inline hce::awt<bool> start(hce::id& id, As&&... as) {
-        HCE_HIGH_METHOD_ENTER("start",id,as...);
+        hce::chrono::time_point timeout =
+            hce::chrono::duration(std::forward<As>(as)...) + hce::chrono::now();
+
+        HCE_HIGH_METHOD_ENTER("start",id,timeout);
         
-        std::unique_ptr<timer> t(new timer(
-            hce::chrono::to_time_point(std::forward<As>(as)...)));
+        std::unique_ptr<timer> t(new timer(*this, timeout));
 
         // acquire the id of the constructed timer
         id = t->id();
@@ -753,15 +755,17 @@ struct scheduler : public printable {
      The returned awaitable will result in `true` if the timer timeout was 
      reached, else `false` will be returned if it was cancelled early.
 
-     @param as the arguments will be passed to `hce::chrono::to_time_point()`
+     @param as the arguments will be passed to `hce::chrono::duration()`
      @return an awaitable to join with the timer timing out or being cancelled
      */
     template <typename... As>
     inline hce::awt<bool> sleep(As&&... as) {
-        HCE_HIGH_METHOD_ENTER("sleep",as...);
+        hce::chrono::time_point timeout =
+            hce::chrono::duration(std::forward<As>(as)...) + hce::chrono::now();
+
+        HCE_HIGH_METHOD_ENTER("sleep",timeout);
         
-        std::unique_ptr<timer> t(
-            new timer(hce::chrono::to_time_point(std::forward<As>(as)...)));
+        std::unique_ptr<timer> t(new timer(*this, timeout));
 
         {
             std::lock_guard<spinlock> lk(lk_);
@@ -899,7 +903,8 @@ private:
                 hce::awt<bool>::interface,
                 hce::spinlock>>
     {
-        timer(const hce::chrono::time_point& tp) : 
+        timer(hce::scheduler& parent,
+              const hce::chrono::time_point& tp) : 
             hce::scheduler::reschedule<
                 hce::awaitable::lockable<
                     hce::awt<bool>::interface,
@@ -911,7 +916,7 @@ private:
             id_(std::make_shared<bool>()),
             ready_(false),
             result_(false),
-            parent_(*hce::detail::scheduler::tl_this_scheduler())
+            parent_(parent)
         { }
 
         virtual ~timer(){
@@ -932,14 +937,21 @@ private:
             return ss.str(); 
         }
 
-        inline bool on_ready() { return ready_; }
+        inline bool on_ready() { 
+            HCE_MED_METHOD_BODY("on_ready",ready_);
+            return ready_; 
+        }
 
         inline void on_resume(void* m) { 
+            HCE_MED_METHOD_ENTER("on_resume",m);
             ready_ = true;
             result_ = (bool)m; 
         }
 
-        inline bool get_result() { return result_; }
+        inline bool get_result() { 
+            HCE_MED_METHOD_BODY("get_result",result_);
+            return result_; 
+        }
 
         inline const hce::chrono::time_point& timeout() const { return tp_; }
         inline const hce::id& id() const { return id_; }
@@ -989,6 +1001,7 @@ private:
             // resort timers from soonest to latest
             return lhs->timeout() < rhs->timeout();
         });
+        tasks_available_notify_();
     }
 
     /*
@@ -1071,6 +1084,7 @@ private:
                         while(it!=end) {
                             // check if a timer is ready to timeout
                             if((*it)->timeout() <= now) {
+                                HCE_TRACE_METHOD_BODY("run_","timer ready:",*it);
                                 ready_timers.push_back(*it);
                                 it = timers_.erase(it);
                             } else {
@@ -1131,7 +1145,7 @@ private:
                                 waiting_for_tasks_ = true;
                                 tasks_available_cv_.wait(lk);
                             } else {
-                                HCE_TRACE_METHOD_BODY("run_","wait_until");
+                                HCE_TRACE_METHOD_BODY("run_","wait_until",timers_.front()->timeout());
                                 // wait, at a maximum, till the next scheduled
                                 // timer timeout
                                 waiting_for_tasks_ = true;

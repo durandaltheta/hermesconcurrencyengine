@@ -199,6 +199,30 @@ chrono_ut.cpp.s:
 	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/chrono_ut.cpp.s
 .PHONY : chrono_ut.cpp.s
 
+scheduler_ut.o: scheduler_ut.cpp.o
+.PHONY : scheduler_ut.o
+
+# target to build an object file
+scheduler_ut.cpp.o:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/scheduler_ut.cpp.o
+.PHONY : scheduler_ut.cpp.o
+
+scheduler_ut.i: scheduler_ut.cpp.i
+.PHONY : scheduler_ut.i
+
+# target to preprocess a source file
+scheduler_ut.cpp.i:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/scheduler_ut.cpp.i
+.PHONY : scheduler_ut.cpp.i
+
+scheduler_ut.s: scheduler_ut.cpp.s
+.PHONY : scheduler_ut.s
+
+# target to generate assembly for a file
+scheduler_ut.cpp.s:
+	cd /home/duran/hermesconcurrencyengine && $(MAKE) $(MAKESILENT) -f tst/CMakeFiles/hce_ut.dir/build.make tst/CMakeFiles/hce_ut.dir/scheduler_ut.cpp.s
+.PHONY : scheduler_ut.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -215,6 +239,9 @@ help:
 	@echo "... chrono_ut.o"
 	@echo "... chrono_ut.i"
 	@echo "... chrono_ut.s"
+	@echo "... scheduler_ut.o"
+	@echo "... scheduler_ut.i"
+	@echo "... scheduler_ut.s"
 .PHONY : help
 
 

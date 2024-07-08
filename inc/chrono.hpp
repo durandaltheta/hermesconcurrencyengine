@@ -47,15 +47,12 @@ std::string to_string(const std::chrono::time_point<Rep, Period>& t) {
 
 }
 
-// project wide time units 
-enum unit {
-    hours,
-    minutes,
-    seconds,
-    milliseconds,
-    microseconds,
-    nanoseconds
-};
+typedef std::chrono::hours hours;
+typedef std::chrono::minutes minutes;
+typedef std::chrono::seconds seconds;
+typedef std::chrono::milliseconds milliseconds;
+typedef std::chrono::microseconds microseconds;
+typedef std::chrono::nanoseconds nanoseconds;
 
 /// project wide duration type
 struct duration : 
@@ -73,12 +70,27 @@ struct duration :
 
     ~duration() { HCE_TRACE_DESTRUCTOR(); }
 
-    inline std::string content() const {
-        return detail::to_string(*this);
-    }
-    
+    inline std::string content() const { return detail::to_string(*this); }
     inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "duration"; }
+
+    /**
+     @brief convert to a duration to the approximate count of a specified DURATION unit type
+
+     Example valid DURATION values:
+     - hce::chrono::hours 
+     - hce::chrono::minutes 
+     - hce::chrono::seconds 
+     - hce::chrono::milliseconds 
+     - hce::chrono::microseconds 
+     - hce::chrono::nanoseconds  
+
+     @return the count of ticks for the given type
+     */
+    template <typename DURATION>
+    inline size_t to_count() {
+        return (size_t)(std::chrono::duration_cast<DURATION>(*this).count());
+    }
 };
 
 /// project wide time_point type
@@ -95,79 +107,37 @@ struct time_point :
 
     ~time_point() { HCE_TRACE_DESTRUCTOR(); }
 
-    inline std::string content() const {
-        return detail::to_string(time_since_epoch());
-    }
-    
+    inline std::string content() const { return detail::to_string(*this); }
     inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "time_point"; }
+
+    /// trivial conversion to a duration
+    inline operator duration() { return time_since_epoch(); }
+
+    /**
+     @brief convert to a duration to the approximate count of a specified DURATION unit type
+
+     Example valid DURATION values:
+     - hce::chrono::hours 
+     - hce::chrono::minutes 
+     - hce::chrono::seconds 
+     - hce::chrono::milliseconds 
+     - hce::chrono::microseconds 
+     - hce::chrono::nanoseconds  
+
+     @return the count of ticks for the given type
+     */
+    template <typename DURATION>
+    inline size_t to_count() {
+        return ((hce::chrono::duration)*this).to_count<DURATION>();
+    }
 };
 
-/// acquire the current time
+/// acquire the current time using the library designated clock 
 static inline hce::chrono::time_point now() {
     HCE_TRACE_FUNCTION_ENTER("hce::now");
     return { std::chrono::steady_clock::now() };
 }
-
-/// convert the time_point to a duration 
-static inline hce::chrono::duration to_duration(const hce::chrono::time_point& tp) {
-    HCE_TRACE_FUNCTION_ENTER("hce::to_duration", tp);
-    return tp.time_since_epoch();
-}
-
-/// return the duration 
-static inline hce::chrono::duration to_duration(const hce::chrono::duration& dur) {
-    HCE_TRACE_FUNCTION_ENTER("hce::to_duration", dur);
-    return dur;
-}
-
-/// return a duration equivalent to the count of units
-static inline hce::chrono::duration to_duration(unit u, size_t count) {
-    HCE_TRACE_FUNCTION_ENTER("hce::to_duration", u, count);
-
-    switch(u) {
-        case unit::hours:
-            return std::chrono::hours(count);
-            break;
-        case unit::minutes:
-            return std::chrono::minutes(count);
-            break;
-        case unit::seconds:
-            return std::chrono::seconds(count);
-            break;
-        case unit::milliseconds:
-            return std::chrono::milliseconds(count);
-            break;
-        case unit::microseconds:
-            return std::chrono::microseconds(count);
-            break;
-        case unit::nanoseconds:
-            return std::chrono::nanoseconds(count);
-            break;
-        default:
-            return std::chrono::nanoseconds(0);
-            break;
-    }
-}
-
-/// return the time_point
-static inline hce::chrono::time_point to_time_point(const hce::chrono::time_point& tp) {
-    HCE_TRACE_FUNCTION_ENTER("hce::to_time_point", tp);
-    return tp;
-}
-
-/// add the duration to the current time to get the future time_point
-static inline hce::chrono::time_point to_time_point(const hce::chrono::duration& dur) {
-    HCE_TRACE_FUNCTION_ENTER("hce::to_time_point", dur);
-    return hce::chrono::now() + dur;
-}
-
-/// return a time_point equivalent to the count of units in the future
-static inline hce::chrono::time_point to_time_point(unit u, size_t count) {
-    HCE_TRACE_FUNCTION_ENTER("hce::to_time_point", u, count);
-    return hce::chrono::to_time_point(hce::chrono::to_duration(u,count));
-}
-
 
 }
 }
