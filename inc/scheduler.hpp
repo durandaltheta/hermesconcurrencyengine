@@ -1084,7 +1084,6 @@ private:
                         while(it!=end) {
                             // check if a timer is ready to timeout
                             if((*it)->timeout() <= now) {
-                                HCE_TRACE_METHOD_BODY("run_","timer ready:",*it);
                                 ready_timers.push_back(*it);
                                 it = timers_.erase(it);
                             } else {
@@ -1297,7 +1296,7 @@ private:
         while(timers_.size()) {
             auto t = timers_.front();
             timers_.pop_front();
-            delete t; // destructor calls cancel operation
+            t->resume((void*)0);
         }
     }
 
