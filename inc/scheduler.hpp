@@ -720,7 +720,7 @@ struct scheduler : public printable {
 
      @param id a reference to an hce::id which will be set to the launched timer's id
      @param as the remaining arguments which will be passed to `hce::chrono::duration()`
-     @return an awaitable to join with the timer timing out or being cancelled
+     @return an awaitable to join with the timer timing out (returning true) or being cancelled (returning false)
      */
     template <typename... As>
     inline hce::awt<bool> start(hce::id& id, As&&... as) {
@@ -1442,7 +1442,7 @@ private:
  */
 template <typename... As>
 void schedule(As&&... as) {
-    HCE_HIGH_FUNCTION_ENTER("schedule",as...);
+    HCE_HIGH_FUNCTION_ENTER("schedule");
     scheduler::get().schedule(std::forward<As>(as)...);
 }
 
@@ -1464,7 +1464,7 @@ auto join(As&&... as) {
  */
 template <typename... As>
 auto scope(As&&... as) {
-    HCE_HIGH_FUNCTION_ENTER("scope",as...);
+    HCE_HIGH_FUNCTION_ENTER("scope");
     return scheduler::get().scope(std::forward<As>(as)...);
 }
 
@@ -1475,7 +1475,7 @@ auto scope(As&&... as) {
  */
 template <typename... As>
 auto start(As&&... as) {
-    HCE_HIGH_FUNCTION_ENTER("start",as...);
+    HCE_HIGH_FUNCTION_ENTER("start");
     return scheduler::get().start(std::forward<As>(as)...);
 }
 
@@ -1486,7 +1486,7 @@ auto start(As&&... as) {
  */
 template <typename... As>
 auto sleep(As&&... as) {
-    HCE_HIGH_FUNCTION_ENTER("sleep",as...);
+    HCE_HIGH_FUNCTION_ENTER("sleep");
     return scheduler::get().sleep(std::forward<As>(as)...);
 }
 
@@ -1497,7 +1497,7 @@ auto sleep(As&&... as) {
  */
 template <typename... As>
 auto cancel(As&&... as) {
-    HCE_HIGH_FUNCTION_ENTER("cancel",as...);
+    HCE_HIGH_FUNCTION_ENTER("cancel");
     return scheduler::get().cancel(std::forward<As>(as)...);
 }
 

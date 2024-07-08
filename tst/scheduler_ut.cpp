@@ -1083,6 +1083,29 @@ size_t scheduler_start_As(As&&... as) {
         ++success_count;
     }
 
+    // global timer timeout
+    {
+        auto now = hce::chrono::now();
+        auto requested_sleep_ticks = 
+                hce::chrono::duration(as...).
+                    to_count<hce::chrono::milliseconds>();
+        hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + now);
+        hce::id i;
+        EXPECT_TRUE((bool)hce::start(i, as...));
+
+        auto done = hce::chrono::now();
+        auto slept_ticks = absolute_difference(done,now).to_count<hce::chrono::milliseconds>();
+        auto overslept_ticks = absolute_difference(target_timeout, done).to_count<hce::chrono::milliseconds>();
+
+        // ensure we slept at least the correct amount of time
+        EXPECT_GE(slept_ticks, requested_sleep_ticks); 
+
+        // ensure we didn't sleep past the upper bound
+        EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
+
+        ++success_count;
+    }
+
     // thread sleep through timer timeout
     {
         auto now = hce::chrono::now();
@@ -1112,6 +1135,70 @@ size_t scheduler_start_As(As&&... as) {
         ++success_count;
     }
 
+    // global thread sleep through timer timeout
+    {
+        auto now = hce::chrono::now();
+        auto requested_sleep_ticks = 
+                hce::chrono::duration(as...).
+                    to_count<hce::chrono::milliseconds>();
+        hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + now);
+        hce::id i;
+        auto awt = hce::start(i, as...);
+
+        // ensure we sleep for the entire normal 
+        std::this_thread::sleep_for(hce::chrono::duration(as...));
+
+        // the awaitable should return immediately
+        EXPECT_TRUE((bool)awt);
+
+        auto done = hce::chrono::now();
+        auto slept_ticks = absolute_difference(done,now).to_count<hce::chrono::milliseconds>();
+        auto overslept_ticks = absolute_difference(target_timeout, done).to_count<hce::chrono::milliseconds>();
+
+        // ensure we slept at least the correct amount of time
+        EXPECT_GE(slept_ticks, requested_sleep_ticks); 
+
+        // ensure we didn't sleep past the upper bound
+        EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
+
+        ++success_count;
+    }
+
+    // stacked thread timeouts 
+    {
+        HCE_INFO_LOG("scheduler_start_As():stacked thread timeouts+");
+        const size_t max_timer_offset = 50;
+        auto now = hce::chrono::now();
+        auto requested_sleep_ticks = 
+                hce::chrono::duration(as...).
+                    to_count<hce::chrono::milliseconds>();
+        hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + hce::chrono::milliseconds(max_timer_offset) + now);
+        std::deque<hce::awt<bool>> started_q;
+
+        for(size_t c=0; c<max_timer_offset; ++c) {
+            hce::id i;
+            started_q.push_back(sch->start(i, hce::chrono::duration(as...) + hce::chrono::milliseconds(c)));
+        }
+
+        for(size_t c=0; c<max_timer_offset; ++c) {
+            EXPECT_TRUE((bool)std::move(started_q.front()));
+            started_q.pop_front();
+        }
+
+        auto done = hce::chrono::now();
+        auto slept_ticks = absolute_difference(done,now).to_count<hce::chrono::milliseconds>();
+        auto overslept_ticks = absolute_difference(target_timeout, done).to_count<hce::chrono::milliseconds>();
+
+        // ensure we slept at least the correct amount of time
+        EXPECT_GE(slept_ticks, requested_sleep_ticks); 
+
+        // ensure we didn't sleep past the upper bound
+        EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
+
+        ++success_count;
+        HCE_INFO_LOG("scheduler_start_As():stacked thread timeouts-");
+    }
+
     // coroutine timer timeout
     {
         test::queue<hce::id> q;
@@ -1135,6 +1222,64 @@ size_t scheduler_start_As(As&&... as) {
         ++success_count;
     }
 
+    // coroutine timer timeout
+    {
+        test::queue<hce::id> q;
+        auto now = hce::chrono::now();
+        auto requested_sleep_ticks = 
+                hce::chrono::duration(as...).
+                    to_count<hce::chrono::milliseconds>();
+        hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + now);
+        EXPECT_TRUE((bool)hce::join(co_start(q, as...)));
+
+        auto done = hce::chrono::now();
+        auto slept_ticks = absolute_difference(done,now).to_count<hce::chrono::milliseconds>();
+        auto overslept_ticks = absolute_difference(target_timeout, done).to_count<hce::chrono::milliseconds>();
+
+        // ensure we slept at least the correct amount of time
+        EXPECT_GE(slept_ticks, requested_sleep_ticks); 
+
+        // ensure we didn't sleep past the upper bound
+        EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
+
+        ++success_count;
+    }
+
+    // stacked coroutine timeouts 
+    {
+        HCE_INFO_LOG("scheduler_start_As():stacked coroutine timeouts+");
+        test::queue<hce::id> q;
+        const size_t max_timer_offset = 50;
+        auto now = hce::chrono::now();
+        auto requested_sleep_ticks = 
+                hce::chrono::duration(as...).
+                    to_count<hce::chrono::milliseconds>();
+        hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + hce::chrono::milliseconds(max_timer_offset) + now);
+        std::deque<hce::awt<bool>> started_q;
+
+        for(size_t c=0; c<max_timer_offset; ++c) {
+            started_q.push_back(sch->join(co_start(q, hce::chrono::duration(as...) + hce::chrono::milliseconds(c))));
+        }
+
+        for(size_t c=0; c<max_timer_offset; ++c) {
+            EXPECT_TRUE((bool)std::move(started_q.front()));
+            started_q.pop_front();
+        }
+
+        auto done = hce::chrono::now();
+        auto slept_ticks = absolute_difference(done,now).to_count<hce::chrono::milliseconds>();
+        auto overslept_ticks = absolute_difference(target_timeout, done).to_count<hce::chrono::milliseconds>();
+
+        // ensure we slept at least the correct amount of time
+        EXPECT_GE(slept_ticks, requested_sleep_ticks); 
+
+        // ensure we didn't sleep past the upper bound
+        EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
+
+        ++success_count;
+        HCE_INFO_LOG("scheduler_start_As():stacked coroutine timeouts-");
+    }
+
     lf.reset();
     thd.join();
 
@@ -1145,15 +1290,273 @@ size_t scheduler_start_As(As&&... as) {
 }
 
 TEST(scheduler, start) {
-    EXPECT_EQ(3,test::scheduler::scheduler_start_As(hce::chrono::milliseconds(50)));
-    EXPECT_EQ(3,test::scheduler::scheduler_start_As(hce::chrono::microseconds(5000)));
-    EXPECT_EQ(3,test::scheduler::scheduler_start_As(hce::chrono::nanoseconds(500000)));
-    EXPECT_EQ(3,test::scheduler::scheduler_start_As(hce::chrono::duration(hce::chrono::milliseconds(50))));
-    EXPECT_EQ(3,test::scheduler::scheduler_start_As(hce::chrono::duration(hce::chrono::microseconds(5000))));
-    EXPECT_EQ(3,test::scheduler::scheduler_start_As(hce::chrono::duration(hce::chrono::nanoseconds(500000))));
-    EXPECT_EQ(3,test::scheduler::scheduler_start_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::milliseconds(50)))));
-    EXPECT_EQ(3,test::scheduler::scheduler_start_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::microseconds(5000)))));
-    EXPECT_EQ(3,test::scheduler::scheduler_start_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::nanoseconds(500000)))));
+    const size_t expected_successes = 8;
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::milliseconds(50)));
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::microseconds(50000)));
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::nanoseconds(50000000)));
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::duration(hce::chrono::milliseconds(50))));
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::duration(hce::chrono::microseconds(50000))));
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::duration(hce::chrono::nanoseconds(50000000))));
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::milliseconds(50)))));
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::microseconds(50000)))));
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::nanoseconds(50000000)))));
+}
+
+namespace test {
+namespace scheduler {
+
+template <typename... As>
+hce::co<bool> co_sleep(
+        test::queue<int>& q,
+        As&&... as) {
+    auto awt = hce::scheduler::local().sleep(as...);
+    co_return co_await std::move(awt);
+}
+
+template <typename... As>
+size_t scheduler_sleep_As(As&&... as) {
+    const size_t upper_bound_overslept_milli_ticks = 50;
+    size_t success_count = 0;
+
+    std::unique_ptr<hce::scheduler::lifecycle> lf;
+    auto sch = hce::scheduler::make(lf);
+    std::thread thd([&]{ sch->install(); });
+
+    // thread timer timeout
+    {
+        auto now = hce::chrono::now();
+        auto requested_sleep_ticks = 
+                hce::chrono::duration(as...).
+                    to_count<hce::chrono::milliseconds>();
+        hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + now);
+        EXPECT_TRUE((bool)sch->sleep(as...));
+
+        auto done = hce::chrono::now();
+        auto slept_ticks = absolute_difference(done,now).to_count<hce::chrono::milliseconds>();
+        auto overslept_ticks = absolute_difference(target_timeout, done).to_count<hce::chrono::milliseconds>();
+
+        // ensure we slept at least the correct amount of time
+        EXPECT_GE(slept_ticks, requested_sleep_ticks); 
+
+        // ensure we didn't sleep past the upper bound
+        EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
+
+        ++success_count;
+    }
+
+    // global timer timeout
+    {
+        auto now = hce::chrono::now();
+        auto requested_sleep_ticks = 
+                hce::chrono::duration(as...).
+                    to_count<hce::chrono::milliseconds>();
+        hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + now);
+        EXPECT_TRUE((bool)hce::sleep(as...));
+
+        auto done = hce::chrono::now();
+        auto slept_ticks = absolute_difference(done,now).to_count<hce::chrono::milliseconds>();
+        auto overslept_ticks = absolute_difference(target_timeout, done).to_count<hce::chrono::milliseconds>();
+
+        // ensure we slept at least the correct amount of time
+        EXPECT_GE(slept_ticks, requested_sleep_ticks); 
+
+        // ensure we didn't sleep past the upper bound
+        EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
+
+        ++success_count;
+    }
+
+    // thread sleep through timer timeout
+    {
+        auto now = hce::chrono::now();
+        auto requested_sleep_ticks = 
+                hce::chrono::duration(as...).
+                    to_count<hce::chrono::milliseconds>();
+        hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + now);
+        auto awt = sch->sleep(as...);
+
+        // ensure we sleep for the entire normal 
+        std::this_thread::sleep_for(hce::chrono::duration(as...));
+
+        // the awaitable should return immediately
+        EXPECT_TRUE((bool)awt);
+
+        auto done = hce::chrono::now();
+        auto slept_ticks = absolute_difference(done,now).to_count<hce::chrono::milliseconds>();
+        auto overslept_ticks = absolute_difference(target_timeout, done).to_count<hce::chrono::milliseconds>();
+
+        // ensure we slept at least the correct amount of time
+        EXPECT_GE(slept_ticks, requested_sleep_ticks); 
+
+        // ensure we didn't sleep past the upper bound
+        EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
+
+        ++success_count;
+    }
+
+    // thread sleep through timer timeout
+    {
+        auto now = hce::chrono::now();
+        auto requested_sleep_ticks = 
+                hce::chrono::duration(as...).
+                    to_count<hce::chrono::milliseconds>();
+        hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + now);
+        auto awt = hce::sleep(as...);
+
+        // ensure we sleep for the entire normal 
+        std::this_thread::sleep_for(hce::chrono::duration(as...));
+
+        // the awaitable should return immediately
+        EXPECT_TRUE((bool)awt);
+
+        auto done = hce::chrono::now();
+        auto slept_ticks = absolute_difference(done,now).to_count<hce::chrono::milliseconds>();
+        auto overslept_ticks = absolute_difference(target_timeout, done).to_count<hce::chrono::milliseconds>();
+
+        // ensure we slept at least the correct amount of time
+        EXPECT_GE(slept_ticks, requested_sleep_ticks); 
+
+        // ensure we didn't sleep past the upper bound
+        EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
+
+        ++success_count;
+    }
+
+    // stacked thread timeouts 
+    {
+        HCE_INFO_LOG("scheduler_sleep_As():stacked thread timeouts+");
+        const size_t max_timer_offset = 50;
+        auto now = hce::chrono::now();
+        auto requested_sleep_ticks = 
+                hce::chrono::duration(as...).
+                    to_count<hce::chrono::milliseconds>();
+        hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + hce::chrono::milliseconds(max_timer_offset) + now);
+        std::deque<hce::awt<bool>> started_q;
+
+        for(size_t c=0; c<max_timer_offset; ++c) {
+            started_q.push_back(sch->sleep(hce::chrono::duration(as...) + hce::chrono::milliseconds(c)));
+        }
+
+        for(size_t c=0; c<max_timer_offset; ++c) {
+            EXPECT_TRUE((bool)std::move(started_q.front()));
+            started_q.pop_front();
+        }
+
+        auto done = hce::chrono::now();
+        auto slept_ticks = absolute_difference(done,now).to_count<hce::chrono::milliseconds>();
+        auto overslept_ticks = absolute_difference(target_timeout, done).to_count<hce::chrono::milliseconds>();
+
+        // ensure we slept at least the correct amount of time
+        EXPECT_GE(slept_ticks, requested_sleep_ticks); 
+
+        // ensure we didn't sleep past the upper bound
+        EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
+
+        ++success_count;
+        HCE_INFO_LOG("scheduler_sleep_As():stacked thread timeouts-");
+    }
+
+    // coroutine timer timeout
+    {
+        test::queue<int> q;
+        auto now = hce::chrono::now();
+        auto requested_sleep_ticks = 
+                hce::chrono::duration(as...).
+                    to_count<hce::chrono::milliseconds>();
+        hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + now);
+        EXPECT_TRUE((bool)sch->join(co_sleep(q, as...)));
+
+        auto done = hce::chrono::now();
+        auto slept_ticks = absolute_difference(done,now).to_count<hce::chrono::milliseconds>();
+        auto overslept_ticks = absolute_difference(target_timeout, done).to_count<hce::chrono::milliseconds>();
+
+        // ensure we slept at least the correct amount of time
+        EXPECT_GE(slept_ticks, requested_sleep_ticks); 
+
+        // ensure we didn't sleep past the upper bound
+        EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
+
+        ++success_count;
+    }
+
+    // coroutine timer timeout
+    {
+        test::queue<int> q;
+        auto now = hce::chrono::now();
+        auto requested_sleep_ticks = 
+                hce::chrono::duration(as...).
+                    to_count<hce::chrono::milliseconds>();
+        hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + now);
+        EXPECT_TRUE((bool)hce::join(co_sleep(q, as...)));
+
+        auto done = hce::chrono::now();
+        auto slept_ticks = absolute_difference(done,now).to_count<hce::chrono::milliseconds>();
+        auto overslept_ticks = absolute_difference(target_timeout, done).to_count<hce::chrono::milliseconds>();
+
+        // ensure we slept at least the correct amount of time
+        EXPECT_GE(slept_ticks, requested_sleep_ticks); 
+
+        // ensure we didn't sleep past the upper bound
+        EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
+
+        ++success_count;
+    }
+
+    // stacked coroutine timeouts 
+    {
+        HCE_INFO_LOG("scheduler_sleep_As():stacked coroutine timeouts+");
+        test::queue<int> q;
+        const size_t max_timer_offset = 50;
+        auto now = hce::chrono::now();
+        auto requested_sleep_ticks = 
+                hce::chrono::duration(as...).
+                    to_count<hce::chrono::milliseconds>();
+        hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + hce::chrono::milliseconds(max_timer_offset) + now);
+        std::deque<hce::awt<bool>> started_q;
+
+        for(size_t c=0; c<max_timer_offset; ++c) {
+            started_q.push_back(sch->join(co_sleep(q, hce::chrono::duration(as...) + hce::chrono::milliseconds(c))));
+        }
+
+        for(size_t c=0; c<max_timer_offset; ++c) {
+            EXPECT_TRUE((bool)std::move(started_q.front()));
+            started_q.pop_front();
+        }
+
+        auto done = hce::chrono::now();
+        auto slept_ticks = absolute_difference(done,now).to_count<hce::chrono::milliseconds>();
+        auto overslept_ticks = absolute_difference(target_timeout, done).to_count<hce::chrono::milliseconds>();
+
+        // ensure we slept at least the correct amount of time
+        EXPECT_GE(slept_ticks, requested_sleep_ticks); 
+
+        // ensure we didn't sleep past the upper bound
+        EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
+
+        ++success_count;
+        HCE_INFO_LOG("scheduler_sleep_As():stacked coroutine timeouts-");
+    }
+
+    lf.reset();
+    thd.join();
+
+    return success_count; 
+}
+
+}
+}
+
+TEST(scheduler, sleep) {
+    const size_t expected_successes = 8;
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::milliseconds(50)));
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::microseconds(50000)));
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::nanoseconds(50000000)));
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::duration(hce::chrono::milliseconds(50))));
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::duration(hce::chrono::microseconds(50000))));
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::duration(hce::chrono::nanoseconds(50000000))));
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::milliseconds(50)))));
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::microseconds(50000)))));
+    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::nanoseconds(50000000)))));
 }
 
 namespace test {
@@ -1161,7 +1564,10 @@ namespace scheduler {
 
 template <typename... As>
 size_t scheduler_cancel_As(As&&... as) {
-    const size_t upper_bound_overslept_milli_ticks = 50;
+    HCE_INFO_LOG(
+            "scheduler_cancel_As:milli timeout:%zu",
+            hce::chrono::duration(as...).
+                to_count<hce::chrono::milliseconds>());
     size_t success_count = 0;
 
     std::unique_ptr<hce::scheduler::lifecycle> lf;
@@ -1185,17 +1591,42 @@ size_t scheduler_cancel_As(As&&... as) {
 
             auto done = hce::chrono::now();
             auto slept_ticks = absolute_difference(done,now).to_count<hce::chrono::milliseconds>();
-            auto overslept_ticks = absolute_difference(target_timeout, done).to_count<hce::chrono::milliseconds>();
 
             // ensure we slept at least the correct amount of time
-            EXPECT_GE(slept_ticks, requested_sleep_ticks); 
-
-            // ensure we didn't sleep past the upper bound
-            EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
+            EXPECT_LT(slept_ticks, requested_sleep_ticks); 
         });
 
         hce::id i = q.pop();
         EXPECT_TRUE(sch->cancel(i));
+        sleeping_thd.join();
+
+        ++success_count;
+    }
+
+    // thread timer cancel
+    {
+        test::queue<hce::id> q;
+
+        std::thread sleeping_thd([&]{
+            hce::id i;
+            auto now = hce::chrono::now();
+            auto requested_sleep_ticks = 
+                    hce::chrono::duration(as...).
+                        to_count<hce::chrono::milliseconds>();
+            hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + now);
+            auto awt = hce::start(i, as...);
+            q.push(i);
+            EXPECT_FALSE((bool)std::move(awt));
+
+            auto done = hce::chrono::now();
+            auto slept_ticks = absolute_difference(done,now).to_count<hce::chrono::milliseconds>();
+
+            // ensure we slept at least the correct amount of time
+            EXPECT_LT(slept_ticks, requested_sleep_ticks); 
+        });
+
+        hce::id i = q.pop();
+        EXPECT_TRUE(hce::cancel(i));
         sleeping_thd.join();
 
         ++success_count;
@@ -1213,17 +1644,36 @@ size_t scheduler_cancel_As(As&&... as) {
         hce::id i = q.pop();
         sch->cancel(i);
 
-        EXPECT_TRUE((bool)std::move(awt));
+        EXPECT_FALSE((bool)std::move(awt));
 
         auto done = hce::chrono::now();
         auto slept_ticks = absolute_difference(done,now).to_count<hce::chrono::milliseconds>();
-        auto overslept_ticks = absolute_difference(target_timeout, done).to_count<hce::chrono::milliseconds>();
 
         // ensure we slept at least the correct amount of time
-        EXPECT_GE(slept_ticks, requested_sleep_ticks); 
+        EXPECT_LT(slept_ticks, requested_sleep_ticks); 
 
-        // ensure we didn't sleep past the upper bound
-        EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
+        ++success_count;
+    }
+
+    // coroutine timer cancel
+    {
+        test::queue<hce::id> q;
+        auto now = hce::chrono::now();
+        auto requested_sleep_ticks = 
+            hce::chrono::duration(as...).
+                to_count<hce::chrono::milliseconds>();
+        hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + now);
+        auto awt = hce::join(co_start(q, as...));
+        hce::id i = q.pop();
+        hce::cancel(i);
+
+        EXPECT_FALSE((bool)std::move(awt));
+
+        auto done = hce::chrono::now();
+        auto slept_ticks = absolute_difference(done,now).to_count<hce::chrono::milliseconds>();
+
+        // ensure we slept at least the correct amount of time
+        EXPECT_LT(slept_ticks, requested_sleep_ticks); 
 
         ++success_count;
     }
@@ -1238,13 +1688,13 @@ size_t scheduler_cancel_As(As&&... as) {
 }
 
 TEST(scheduler, cancel) {
-    EXPECT_EQ(2,test::scheduler::scheduler_cancel_As(hce::chrono::milliseconds(50)));
-    EXPECT_EQ(3,test::scheduler::scheduler_cancel_As(hce::chrono::microseconds(5000)));
-    EXPECT_EQ(3,test::scheduler::scheduler_cancel_As(hce::chrono::nanoseconds(500000)));
-    EXPECT_EQ(3,test::scheduler::scheduler_cancel_As(hce::chrono::duration(hce::chrono::milliseconds(50))));
-    EXPECT_EQ(3,test::scheduler::scheduler_cancel_As(hce::chrono::duration(hce::chrono::microseconds(5000))));
-    EXPECT_EQ(3,test::scheduler::scheduler_cancel_As(hce::chrono::duration(hce::chrono::nanoseconds(500000))));
-    EXPECT_EQ(3,test::scheduler::scheduler_cancel_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::milliseconds(50)))));
-    EXPECT_EQ(3,test::scheduler::scheduler_cancel_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::microseconds(5000)))));
-    EXPECT_EQ(3,test::scheduler::scheduler_cancel_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::nanoseconds(500000)))));
+    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::milliseconds(50)));
+    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::microseconds(50000)));
+    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::nanoseconds(50000000)));
+    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::duration(hce::chrono::milliseconds(50))));
+    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::duration(hce::chrono::microseconds(50000))));
+    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::duration(hce::chrono::nanoseconds(50000000))));
+    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::milliseconds(50)))));
+    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::microseconds(50000)))));
+    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::nanoseconds(50000000)))));
 }
