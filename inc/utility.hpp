@@ -144,8 +144,8 @@
 #if HCELOGLIMIT >= 0
 #define HCE_INFO_CONSTRUCTOR(...) this->log_constructor__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_INFO_DESTRUCTOR() this->log_destructor__(loguru::Verbosity_INFO, __FILE__, __LINE__)
-#define HCE_INFO_METHOD_ENTER(...) this->log_method_enter__(loguru::Verbosity_INF, __FILE__, __LINE__O __VA_OPT__(,) __VA_ARGS__)
-#define HCE_INFO_METHOD_BODY(...) this->log_method_body__(loguru::Verbosity_INFO __VA_OPT__(,) __VA_ARGS__)
+#define HCE_INFO_METHOD_ENTER(...) this->log_method_enter__(loguru::Verbosity_INF, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_INFO_METHOD_BODY(...) this->log_method_body__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_INFO_FUNCTION_ENTER(...) hce::printable::log_function_enter__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_INFO_FUNCTION_BODY(...) hce::printable::log_function_body__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_INFO_LOG(...) loguru::log(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)

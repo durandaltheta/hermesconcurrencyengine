@@ -6,6 +6,7 @@
 #include <vector>
 #include <list>
 #include <forward_list>
+#include <iostream>
 
 #include "loguru.hpp"
 #include "atomic.hpp"
@@ -1166,7 +1167,6 @@ size_t scheduler_start_As(As&&... as) {
 
     // stacked thread timeouts 
     {
-        HCE_INFO_LOG("scheduler_start_As():stacked thread timeouts+");
         const size_t max_timer_offset = 50;
         auto now = hce::chrono::now();
         auto requested_sleep_ticks = 
@@ -1175,12 +1175,12 @@ size_t scheduler_start_As(As&&... as) {
         hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + hce::chrono::milliseconds(max_timer_offset) + now);
         std::deque<hce::awt<bool>> started_q;
 
-        for(size_t c=0; c<max_timer_offset; ++c) {
+        for(size_t c=max_timer_offset; c>0; --c) {
             hce::id i;
             started_q.push_back(sch->start(i, hce::chrono::duration(as...) + hce::chrono::milliseconds(c)));
         }
 
-        for(size_t c=0; c<max_timer_offset; ++c) {
+        for(size_t c=max_timer_offset; c>0; --c) {
             EXPECT_TRUE((bool)std::move(started_q.front()));
             started_q.pop_front();
         }
@@ -1196,7 +1196,6 @@ size_t scheduler_start_As(As&&... as) {
         EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
 
         ++success_count;
-        HCE_INFO_LOG("scheduler_start_As():stacked thread timeouts-");
     }
 
     // coroutine timer timeout
@@ -1247,7 +1246,6 @@ size_t scheduler_start_As(As&&... as) {
 
     // stacked coroutine timeouts 
     {
-        HCE_INFO_LOG("scheduler_start_As():stacked coroutine timeouts+");
         test::queue<hce::id> q;
         const size_t max_timer_offset = 50;
         auto now = hce::chrono::now();
@@ -1257,11 +1255,11 @@ size_t scheduler_start_As(As&&... as) {
         hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + hce::chrono::milliseconds(max_timer_offset) + now);
         std::deque<hce::awt<bool>> started_q;
 
-        for(size_t c=0; c<max_timer_offset; ++c) {
+        for(size_t c=max_timer_offset; c>0; --c) {
             started_q.push_back(sch->join(co_start(q, hce::chrono::duration(as...) + hce::chrono::milliseconds(c))));
         }
 
-        for(size_t c=0; c<max_timer_offset; ++c) {
+        for(size_t c=max_timer_offset; c>0; --c) {
             EXPECT_TRUE((bool)std::move(started_q.front()));
             started_q.pop_front();
         }
@@ -1277,7 +1275,6 @@ size_t scheduler_start_As(As&&... as) {
         EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
 
         ++success_count;
-        HCE_INFO_LOG("scheduler_start_As():stacked coroutine timeouts-");
     }
 
     lf.reset();
@@ -1424,7 +1421,6 @@ size_t scheduler_sleep_As(As&&... as) {
 
     // stacked thread timeouts 
     {
-        HCE_INFO_LOG("scheduler_sleep_As():stacked thread timeouts+");
         const size_t max_timer_offset = 50;
         auto now = hce::chrono::now();
         auto requested_sleep_ticks = 
@@ -1433,11 +1429,11 @@ size_t scheduler_sleep_As(As&&... as) {
         hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + hce::chrono::milliseconds(max_timer_offset) + now);
         std::deque<hce::awt<bool>> started_q;
 
-        for(size_t c=0; c<max_timer_offset; ++c) {
+        for(size_t c=max_timer_offset; c>0; --c) {
             started_q.push_back(sch->sleep(hce::chrono::duration(as...) + hce::chrono::milliseconds(c)));
         }
 
-        for(size_t c=0; c<max_timer_offset; ++c) {
+        for(size_t c=max_timer_offset; c>0; --c) {
             EXPECT_TRUE((bool)std::move(started_q.front()));
             started_q.pop_front();
         }
@@ -1453,7 +1449,6 @@ size_t scheduler_sleep_As(As&&... as) {
         EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
 
         ++success_count;
-        HCE_INFO_LOG("scheduler_sleep_As():stacked thread timeouts-");
     }
 
     // coroutine timer timeout
@@ -1504,7 +1499,6 @@ size_t scheduler_sleep_As(As&&... as) {
 
     // stacked coroutine timeouts 
     {
-        HCE_INFO_LOG("scheduler_sleep_As():stacked coroutine timeouts+");
         test::queue<int> q;
         const size_t max_timer_offset = 50;
         auto now = hce::chrono::now();
@@ -1514,11 +1508,11 @@ size_t scheduler_sleep_As(As&&... as) {
         hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + hce::chrono::milliseconds(max_timer_offset) + now);
         std::deque<hce::awt<bool>> started_q;
 
-        for(size_t c=0; c<max_timer_offset; ++c) {
+        for(size_t c=max_timer_offset; c>0; --c) {
             started_q.push_back(sch->join(co_sleep(q, hce::chrono::duration(as...) + hce::chrono::milliseconds(c))));
         }
 
-        for(size_t c=0; c<max_timer_offset; ++c) {
+        for(size_t c=max_timer_offset; c>0; --c) {
             EXPECT_TRUE((bool)std::move(started_q.front()));
             started_q.pop_front();
         }
@@ -1534,7 +1528,6 @@ size_t scheduler_sleep_As(As&&... as) {
         EXPECT_LT(overslept_ticks, upper_bound_overslept_milli_ticks);
 
         ++success_count;
-        HCE_INFO_LOG("scheduler_sleep_As():stacked coroutine timeouts-");
     }
 
     lf.reset();

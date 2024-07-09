@@ -1001,6 +1001,7 @@ private:
             // resort timers from soonest to latest
             return lhs->timeout() < rhs->timeout();
         });
+
         tasks_available_notify_();
     }
 
