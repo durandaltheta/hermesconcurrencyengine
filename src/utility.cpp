@@ -27,7 +27,7 @@ extern void hce_log_initialize(int hceloglevel);
 /// the default log initialization code is defined here
 void hce_log_initialize(int hceloglevel) {
     std::stringstream ss;
-    ss << "-v" << HCELOGLEVEL;
+    ss << "-v" << hceloglevel;
     std::string process("hermesconcurrencyengine");
     std::string verbosity = ss.str();
     std::vector<char*> argv;

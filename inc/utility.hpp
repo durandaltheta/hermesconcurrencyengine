@@ -38,11 +38,14 @@
  The reason most of these functions concatenate arguments rather than pass them 
  to a formatting string is because it allows the log functions to ingest 
  arguments dynamically into an internal stream and therefore be used in 
- parameter pack template code which can have an undefined number of arguments.
+ parameter pack template code which can have an undefined number of arguments. 
+ Parameter packs have fewer limitations than old school `c` `va_args`.
 
  The `CONSTRUCTOR`, `DESTRUCTOR`, and `METHOD` logging macros can *only* be 
  called by implementors of `hce::printable`.  However, `FUNCTION` and `LOG` 
- macros can be called anywhere.
+ macros can be called anywhere. `CONSTRUCTOR`, `DESTRUCTOR`, and `METHOD` 
+ logging macros will print details about their object, such as its `this` 
+ pointer and function namespaces.
 
  `ENTER` and `CONSTRUCTOR` (for object constructors specifically) macros are for 
  describing functions as they are being entered, all arguments to the macro are 
@@ -567,6 +570,7 @@ private:
 };
 
 namespace detail {
+namespace utility {
 
 /// convenience std::function->std::string conversion
 template <typename Callable>
@@ -576,6 +580,7 @@ inline std::string callable_to_string(Callable& f) {
     return ss.str();
 }
 
+}
 }
 
 /**
@@ -599,7 +604,7 @@ struct cleanup : public printable {
         HCE_MED_DESTRUCTOR();
 
         for(auto& hdl : handlers_) { 
-            HCE_MED_METHOD_BODY("~cleanup",detail::callable_to_string(hdl));
+            HCE_MED_METHOD_BODY("~cleanup",detail::utility::callable_to_string(hdl));
             hdl(t_); 
         } 
     }
@@ -610,13 +615,13 @@ struct cleanup : public printable {
     /// install handler taking no arguments
     inline void install(thunk th) { 
         handlers_.push_back(adaptor{ std::move(th) });
-        HCE_MED_METHOD_ENTER("install",detail::callable_to_string(handlers_.back()));
+        HCE_MED_METHOD_ENTER("install",detail::utility::callable_to_string(handlers_.back()));
     }
 
     /// install handler taking T as an argument
     inline void install(handler h) { 
         handlers_.push_back(std::move(h)); 
-        HCE_MED_METHOD_ENTER("install",detail::callable_to_string(handlers_.back()));
+        HCE_MED_METHOD_ENTER("install",detail::utility::callable_to_string(handlers_.back()));
     }
 
 private:
@@ -666,7 +671,7 @@ inline std::ostream& operator<<(std::ostream& out, const hce::printable& p) {
 
 inline std::ostream& operator<<(std::ostream& out, const hce::printable* p) {
     if(p) { out << *p; } 
-    else { out << "hce::printable[nullptr]"; }
+    else { out << "hce::printable@nullptr"; }
     return out;
 }
 

@@ -4,16 +4,11 @@
 #define HCEMINBLOCKPROCS 1
 #endif 
 
-hce::blocking::blocking() :
-        min_worker_cnt_(HCEMINBLOCKPROCS ? HCEMINBLOCKPROCS : 1),
-        worker_cnt_(min_worker_cnt_),
-        workers_(min_worker_cnt_) { 
-    // create block workers
-    for(auto& w : workers_) {
-        w = std::unique_ptr<hce::blocking::worker>(
-            new hce::blocking::worker()); 
-    }
-}
+// create no workers initially, but reuse them as they are checked back 
+// in as long as the stored workers are less than the min_worker_cnt_
+hce::scheduler::blocking::blocking() :
+    min_worker_cnt_(HCEMINBLOCKPROCS ? HCEMINBLOCKPROCS : 1)
+{ }
 
 bool& hce::blocking::worker::tl_is_block() {
     thread_local bool iw = false;

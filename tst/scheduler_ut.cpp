@@ -6,7 +6,6 @@
 #include <vector>
 #include <list>
 #include <forward_list>
-#include <iostream>
 
 #include "loguru.hpp"
 #include "atomic.hpp"
@@ -1053,7 +1052,7 @@ hce::co<bool> co_start(
 }
 
 template <typename... As>
-size_t scheduler_start_As(As&&... as) {
+size_t start_As(As&&... as) {
     const size_t upper_bound_overslept_milli_ticks = 50;
     size_t success_count = 0;
 
@@ -1288,15 +1287,15 @@ size_t scheduler_start_As(As&&... as) {
 
 TEST(scheduler, start) {
     const size_t expected_successes = 8;
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::milliseconds(50)));
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::microseconds(50000)));
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::nanoseconds(50000000)));
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::duration(hce::chrono::milliseconds(50))));
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::duration(hce::chrono::microseconds(50000))));
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::duration(hce::chrono::nanoseconds(50000000))));
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::milliseconds(50)))));
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::microseconds(50000)))));
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_start_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::nanoseconds(50000000)))));
+    EXPECT_EQ(expected_successes,test::scheduler::start_As(hce::chrono::milliseconds(50)));
+    EXPECT_EQ(expected_successes,test::scheduler::start_As(hce::chrono::microseconds(50000)));
+    EXPECT_EQ(expected_successes,test::scheduler::start_As(hce::chrono::nanoseconds(50000000)));
+    EXPECT_EQ(expected_successes,test::scheduler::start_As(hce::chrono::duration(hce::chrono::milliseconds(50))));
+    EXPECT_EQ(expected_successes,test::scheduler::start_As(hce::chrono::duration(hce::chrono::microseconds(50000))));
+    EXPECT_EQ(expected_successes,test::scheduler::start_As(hce::chrono::duration(hce::chrono::nanoseconds(50000000))));
+    EXPECT_EQ(expected_successes,test::scheduler::start_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::milliseconds(50)))));
+    EXPECT_EQ(expected_successes,test::scheduler::start_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::microseconds(50000)))));
+    EXPECT_EQ(expected_successes,test::scheduler::start_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::nanoseconds(50000000)))));
 }
 
 namespace test {
@@ -1311,7 +1310,7 @@ hce::co<bool> co_sleep(
 }
 
 template <typename... As>
-size_t scheduler_sleep_As(As&&... as) {
+size_t sleep_As(As&&... as) {
     const size_t upper_bound_overslept_milli_ticks = 50;
     size_t success_count = 0;
 
@@ -1541,24 +1540,24 @@ size_t scheduler_sleep_As(As&&... as) {
 
 TEST(scheduler, sleep) {
     const size_t expected_successes = 8;
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::milliseconds(50)));
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::microseconds(50000)));
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::nanoseconds(50000000)));
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::duration(hce::chrono::milliseconds(50))));
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::duration(hce::chrono::microseconds(50000))));
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::duration(hce::chrono::nanoseconds(50000000))));
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::milliseconds(50)))));
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::microseconds(50000)))));
-    EXPECT_EQ(expected_successes,test::scheduler::scheduler_sleep_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::nanoseconds(50000000)))));
+    EXPECT_EQ(expected_successes,test::scheduler::sleep_As(hce::chrono::milliseconds(50)));
+    EXPECT_EQ(expected_successes,test::scheduler::sleep_As(hce::chrono::microseconds(50000)));
+    EXPECT_EQ(expected_successes,test::scheduler::sleep_As(hce::chrono::nanoseconds(50000000)));
+    EXPECT_EQ(expected_successes,test::scheduler::sleep_As(hce::chrono::duration(hce::chrono::milliseconds(50))));
+    EXPECT_EQ(expected_successes,test::scheduler::sleep_As(hce::chrono::duration(hce::chrono::microseconds(50000))));
+    EXPECT_EQ(expected_successes,test::scheduler::sleep_As(hce::chrono::duration(hce::chrono::nanoseconds(50000000))));
+    EXPECT_EQ(expected_successes,test::scheduler::sleep_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::milliseconds(50)))));
+    EXPECT_EQ(expected_successes,test::scheduler::sleep_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::microseconds(50000)))));
+    EXPECT_EQ(expected_successes,test::scheduler::sleep_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::nanoseconds(50000000)))));
 }
 
 namespace test {
 namespace scheduler {
 
 template <typename... As>
-size_t scheduler_cancel_As(As&&... as) {
+size_t cancel_As(As&&... as) {
     HCE_INFO_LOG(
-            "scheduler_cancel_As:milli timeout:%zu",
+            "cancel_As:milli timeout:%zu",
             hce::chrono::duration(as...).
                 to_count<hce::chrono::milliseconds>());
     size_t success_count = 0;
@@ -1681,13 +1680,418 @@ size_t scheduler_cancel_As(As&&... as) {
 }
 
 TEST(scheduler, cancel) {
-    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::milliseconds(50)));
-    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::microseconds(50000)));
-    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::nanoseconds(50000000)));
-    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::duration(hce::chrono::milliseconds(50))));
-    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::duration(hce::chrono::microseconds(50000))));
-    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::duration(hce::chrono::nanoseconds(50000000))));
-    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::milliseconds(50)))));
-    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::microseconds(50000)))));
-    EXPECT_EQ(4,test::scheduler::scheduler_cancel_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::nanoseconds(50000000)))));
+    const size_t expected_successes = 4;
+    EXPECT_EQ(expected_successes,test::scheduler::cancel_As(hce::chrono::milliseconds(50)));
+    EXPECT_EQ(expected_successes,test::scheduler::cancel_As(hce::chrono::microseconds(50000)));
+    EXPECT_EQ(expected_successes,test::scheduler::cancel_As(hce::chrono::nanoseconds(50000000)));
+    EXPECT_EQ(expected_successes,test::scheduler::cancel_As(hce::chrono::duration(hce::chrono::milliseconds(50))));
+    EXPECT_EQ(expected_successes,test::scheduler::cancel_As(hce::chrono::duration(hce::chrono::microseconds(50000))));
+    EXPECT_EQ(expected_successes,test::scheduler::cancel_As(hce::chrono::duration(hce::chrono::nanoseconds(50000000))));
+    EXPECT_EQ(expected_successes,test::scheduler::cancel_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::milliseconds(50)))));
+    EXPECT_EQ(expected_successes,test::scheduler::cancel_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::microseconds(50000)))));
+    EXPECT_EQ(expected_successes,test::scheduler::cancel_As(hce::chrono::time_point(hce::chrono::duration(hce::chrono::nanoseconds(50000000)))));
+}
+
+namespace test {
+namespace scheduler {
+
+template <typename T>
+T block_done_immediately(T t, bool& ids_identical, std::thread::id parent_id) {
+    ids_identical = parent_id == std::this_thread::get_id();
+    return std::move(t);
+}
+
+template <typename T>
+T block_done_immediately_stacked_outer(T t, bool& ids_identical, std::thread::id parent_id) {
+    auto thd_id = std::this_thread::get_id();
+    ids_identical = parent_id == thd_id;
+    bool sub_ids_identical = false;
+    auto result = scheduler::block(block_done_immediately<T>(std::move(t), std::ref(sub_ids_identical), thd_id));
+    EXPECT_TRUE(sub_ids_identical);
+    return result;
+}
+
+inline hce::co<T> co_block_done_immediately(T t, bool& ids_identical, std::thread::id parent_id) {
+    auto thd_id = std::this_thread::get_id();
+    ids_identical = parent_id == thd_id;
+    bool sub_ids_identical = true;
+    T result = co_await scheduler::block(block_done_immediately<T>(std::move(t),std::ref(sub_ids_identical), parent_id));
+    EXPECT_FALSE(sub_ids_identical);
+    co_return std::move(t);
+}
+
+inline hce::co<T> co_block_done_immediately_stacked_outer(T t, bool& ids_identical, std::thread::id parent_id) {
+    auto thd_id = std::this_thread::get_id();
+    ids_identical = parent_id == thd_id;
+    bool sub_ids_identical = true;
+    T result = co_await scheduler::block(block_done_immediately_stacked_outer<T>(std::move(t),std::ref(sub_ids_identical), parent_id));
+    EXPECT_FALSE(sub_ids_identical);
+    co_return std::move(t);
+}
+
+template <typename T>
+T block_for_queue(test::queue<T>& q, bool& ids_identical, std::thread::id parent_id) {
+    ids_identical = parent_id == std::this_thread::get_id();
+    return q.pop();
+}
+
+template <typename T>
+T block_for_queue_stacked_outer(test::queue<T>& q, bool& ids_identical, std::thread::id parent_id) {
+    auto thd_id = std::this_thread::get_id();
+    ids_identical = parent_id == thd_id;
+    bool sub_ids_identical = false;
+    auto result = scheduler::block(block_done_immediately<T>(std::ref(q), std::ref(sub_ids_identical), thd_id));
+    EXPECT_TRUE(sub_ids_identical);
+    return result;
+}
+
+inline hce::co<T> co_block_for_queue(test::queue<T>& q, bool& ids_identical, std::thread::id parent_id) {
+    auto thd_id = std::this_thread::get_id();
+    ids_identical = parent_id == thd_id;
+    bool sub_ids_identical = true;
+    T result = co_await scheduler::block(block_for_queue<T>(q,std::ref(sub_ids_identical), parent_id));
+    EXPECT_FALSE(sub_ids_identical);
+    co_return std::move(t);
+}
+
+inline hce::co<T> co_block_for_queue_stacked_outer(test::queue<T>& q, bool& ids_identical, std::thread::id parent_id) {
+    auto thd_id = std::this_thread::get_id();
+    ids_identical = parent_id == thd_id;
+    bool sub_ids_identical = true;
+    T result = co_await scheduler::block(block_for_queue_stacked_outer<T>(q,std::ref(sub_ids_identical), parent_id));
+    EXPECT_FALSE(sub_ids_identical);
+    co_return std::move(t);
+}
+
+template <typename T>
+size_t block_T() {
+    size_t success_count = 0;
+
+    // thread block done immediately 
+    {
+        auto schedule_blocking = [&](T&& t) {
+            auto thd_id = std::this_thread::get_id();
+            bool ids_identical = false;
+            bool ids_identical2 = false;
+            bool ids_identical3 = false;
+            EXPECT_EQ(0, scheduler::get().blockers());
+            EXPECT_EQ(t, (T)scheduler::block(block_done_immediately<T>(t,std::ref(ids_identical), thd_id)));
+            EXPECT_TRUE(ids_identical);
+            EXPECT_EQ(t, (T)scheduler::block(block_done_immediately<T>(t,std::ref(ids_identical), thd_id)));
+            EXPECT_TRUE(ids_identical2);
+            EXPECT_EQ(t, (T)scheduler::block(block_done_immediately<T>(t,std::ref(ids_identical), thd_id)));
+            EXPECT_TRUE(ids_identical3);
+            EXPECT_EQ(0, scheduler::get().blockers());
+        };
+
+        try {
+            schedule_blocking((T)test::init<T>(3));
+            schedule_blocking((T)test::init<T>(2));
+            schedule_blocking((T)test::init<T>(1));
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    }
+
+    // thread block for queue
+    {
+        auto schedule_blocking = [&](T&& t) {
+            test::queue<T> q;
+            auto thd_id = std::this_thread::get_id();
+            bool ids_identical = false;
+            bool ids_identical2 = false;
+            bool ids_identical3 = false;
+
+            auto launch_sender_thd = [&]{
+                std::thread([&](T t){
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                    EXPECT_EQ(3, scheduler::get()).blockers())
+                    q.send(std::move(t));
+                },t).detach();
+            };
+
+            EXPECT_EQ(0, scheduler::get().blockers());
+            launch_sender_thd();
+            launch_sender_thd();
+            launch_sender_thd();
+            EXPECT_EQ(t, (T)scheduler::block(block_for_queue<T>(q,std::ref(ids_identical), thd_id)));
+            EXPECT_TRUE(ids_identical);
+            EXPECT_EQ(t, (T)scheduler::block(block_for_queue<T>(q,std::ref(ids_identical), thd_id)));
+            EXPECT_TRUE(ids_identical2);
+            EXPECT_EQ(t, (T)scheduler::block(block_for_queue<T>(q,std::ref(ids_identical), thd_id)));
+            EXPECT_TRUE(ids_identical3);
+            EXPECT_EQ(0, scheduler::get().blockers());
+        };
+
+        try {
+            schedule_blocking((T)test::init<T>(3));
+            schedule_blocking((T)test::init<T>(2));
+            schedule_blocking((T)test::init<T>(1));
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    }
+
+    /*
+     thread stacked block done immediately 
+
+     When block() calls are stacked (block() calls block()), the inner block()
+     call should execute immediately on the current thread, leaving the 
+     'blockers()' count the same as only calling block() once. 
+     */
+    {
+        auto schedule_blocking = [&](T&& t) {
+            auto thd_id = std::this_thread::get_id();
+            bool ids_identical = false;
+            bool ids_identical2 = false;
+            bool ids_identical3 = false;
+            EXPECT_EQ(0, scheduler::get().blockers());
+            EXPECT_EQ(t, (T)scheduler::block(block_done_immediately_stacked_outer<T>(t,std::ref(ids_identical), thd_id)));
+            EXPECT_TRUE(ids_identical);
+            EXPECT_EQ(t, (T)scheduler::block(block_done_immediately_stacked_outer<T>(t,std::ref(ids_identical), thd_id)));
+            EXPECT_TRUE(ids_identical2);
+            EXPECT_EQ(t, (T)scheduler::block(block_done_immediately_stacked_outer<T>(t,std::ref(ids_identical), thd_id)));
+            EXPECT_TRUE(ids_identical3);
+            EXPECT_EQ(0, scheduler::get().blockers());
+        };
+
+        try {
+            schedule_blocking((T)test::init<T>(3));
+            schedule_blocking((T)test::init<T>(2));
+            schedule_blocking((T)test::init<T>(1));
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    }
+
+    // thread stacked block 
+    {
+        auto schedule_blocking = [&](T&& t) {
+            test::queue<T> q;
+            auto thd_id = std::this_thread::get_id();
+            bool ids_identical = false;
+            bool ids_identical2 = false;
+            bool ids_identical3 = false;
+
+            auto launch_sender_thd = [&]{
+                std::thread([&](T t){
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                    EXPECT_EQ(3, scheduler::get()).blockers())
+                    q.send(std::move(t));
+                },t).detach();
+            };
+
+            EXPECT_EQ(0, scheduler::get().blockers());
+            launch_sender_thd();
+            launch_sender_thd();
+            launch_sender_thd();
+            EXPECT_EQ(t, (T)scheduler::block(block_for_queue_stacked_outer<T>(q,std::ref(ids_identical), thd_id)));
+            EXPECT_TRUE(ids_identical);
+            EXPECT_EQ(t, (T)scheduler::block(block_for_queue_stacked_outer<T>(q,std::ref(ids_identical), thd_id)));
+            EXPECT_TRUE(ids_identical2);
+            EXPECT_EQ(t, (T)scheduler::block(block_for_queue_stacked_outer<T>(q,std::ref(ids_identical), thd_id)));
+            EXPECT_TRUE(ids_identical3);
+            EXPECT_EQ(0, scheduler::get().blockers());
+        };
+
+        try {
+            schedule_blocking((T)test::init<T>(3));
+            schedule_blocking((T)test::init<T>(2));
+            schedule_blocking((T)test::init<T>(1));
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    }
+
+    // coroutine block done immediately 
+    {
+        test::queue<T> q;
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+
+        auto schedule_blocking_co = [&](T&& t) {
+            auto thd_id = std::this_thread::get_id();
+            bool co_ids_identical = true;
+            bool co_ids_identical2 = true;
+            bool co_ids_identical3 = true;
+            auto awt = sch->join(test::schedule::co_block_done_immediately(t,co_ids_identical, thd_id));
+            auto awt2 = sch->join(test::schedule::co_block_done_immediately(t,co_ids_identical2, thd_id));
+            auto awt3 = sch->join(test::schedule::co_block_done_immediately(t,co_ids_identical3, thd_id));
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            EXPECT_EQ(0, sch->blockers());
+            EXPECT_EQ(t, (T)std::move(awt));
+            EXPECT_FALSE(co_ids_identical);
+            EXPECT_EQ(t, (T)std::move(awt2));
+            EXPECT_FALSE(co_ids_identical2);
+            EXPECT_EQ(t, (T)std::move(awt3));
+            EXPECT_FALSE(co_ids_identical3);
+        };
+
+        try {
+            schedule_blocking_co((T)test::init<T>(3));
+            schedule_blocking_co((T)test::init<T>(2));
+            schedule_blocking_co((T)test::init<T>(1));
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    }
+
+    // coroutine block for queue
+    {
+        test::queue<T> q;
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+
+        auto schedule_blocking_co = [&](T&& t) {
+            auto thd_id = std::this_thread::get_id();
+            bool co_ids_identical = true;
+            bool co_ids_identical2 = true;
+            bool co_ids_identical3 = true;
+            auto awt = sch->join(test::schedule::co_block_for_queue(q,co_ids_identical, thd_id));
+            auto awt2 = sch->join(test::schedule::co_block_for_queue(q,co_ids_identical2, thd_id));
+            auto awt3 = sch->join(test::schedule::co_block_for_queue(q,co_ids_identical3, thd_id));
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            EXPECT_EQ(3, sch->blockers());
+            q.push(t);
+            q.push(t);
+            q.push(t);
+            EXPECT_EQ(t, (T)std::move(awt));
+            EXPECT_FALSE(co_ids_identical);
+            EXPECT_EQ(t, (T)std::move(awt2));
+            EXPECT_FALSE(co_ids_identical2);
+            EXPECT_EQ(t, (T)std::move(awt3));
+            EXPECT_FALSE(co_ids_identical3);
+        };
+
+        try {
+            schedule_blocking_co((T)test::init<T>(3));
+            schedule_blocking_co((T)test::init<T>(2));
+            schedule_blocking_co((T)test::init<T>(1));
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    }
+
+    // coroutine stacked block done immediately 
+    {
+        test::queue<T> q;
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+
+        auto schedule_blocking_co = [&](T&& t) {
+            auto thd_id = std::this_thread::get_id();
+            bool co_ids_identical = true;
+            bool co_ids_identical2 = true;
+            bool co_ids_identical3 = true;
+            auto awt = sch->join(test::schedule::co_block_done_immediately_stacked_outer(t,co_ids_identical, thd_id));
+            auto awt2 = sch->join(test::schedule::co_block_done_immediately_stacked_outer(t,co_ids_identical2, thd_id));
+            auto awt3 = sch->join(test::schedule::co_block_done_immediately_stacked_outer(t,co_ids_identical3, thd_id));
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            EXPECT_EQ(0, sch->blockers());
+            EXPECT_EQ(t, (T)std::move(awt));
+            EXPECT_FALSE(co_ids_identical);
+            EXPECT_EQ(t, (T)std::move(awt2));
+            EXPECT_FALSE(co_ids_identical2);
+            EXPECT_EQ(t, (T)std::move(awt3));
+            EXPECT_FALSE(co_ids_identical3);
+        };
+
+        try {
+            schedule_blocking_co((T)test::init<T>(3));
+            schedule_blocking_co((T)test::init<T>(2));
+            schedule_blocking_co((T)test::init<T>(1));
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    }
+
+    // coroutine stacked block 
+    {
+        test::queue<T> q;
+        std::unique_ptr<hce::scheduler::lifecycle> lf;
+        auto sch = hce::scheduler::make(lf);
+        std::thread thd([&]{ sch->install(); });
+
+        auto schedule_blocking_co = [&](T&& t) {
+            auto thd_id = std::this_thread::get_id();
+            bool co_ids_identical = true;
+            bool co_ids_identical2 = true;
+            bool co_ids_identical3 = true;
+            auto awt = sch->join(test::schedule::co_block_for_queue_stacked_outer(q,co_ids_identical, thd_id));
+            auto awt2 = sch->join(test::schedule::co_block_for_queue_stacked_outer(q,co_ids_identical2, thd_id));
+            auto awt3 = sch->join(test::schedule::co_block_for_queue_stacked_outer(q,co_ids_identical3, thd_id));
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+            EXPECT_EQ(3, sch->blockers());
+            q.push(t);
+            q.push(t);
+            q.push(t);
+            EXPECT_EQ(t, (T)std::move(awt));
+            EXPECT_FALSE(co_ids_identical);
+            EXPECT_EQ(t, (T)std::move(awt2));
+            EXPECT_FALSE(co_ids_identical2);
+            EXPECT_EQ(t, (T)std::move(awt3));
+            EXPECT_FALSE(co_ids_identical3);
+        };
+
+        try {
+            schedule_blocking_co((T)test::init<T>(3));
+            schedule_blocking_co((T)test::init<T>(2));
+            schedule_blocking_co((T)test::init<T>(1));
+
+            lf.reset();
+            thd.join();
+            ++success_count;
+        } catch(const std::exception& e) {
+            LOG_F(ERROR, e.what());
+        }
+    }
+
+    return success_count;
+}
+
+}
+}
+
+TEST(scheduler, block_and_blockers) {
+    const size_t expected = 8;
+    EXPECT_EQ(expected, test::scheduler::block_T<int>());
+    EXPECT_EQ(expected, test::scheduler::block_T<unsigned int>());
+    EXPECT_EQ(expected, test::scheduler::block_T<size_t>());
+    EXPECT_EQ(expected, test::scheduler::block_T<float>());
+    EXPECT_EQ(expected, test::scheduler::block_T<double>());
+    EXPECT_EQ(expected, test::scheduler::block_T<char>());
+    EXPECT_EQ(expected, test::scheduler::block_T<void*>());
+    EXPECT_EQ(expected, test::scheduler::block_T<std::string>());
+    EXPECT_EQ(expected, test::scheduler::block_T<test::CustomObject>());
 }

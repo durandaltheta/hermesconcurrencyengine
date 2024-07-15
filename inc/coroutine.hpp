@@ -20,6 +20,17 @@
 
 namespace hce {
 
+struct coroutine;
+
+namespace detail {
+namespace coroutine {
+
+// always points to the coroutine running on the scheduler on this thread
+hce::coroutine*& tl_this_coroutine();
+
+}
+}
+
 /** 
  @brief interface coroutine type 
 
@@ -152,19 +163,19 @@ struct coroutine : public printable {
     /// return true if called inside a running coroutine, else false
     static inline bool in() { 
         HCE_TRACE_LOG("hce::coroutine::in()");
-        return coroutine::tl_this_coroutine(); 
+        return detail::coroutine::tl_this_coroutine(); 
     }
 
     /// return the coroutine running on this thread
     static inline coroutine& local() { 
         HCE_TRACE_LOG("hce::coroutine::local()");
-        return *(coroutine::tl_this_coroutine()); 
+        return *(detail::coroutine::tl_this_coroutine()); 
     }
 
     /// resume the coroutine 
     inline void resume() {
         HCE_MED_METHOD_ENTER("resume");
-        auto& tl_co = coroutine::tl_this_coroutine();
+        auto& tl_co = detail::coroutine::tl_this_coroutine();
 
         // store parent coroutine pointer
         auto parent_co = tl_co;
@@ -207,9 +218,6 @@ struct coroutine : public printable {
     }
 
 protected:
-    // always points to the coroutine running on the scheduler on this thread
-    static coroutine*& tl_this_coroutine();
-
     inline void destroy() {
         HCE_MED_FUNCTION_BODY("destroy", handle_);
         handle_.destroy(); 
@@ -408,17 +416,6 @@ private:
     std::condition_variable_any cv;
 };
 
-template <typename T>
-inline hce::co<T> wrapper(std::function<T()> f) {
-    co_return f();
-}
-
-template <>
-inline hce::co<void> wrapper(std::function<void()> f) {
-    f();
-    co_return;
-}
-
 void coroutine_did_not_co_await(void* awt);
 
 }
@@ -453,29 +450,6 @@ private:
     static std::string str_;
 };
 
-}
-
-/**
- @brief wrap an arbitrary Callable and optional arguments as a co<T>
-
- A utility to wrap any Callable as a coroutine for execution. A Callable is any 
- invokable object such as function pointers, Functors or lambdas.
-
- The resulting co<T> will not have any special features, when resume()d
- it will execute cb(as...) and `co_return` the result (if result is non-void). 
- This allows execution of arbitary code as a coroutine if necessary.
-
- @param cb a Callable
- @param as arguments to the Callable
- @return a co<T>
- */
-template <typename Callable, typename... As>
-auto 
-to_coroutine(Callable&& cb, As&&... as) {
-    return detail::coroutine::wrapper(
-        std::bind(
-            std::forward<Callable>(cb),
-            std::forward<As>(as)...));
 }
 
 /**

@@ -8,7 +8,7 @@ C++20 Stackless Coroutine Concurrency Engine
 - `c++20` compiler toolchain (eg, `gcc`, `clang`, etc.) 
 - `cmake`
 
-Because usage of this library depends only on the `c++` language, in theory, it should be usable on different operating systems.
+Because usage of this library depends only on the `c++` language, in theory, it should be usable on different operating systems. Actual testing on the target platform with `script/validate` is highly recommended to verify behavior.
 
 ### Build 
 Set your environment variables (IE, `HCELOGLEVEL`, etc.) and execute:
@@ -32,7 +32,7 @@ doxygen
 ```
 The generated `doc/` directory should contain both `html` and `rtf` generated documentation. For `html`, open `index.html` by a browser to view the documentation. 
 
-## Building and Running Unit Tests
+## Unit Tests
 ### Prerequisites
 - `python3`
 - `cmake`
@@ -44,7 +44,7 @@ The generated `doc/` directory should contain both `html` and `rtf` generated do
 - `tex`
 
 ### Build and Run
-Execute all tests with (example with `gcc`):
+Execute all tests with `script/validate` from this repository's root directory (example with `gcc`):
 ```
 ./script/validate -cc=gcc -cxx=g++
 ```
@@ -54,16 +54,17 @@ Print test help with:
 ./script/validate --help
 ```
 
-The `validate` command is a `python3` executable script. It's goal is to provide a consistent unit test validation algorithm. It builds and runs the library in many different configurations:
-- the specified `c` and `c++` compiler
-- produce `valgrind` memory leak reports 
+The `validate` command is a `python3` executable script. Its design goal is to provide a consistent and thorough unit test validation algorithm. It builds and runs the library in many different configurations:
+- with the specified `c` and `c++` compiler
 - `hce` library compiled with various `HCELOGLEVEL`s
 - `hce_ut` unit tests compiled with various `HCELOGLIMIT`s
+- produce `valgrind` memory leak reports 
 
 The total times the the `hce_ut` unit tests are built and run is the combinatorial total of all enabled options. IE:
-- the maximum `HCELOGLEVEL`: 11x
-- the maximum `HCELOGLIMIT`: 11x
-- valgrind `memcheck`: 1
+- compiler settings: x1
+- `-1` up to the maximum `HCELOGLEVEL`: x11
+- `-1` up to the maximum `HCELOGLIMIT`: x11
+- valgrind `memcheck`: +1
 
 Then the unit tests will be run "122" times.
 
@@ -80,16 +81,16 @@ Additionally, if cross compiling, the user will need to specify `-otc`/`--overri
 
 ## Communication 
 
-## Blocking Calls
+## Thread Blocking Calls
 
-## Non-Blocking Calls
+## Thread Non-Blocking Calls
 
 ## Integration with Existing Code
 
 ## Debug Logging
 This project utilizes the [emilk/loguru](https://github.com/emilk/loguru) project for debug logging, writing to stdout and stderr by default. Logging features are provided primarily for the development of this library, but work has been done to make it fairly robust and may be applicable for user development and production code debugging purposes.
 
-The `loguru` source code is included in this code repository and does not need to be downloaded.
+The `loguru` source code is included in this code repository and does not need to be downloaded. `loguru` is distributed with the permissive "unlicense" license.
 
 Most user accessible objects provided by this library are printable (writable to an `std::ostream` with `<<` and convertable to an `std::string` with `std::to_string()`).
 
@@ -101,13 +102,13 @@ Most user accessible objects provided by this library are printable (writable to
 -1: WARNING will be logged (the framework default loglevel)
 0: INFO will be logged
 1: high criticality construction/destruction of objects
-2: high criticality method calls of objects and functions
+2: high criticality method and function calls
 3: medium criticality construction/destruction of objects
-4: medium criticality method calls of objects and functions
+4: medium criticality method and function calls
 5: low criticality construction/destruction of objects
-6: low criticality method calls of objects and functions 
+6: low criticality method and function calls 
 7: minimal criticality construction/destruction of objects
-8: minimal criticality method calls of objects and functions
+8: minimal criticality method and function calls
 9: trace criticality logging enabled
 ```
 
@@ -119,16 +120,20 @@ All logs for an object of a given criticality are not guaranteed to print at the
 - `hce::scheduler::lifecycle::manager`
 - `hce::scheduler::config`
 - `hce::scheduler::config::handlers`
-- `hce::schedule()`
-- `hce::join()`
-- `hce::scope()`
-- `hce::sleep()`
+- `hce::schedule()` and `hce::scheduler::schedule()`
+- `hce::join()` and `hce::scheduler::join()`
+- `hce::scope()` and `hce::scheduler::scope()`
 
 This category contains framework management and scheduling utilities.
 
 #### Medium criticality
 - `hce::coroutine`
 - `hce::timer`
+- `hce::start()` and `hce::scheduler::start()`
+- `hce::running()` and `hce::scheduler::running()`
+- `hce::sleep()` and `hce::scheduler::sleep()`
+- `hce::cancel()` and `hce::scheduler::cancel()`
+- `hce::block()` and `hce::scheduler::block()`
 
 This category includes individual coroutine lifecycle and execution.
 
@@ -153,9 +158,9 @@ This category includes "communication" operations.
 This category contains synchronization objects implemented by this library.
 
 #### Trace criticality
-All remaining API log statements (that has does not log with any lower loglevel) will print at this level. Output may be *extremely* verbose. It is expected this is only necessary in 2 situations:
+All remaining API log statements (that has does not log with any lower loglevel) will print at this level. Output may be *extremely* verbose. It is expected this is only necessary in a few situations:
 - debugging of specific issues, potentially in combination with thread local log level management
-- introducing maximum processing jitter during calls to `validate`
+- introducing maximum processing jitter during calls to `script/validate` to increase the likelyhood of detecting race conditions in the unit tests
 
 ### Library Compile Time Definitions 
 #### HCELOGLEVEL

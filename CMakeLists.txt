@@ -17,9 +17,9 @@ project(libhce)
 
 # Define the minimum count of available threads for await tasks executed by 
 # `hce::blocking::call()` (more will be temporarily spawned as necessary).
-if(DEFINED HCEMINBLOCKPROCS)
+if(DEFINED HCEGLOBALREUSEBLOCKPROCS)
 else()
-    set(HCEMINBLOCKPROCS 1) 
+    set(HCEGLOBALREUSEBLOCKPROCS 1) 
 endif()
 
 # set loglevel
@@ -41,7 +41,6 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/circular_buffer.hpp
     ${HCE_INCLUDE_DIR}/coroutine.hpp
     ${HCE_INCLUDE_DIR}/scheduler.hpp
-    ${HCE_INCLUDE_DIR}/block.hpp
     #${HCE_INCLUDE_DIR}/mutex.hpp
     #${HCE_INCLUDE_DIR}/condition_variable.hpp
     ${HCE_INCLUDE_DIR}/channel.hpp
@@ -51,8 +50,7 @@ set(HCE_SOURCE_FILES
     ${LOGURU_DIR}/loguru.cpp
     ${HCE_SOURCE_DIR}/utility.cpp
     ${HCE_SOURCE_DIR}/coroutine.cpp
-    ${HCE_SOURCE_DIR}/scheduler.cpp
-    ${HCE_SOURCE_DIR}/block.cpp)
+    ${HCE_SOURCE_DIR}/scheduler.cpp)
 
 # convert a list to a readable string
 function (ListToString result delim)
@@ -74,10 +72,14 @@ target_include_directories(hce PUBLIC ${HCE_INCLUDE_DIR} ${LOGURU_DIR})
 
 set(HCE_COMPILE_DEFS 
     -DHCELOGLEVEL=${HCELOGLEVEL}
-    -DHCEMINBLOCKPROCS=${HCEMINBLOCKPROCS})
+    -DHCEMINBLOCKPROCS=${HCEGLOBALREUSEBLOCKPROCS})
 
 if(DEFINED ENV{HCECUSTOMLOGINIT})
     set(HCE_COMPILE_DEFS ${HCE_COMPILE_DEFS} -DHCECUSTOMLOGINIT)
+endif()
+
+if(DEFINED ENV{HCECUSTOMGLOBALCONFIG})
+    set(HCE_COMPILE_DEFS ${HCE_COMPILE_DEFS} -DHCECUSTOMGLOBALCONFIG)
 endif()
 
 target_compile_definitions(hce PRIVATE ${HCE_COMPILE_DEFS})
@@ -87,7 +89,7 @@ message(${PRETTY_HCE_HEADER_FILES})
 message("-- HCE LIBRARY SOURCES -- ")
 message(${PRETTY_HCE_SOURCE_FILES})
 message("-- HCE LIBRARY COMPILE DEFINES -- ")
-message("-DHCEMINBLOCKPROCS=${HCEMINBLOCKPROCS}")
+message("-DHCEMINBLOCKPROCS=${HCEGLOBALREUSEBLOCKPROCS}")
 message("-DHCELOGLEVEL:${HCELOGLEVEL}")
 
 add_subdirectory(tst EXCLUDE_FROM_ALL)

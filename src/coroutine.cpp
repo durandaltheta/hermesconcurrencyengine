@@ -10,7 +10,7 @@
 // test, only uncomment for development of this library
 //#include "dev_print.hpp"
 
-hce::coroutine*& hce::coroutine::tl_this_coroutine() {
+hce::coroutine*& hce::detail::coroutine::tl_this_coroutine() {
     thread_local hce::coroutine* tltc = nullptr;
     return tltc;
 }
