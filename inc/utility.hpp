@@ -287,8 +287,10 @@ namespace detail {
 template <typename T>
 using unqualified = typename std::decay<T>::type;
 
+//template <typename F, typename... Ts>
+//using function_return_type = typename std::invoke_result<unqualified<F>,Ts...>::type;
 template <typename F, typename... Ts>
-using function_return_type = typename std::invoke_result<unqualified<F>,Ts...>::type;
+using function_return_type = typename std::invoke_result<F,Ts...>::type;
 
 template<typename T, typename _ = void>
 struct is_container : std::false_type {};
@@ -585,13 +587,16 @@ inline std::string callable_to_string(Callable& f) {
 
 /**
  @brief call runtime handlers on object destructor
-
- It is worth pointing out that `T` can be a reference, like `int&`, or a pointer 
- `int*`.
  */
 template <typename T>
 struct cleanup : public printable {
-    typedef std::function<void(T)> handler;
+    /// typed handler
+    struct handler : public printable {
+        virtual ~handler() { }
+        inline const char* nspace() const { return "hce::cleanup"; }
+        inline const char* name() const { return "handler"; }
+        virtual void operator()(T&) = 0;
+    };
 
     /// construct T
     template <typename... As>
@@ -603,35 +608,28 @@ struct cleanup : public printable {
     virtual ~cleanup() { 
         HCE_MED_DESTRUCTOR();
 
-        for(auto& hdl : handlers_) { 
-            HCE_MED_METHOD_BODY("~cleanup",detail::utility::callable_to_string(hdl));
-            hdl(t_); 
-        } 
+        while(handlers_.size()) {
+            auto& hdl = handlers_.front();
+            HCE_MED_METHOD_BODY("~cleanup",detail::utility::callable_to_string(*hdl));
+            (*hdl)(t_); 
+            handlers_.pop_front();
+        }
     }
 
     inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "cleanup"; }
 
-    /// install handler taking no arguments
-    inline void install(thunk th) { 
-        handlers_.push_back(adaptor{ std::move(th) });
-        HCE_MED_METHOD_ENTER("install",detail::utility::callable_to_string(handlers_.back()));
-    }
-
     /// install handler taking T as an argument
-    inline void install(handler h) { 
-        handlers_.push_back(std::move(h)); 
-        HCE_MED_METHOD_ENTER("install",detail::utility::callable_to_string(handlers_.back()));
+    inline void install(std::unique_ptr<handler> hdl) { 
+        if(hdl) {
+            HCE_MED_METHOD_ENTER("install",detail::utility::callable_to_string(*hdl));
+            handlers_.push_back(std::move(hdl)); 
+        }
     }
 
 private:
-    struct adaptor {
-        inline void operator()(T) { t(); }
-        thunk t;
-    };
-
     T t_;
-    std::deque<handler> handlers_; 
+    std::deque<std::unique_ptr<handler>> handlers_; 
 };
 
 // Arbitrary word sized allocated memory. The unique address of this 

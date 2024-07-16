@@ -59,6 +59,12 @@ namespace scheduler {
 // the true, current scheduler
 hce::scheduler*& tl_this_scheduler();
 
+template <typename T>
+using awt_interface = hce::awt<T>::interface;
+
+template <typename T>
+using cleanup_handler = hce::cleanup<typename hce::co<T>::promise_type&>::handler;
+
 /*
  An implementation of hce::awt<T>::interface capable of joining a coroutine 
 
@@ -67,7 +73,6 @@ hce::scheduler*& tl_this_scheduler();
 template <typename T>
 struct joiner : 
     public hce::awaitable::lockable<
-        //hce::awt<T>::interface,
         awt_interface<T>,
         hce::spinlock>
 {
@@ -81,26 +86,38 @@ struct joiner :
         ready_(false),
         address_(co.address())
     { 
+        struct handler : public cleanup_handler<T> {
+            handler(joiner<T>* parent) : parent_(parent) { }
+            virtual ~handler(){}
+
+            inline void operator()(typename hce::co<T>::promise_type& p){
+                // get a copy of the handle to see if the coroutine completed 
+                auto handle = 
+                    std::coroutine_handle<
+                        typename hce::co<T>::promise_type>::from_promise(p);
+
+                if(handle.done()) {
+                    HCE_TRACE_FUNCTION_BODY("joiner<T>::handler::operator()()","cleanup done@",handle);
+                    // resume the blocked awaitable
+                    parent_->resume(&(p.result));
+                } else {
+                    HCE_ERROR_FUNCTION_BODY("joiner<T>::handler::operator()()","cleanup NOT done@",handle);
+                    // resume with no result
+                    parent_->resume(nullptr);
+                }
+            }
+
+        private:
+            joiner<T>* parent_;
+        };
+
         HCE_TRACE_CONSTRUCTOR(co);
 
         // install a cleanup handler to resume the returned awaitable when 
         // the coroutine goes out of scope
-        co.promise().install([self=this](typename hce::co<T>::promise_type& p){
-            // get a copy of the handle to see if the coroutine completed 
-            auto handle = 
-                std::coroutine_handle<
-                    typename hce::co<T>::promise_type>::from_promise(p);
-
-            if(handle.done()) {
-                HCE_TRACE_FUNCTION_BODY("joiner::cleanup::install","done@",handle);
-                // resume the blocked awaitable
-                self->resume(&(p.result));
-            } else {
-                HCE_ERROR_FUNCTION_BODY("joiner::cleanup::install","NOT done@",handle);
-                // resume with no result
-                self->resume(nullptr);
-            }
-        });
+        co.promise().install(
+            std::unique_ptr<cleanup_handler<T>>(
+                dynamic_cast<cleanup_handler<T>*>(new handler(this))));
     }
 
     inline bool on_ready() { return ready_; }
@@ -129,7 +146,6 @@ private:
 template <>
 struct joiner<void> : 
     public hce::awaitable::lockable<
-        //awt<void>::interface,
         awt_interface<void>,
         hce::spinlock>
 {
@@ -142,11 +158,24 @@ struct joiner<void> :
                 hce::awaitable::resume::policy::lock),
         ready_(false)
     { 
+        struct handler : public cleanup_handler<void> {
+            handler(joiner<void>* parent) : parent_(parent) { }
+            virtual ~handler(){}
+            inline void operator()(typename hce::co<void>::promise_type& p){ 
+                parent_->resume(nullptr); 
+            }
+
+        private:
+            joiner<void>* parent_;
+        };
+
         HCE_TRACE_CONSTRUCTOR(co);
 
         // install a cleanup handler to resume the returned awaitable when 
         // the coroutine goes out of scope
-        co.promise().install([self=this]() mutable { self->resume(nullptr); });
+        co.promise().install(
+            std::unique_ptr<cleanup_handler<void>>(
+                dynamic_cast<cleanup_handler<void>*>(new handler(this))));
     }
 
     inline bool on_ready() { return ready_; }
@@ -212,9 +241,6 @@ inline hce::co<void> wrapper(std::function<void()> f) {
 
     co_return;
 }
-
-template <typename T>
-using awt_interface = hce::awt<T>::interface;
 
 template <typename T>
 struct done_partial : public 
@@ -1124,7 +1150,7 @@ struct scheduler : public printable {
      returned by `block()`. If the executing Callable accesses the stack of the 
      caller in an unsynchronized way, and the caller of `block()` is a 
      coroutine, then the caller should `co_await` the returned awaitable before 
-     reading or writing accessed values again. Doing this ensures the coroutine 
+     reading or writing others values again. Doing this ensures the coroutine 
      is safely blocked until `block()` completes.
 
      @param cb a function, Functor, or lambda 
@@ -1132,13 +1158,13 @@ struct scheduler : public printable {
      @return an awaitable returning the result of the Callable 
      */
     template <typename Callable, typename... As>
-    auto block(Callable&& cb, As&&... as) {
+    awt<hce::detail::function_return_type<Callable,As...>> 
+    block(Callable&& cb, As&&... as) {
         typedef hce::detail::function_return_type<Callable,As...> RETURN_TYPE;
 
         HCE_MED_METHOD_ENTER("block",hce::detail::utility::callable_to_string(cb));
 
         return blocking_.block<RETURN_TYPE>(
-            *this,
             std::forward<Callable>(cb),
             std::forward<As>(as)...);
     }
@@ -1326,7 +1352,7 @@ private:
         struct worker {
             worker() : sch_([&]() -> std::shared_ptr<hce::scheduler> {
                     auto sch = hce::scheduler::make(lf_);
-                    std::thread([=]() mutable { sch->install(); }).detach();
+                    std::thread([sch]() mutable { sch->install(); }).detach();
                     return sch;
                 }())
             { }
@@ -1349,20 +1375,23 @@ private:
         {
             template <typename... As>
             done(As&&... as) : 
-                hce::detail::scheduler::done_partial<T>(std::forward<As>(as)...)
+                hce::scheduler::reschedule<
+                    hce::detail::scheduler::done_partial<T>>(
+                        std::forward<As>(as)...)
             { }
         };
 
         // contractors are transient managers of block worker threads, ensuring 
         // they are checked out and back in at the proper times
-        struct contractor {
+        template <typename T>
+        struct contractor : public detail::scheduler::cleanup_handler<T> {
             contractor(hce::scheduler& parent) : 
                 // on construction get a worker
                 wkr_(parent.blocking_.checkout_worker_()),
                 wparent_(parent)
             { }
 
-            ~contractor() { 
+            virtual ~contractor() { 
                 // on destruction return the worker
                 if(wkr_){ 
                     auto sch = wparent_.lock();
@@ -1373,8 +1402,7 @@ private:
                 } 
             }
 
-            // allow conversion to a coroutine's cleanup handler thunk
-            inline void operator()(){}
+            inline void operator()(typename hce::co<T>::promise_type& p){ }
 
             // return the worker's scheduler 
             inline hce::scheduler& scheduler() { return wkr_->scheduler(); }
@@ -1384,7 +1412,10 @@ private:
             std::weak_ptr<hce::scheduler> wparent_;
         };
 
-        blocking() : reuse_cnt_(0) { }
+        blocking(hce::scheduler& parent) : 
+            reuse_cnt_(0),
+            parent_(parent)
+        { }
 
         inline void set_worker_reuse_count(size_t reuse_count) {
             reuse_cnt_ = reuse_count;
@@ -1392,27 +1423,29 @@ private:
 
         template <typename T, typename Callable, typename... As>
         hce::awt<T>
-        block(hce::scheduler& parent, Callable&& cb, As&&... as) {
+        block(Callable&& cb, As&&... as) {
             if(!scheduler::in() || worker::tl_is_block()) {
                 /// we own the thread, call cb immediately and return the result
                 return hce::awt<T>::make(
                     new done<T>(cb(std::forward<As>(as)...)));
             } else {
                 // get a contractor to do the work of managing threads
-                contractor cr(parent); 
-                auto& sch = cr.scheduler(); // acquire the contractor's scheduler
+                std::unique_ptr<contractor<T>> cr(new contractor<T>(parent_)); 
+                auto& sch = cr->scheduler(); // acquire the contractor's scheduler
 
                 // convert our Callable to a coroutine
-                hce::co<T> co = blocking::to_coroutine_(
-                    [](Callable cb, As&&... as) -> T {
+                hce::co<T> co = detail::scheduler::wrapper<T>(
+                    [cb=std::forward<Callable>(cb),
+                     ... as=std::forward<As>(as)]() mutable -> T {
                         return cb(std::forward<As>(as)...);
-                    }, 
-                    std::forward<Callable>(cb), 
-                    std::forward<As>(as)...);
+                    });
 
-                // install the contractor as a coroutine cleanup handler to check in 
-                // the worker when the coroutine goes out of scope
-                co.promise().install(std::move(cr));
+                // install the contractor as a coroutine cleanup handler to 
+                // check in the worker when the coroutine goes out of scope
+                co.promise().install(
+                    std::unique_ptr<detail::scheduler::cleanup_handler<T>>(
+                        dynamic_cast<detail::scheduler::cleanup_handler<T>*>(
+                            cr.release())));
 
                 // schedule the coroutine on the contractor's worker thread
                 return sch.join(std::move(co));
@@ -1421,22 +1454,24 @@ private:
 
         template <typename Callable, typename... As>
         hce::awt<void>
-        block(hce::scheduler& parent, Callable&& cb, As&&... as) {
+        block(Callable&& cb, As&&... as) {
             if(!scheduler::in() || worker::tl_is_block()) {
                 cb(std::forward<As>(as)...);
                 return hce::awt<void>::make(new done<void>());
             } else {
-                contractor cr(parent); 
-                auto& sch = cr.scheduler(); 
+                std::unique_ptr<contractor<void>> cr(new contractor<void>(parent_)); 
+                auto& sch = cr->scheduler(); 
 
-                hce::co<void> co = blocking::to_coroutine_(
-                    [](Callable cb, As&&... as) -> void {
+                hce::co<void> co = detail::scheduler::wrapper<void>(
+                    [cb=std::forward<Callable>(cb),
+                     ... as=std::forward<As>(as)]() mutable -> void {
                         cb(std::forward<As>(as)...);
-                    }, 
-                    std::forward<Callable>(cb), 
-                    std::forward<As>(as)...);
+                    });
 
-                co.promise().install(std::move(cr));
+                co.promise().install(
+                    std::unique_ptr<detail::scheduler::cleanup_handler<void>>(
+                        dynamic_cast<detail::scheduler::cleanup_handler<void>*>(
+                            cr.release())));
 
                 return sch.join(std::move(co));
             }
@@ -1463,21 +1498,6 @@ private:
         }
 
     private:
-
-        /*
-         Embed a Callable in a coroutine. The Callable will not have access to 
-         the running coroutine or scheduler.
-         */
-        template <typename Callable, typename... As>
-        auto 
-        to_coroutine_(Callable&& cb, As&&... as) {
-            return detail::scheduler::wrapper(
-                std::bind(
-                    std::forward<Callable>(cb),
-                    std::forward<As>(as)...));
-        }
-
-
         inline std::unique_ptr<worker> checkout_worker_() {
             std::unique_ptr<worker> w;
 
@@ -1506,6 +1526,7 @@ private:
 
         // reused block() worker thread count
         size_t reuse_cnt_; 
+        hce::scheduler& parent_;
 
         // worker memory
         std::deque<std::unique_ptr<worker>> workers_;
@@ -1515,7 +1536,8 @@ private:
             // state_ persists between suspends
             state_(ready), 
             // persists as necessary
-            coroutine_queue_(new std::deque<std::coroutine_handle<>>) 
+            coroutine_queue_(new std::deque<std::coroutine_handle<>>),
+            blocking_(*this)
     { 
         HCE_HIGH_CONSTRUCTOR();
         reset_flags_(); // initialize flags

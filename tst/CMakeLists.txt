@@ -20,9 +20,8 @@ add_executable(hce_ut
     #circular_buffer_ut.cpp
     #chrono_ut.cpp
     #coroutine_ut.cpp
-    #scheduler_ut.cpp
+    scheduler_ut.cpp
     #channel_ut.cpp 
-    block_ut.cpp
     #comparison_ut.cpp
 )
 
