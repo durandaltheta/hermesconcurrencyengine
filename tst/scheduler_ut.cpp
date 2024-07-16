@@ -1778,14 +1778,14 @@ size_t block_T() {
             bool ids_identical = false;
             bool ids_identical2 = false;
             bool ids_identical3 = false;
-            EXPECT_EQ(0, hce::scheduler::get().blockers());
+            EXPECT_EQ(0, hce::scheduler::get().block_workers());
             EXPECT_EQ(t, (T)hce::scheduler::get().block(block_done_immediately<T>,t,std::ref(ids_identical), thd_id));
             EXPECT_TRUE(ids_identical);
-            EXPECT_EQ(t, (T)hce::scheduler::get().block(block_done_immediately<T>,t,std::ref(ids_identical), thd_id));
+            EXPECT_EQ(t, (T)hce::scheduler::get().block(block_done_immediately<T>,t,std::ref(ids_identical2), thd_id));
             EXPECT_TRUE(ids_identical2);
-            EXPECT_EQ(t, (T)hce::block(block_done_immediately<T>,t,std::ref(ids_identical), thd_id));
+            EXPECT_EQ(t, (T)hce::block(block_done_immediately<T>,t,std::ref(ids_identical3), thd_id));
             EXPECT_TRUE(ids_identical3);
-            EXPECT_EQ(0, hce::scheduler::get().blockers());
+            EXPECT_EQ(0, hce::scheduler::get().block_workers());
         };
 
         try {
@@ -1811,22 +1811,22 @@ size_t block_T() {
             auto launch_sender_thd = [&]{
                 std::thread([&](T t){
                     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                    EXPECT_EQ(3, hce::scheduler::get().blockers());
+                    EXPECT_EQ(0, hce::scheduler::get().block_workers());
                     q.push(std::move(t));
                 },t).detach();
             };
 
-            EXPECT_EQ(0, hce::scheduler::get().blockers());
+            EXPECT_EQ(0, hce::scheduler::get().block_workers());
             launch_sender_thd();
             launch_sender_thd();
             launch_sender_thd();
             EXPECT_EQ(t, (T)hce::scheduler::get().block(block_for_queue<T>,std::ref(q),std::ref(ids_identical), thd_id));
             EXPECT_TRUE(ids_identical);
-            EXPECT_EQ(t, (T)hce::scheduler::get().block(block_for_queue<T>,std::ref(q),std::ref(ids_identical), thd_id));
+            EXPECT_EQ(t, (T)hce::scheduler::get().block(block_for_queue<T>,std::ref(q),std::ref(ids_identical2), thd_id));
             EXPECT_TRUE(ids_identical2);
-            EXPECT_EQ(t, (T)hce::block(block_for_queue<T>,std::ref(q),std::ref(ids_identical), thd_id));
+            EXPECT_EQ(t, (T)hce::block(block_for_queue<T>,std::ref(q),std::ref(ids_identical3), thd_id));
             EXPECT_TRUE(ids_identical3);
-            EXPECT_EQ(0, hce::scheduler::get().blockers());
+            EXPECT_EQ(0, hce::scheduler::get().block_workers());
         };
 
         try {
@@ -1845,7 +1845,7 @@ size_t block_T() {
 
      When block() calls are stacked (block() calls block()), the inner block()
      call should execute immediately on the current thread, leaving the 
-     'blockers()' count the same as only calling block() once. 
+     'block_workers()' count the same as only calling block() once. 
      */
     {
         auto schedule_blocking = [&](T&& t) {
@@ -1853,14 +1853,14 @@ size_t block_T() {
             bool ids_identical = false;
             bool ids_identical2 = false;
             bool ids_identical3 = false;
-            EXPECT_EQ(0, hce::scheduler::get().blockers());
+            EXPECT_EQ(0, hce::scheduler::get().block_workers());
             EXPECT_EQ(t, (T)hce::scheduler::get().block(block_done_immediately_stacked_outer<T>,t,std::ref(ids_identical), thd_id));
             EXPECT_TRUE(ids_identical);
-            EXPECT_EQ(t, (T)hce::scheduler::get().block(block_done_immediately_stacked_outer<T>,t,std::ref(ids_identical), thd_id));
+            EXPECT_EQ(t, (T)hce::scheduler::get().block(block_done_immediately_stacked_outer<T>,t,std::ref(ids_identical2), thd_id));
             EXPECT_TRUE(ids_identical2);
-            EXPECT_EQ(t, (T)hce::block(block_done_immediately_stacked_outer<T>,t,std::ref(ids_identical), thd_id));
+            EXPECT_EQ(t, (T)hce::block(block_done_immediately_stacked_outer<T>,t,std::ref(ids_identical3), thd_id));
             EXPECT_TRUE(ids_identical3);
-            EXPECT_EQ(0, hce::scheduler::get().blockers());
+            EXPECT_EQ(0, hce::scheduler::get().block_workers());
         };
 
         try {
@@ -1886,22 +1886,22 @@ size_t block_T() {
             auto launch_sender_thd = [&]{
                 std::thread([&](T t){
                     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                    EXPECT_EQ(3, hce::scheduler::get().blockers());
+                    EXPECT_EQ(0, hce::scheduler::get().block_workers());
                     q.push(std::move(t));
                 },t).detach();
             };
 
-            EXPECT_EQ(0, hce::scheduler::get().blockers());
+            EXPECT_EQ(0, hce::scheduler::get().block_workers());
             launch_sender_thd();
             launch_sender_thd();
             launch_sender_thd();
             EXPECT_EQ(t, (T)hce::scheduler::get().block(block_for_queue_stacked_outer<T>,std::ref(q),std::ref(ids_identical), thd_id));
             EXPECT_TRUE(ids_identical);
-            EXPECT_EQ(t, (T)hce::scheduler::get().block(block_for_queue_stacked_outer<T>,std::ref(q),std::ref(ids_identical), thd_id));
+            EXPECT_EQ(t, (T)hce::scheduler::get().block(block_for_queue_stacked_outer<T>,std::ref(q),std::ref(ids_identical2), thd_id));
             EXPECT_TRUE(ids_identical2);
-            EXPECT_EQ(t, (T)hce::block(block_for_queue_stacked_outer<T>,std::ref(q),std::ref(ids_identical), thd_id));
+            EXPECT_EQ(t, (T)hce::block(block_for_queue_stacked_outer<T>,std::ref(q),std::ref(ids_identical3), thd_id));
             EXPECT_TRUE(ids_identical3);
-            EXPECT_EQ(0, hce::scheduler::get().blockers());
+            EXPECT_EQ(0, hce::scheduler::get().block_workers());
         };
 
         try {
@@ -1931,7 +1931,7 @@ size_t block_T() {
             auto awt2 = sch->join(test::scheduler::co_block_done_immediately(t,co_ids_identical2, thd_id));
             auto awt3 = sch->join(test::scheduler::co_block_done_immediately(t,co_ids_identical3, thd_id));
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
-            EXPECT_EQ(0, sch->blockers());
+            EXPECT_EQ(0, sch->block_workers());
             EXPECT_EQ(t, (T)std::move(awt));
             EXPECT_FALSE(co_ids_identical);
             EXPECT_EQ(t, (T)std::move(awt2));
@@ -1969,7 +1969,7 @@ size_t block_T() {
             auto awt2 = sch->join(test::scheduler::co_block_for_queue(q,co_ids_identical2, thd_id));
             auto awt3 = sch->join(test::scheduler::co_block_for_queue(q,co_ids_identical3, thd_id));
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
-            EXPECT_EQ(3, sch->blockers());
+            EXPECT_EQ(3, sch->block_workers());
             q.push(t);
             q.push(t);
             q.push(t);
@@ -2010,7 +2010,7 @@ size_t block_T() {
             auto awt2 = sch->join(test::scheduler::co_block_done_immediately_stacked_outer(t,co_ids_identical2, thd_id));
             auto awt3 = sch->join(test::scheduler::co_block_done_immediately_stacked_outer(t,co_ids_identical3, thd_id));
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
-            EXPECT_EQ(0, sch->blockers());
+            EXPECT_EQ(0, sch->block_workers());
             EXPECT_EQ(t, (T)std::move(awt));
             EXPECT_FALSE(co_ids_identical);
             EXPECT_EQ(t, (T)std::move(awt2));
@@ -2048,7 +2048,7 @@ size_t block_T() {
             auto awt2 = sch->join(test::scheduler::co_block_for_queue_stacked_outer(q,co_ids_identical2, thd_id));
             auto awt3 = sch->join(test::scheduler::co_block_for_queue_stacked_outer(q,co_ids_identical3, thd_id));
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
-            EXPECT_EQ(3, sch->blockers());
+            EXPECT_EQ(3, sch->block_workers());
             q.push(t);
             q.push(t);
             q.push(t);
@@ -2079,7 +2079,7 @@ size_t block_T() {
 }
 }
 
-TEST(scheduler, block_and_blockers) {
+TEST(scheduler, block_and_block_workers) {
     const size_t expected = 8;
     EXPECT_EQ(expected, test::scheduler::block_T<int>());
     EXPECT_EQ(expected, test::scheduler::block_T<unsigned int>());

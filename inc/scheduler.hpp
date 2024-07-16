@@ -672,8 +672,8 @@ struct scheduler : public printable {
 
         inline std::string content() const {
             std::stringstream ss;
-            ss << "block_worker_reuse_pool:"
-               << block_worker_reuse_pool
+            ss << "block_workers_reuse_pool:"
+               << block_workers_reuse_pool
                << "on_init:" 
                << on_init 
                << ", on_suspend:" 
@@ -687,7 +687,7 @@ struct scheduler : public printable {
          The count of worker threads used by `block()` this scheduler will 
          persist for reuse. No workers are created until they are required.
          */
-        size_t block_worker_reuse_pool = 0;
+        size_t block_workers_reuse_pool = 0;
         
         /**
          Handlers to be called on initialization (before executing coroutines) 
@@ -714,7 +714,7 @@ struct scheduler : public printable {
         // deep copy
         inline void copy_(const config& rhs) {
             HCE_MED_METHOD_ENTER("copy_",rhs);
-            block_worker_reuse_pool = rhs.block_worker_reuse_pool;
+            block_workers_reuse_pool = rhs.block_workers_reuse_pool;
             on_init = rhs.on_init;
             on_suspend = rhs.on_suspend;
             on_halt = rhs.on_halt;
@@ -723,7 +723,7 @@ struct scheduler : public printable {
         // shallow copy
         inline void move_(config&& rhs) {
             HCE_MED_METHOD_ENTER("move_",rhs);
-            block_worker_reuse_pool = std::move(rhs.block_worker_reuse_pool);
+            block_workers_reuse_pool = std::move(rhs.block_workers_reuse_pool);
             on_init = std::move(rhs.on_init);
             on_suspend = std::move(rhs.on_suspend);
             on_halt = std::move(rhs.on_halt);
@@ -862,7 +862,7 @@ struct scheduler : public printable {
         if(c) { 
             auto& conf = *c;
             HCE_HIGH_METHOD_ENTER("install",conf);
-            blocking_.set_worker_reuse_count(conf.block_worker_reuse_pool);
+            blocking_.set_worker_reuse_count(conf.block_workers_reuse_pool);
 
             conf.on_init.call(*this);
             conf.on_init.clear();
@@ -1118,29 +1118,6 @@ struct scheduler : public printable {
      `block()`, or if called outside of an `hce` coroutine, the Callable will be 
      executed immediately on the *current* thread.
 
-     Worker threads utilized by this mechanism can be reused by the scheduler,
-     potentially increasing program efficiency when blocking calls need to be 
-     regularly made.
-
-     The default count of reused worker threads is 0 threads. However, any 
-     number of 0 or higher can be specified by `install()`ing the scheduler with 
-     an `hce::scheduler::config` with its `block_worker_reuse_pool` member set
-     to the desired count of worker threads to reuse. Consider configuring 
-     schedulers with a higher value `block_worker_reuse_pool` if blocking calls 
-     are made frequently.
-
-     The default global scheduler's reuse blocker worker count is specified by 
-     the `std::unique_ptr<hce::scheduler::config>` returned by global function 
-     `hce_global_config()`. `hce_global_config()` is an `extern` function, and 
-     it's library default implementation not compiled if compiler flag 
-     `HCECUSTOMGLOBALCONFIG` is provided during compilation of the library. This 
-     allows the user to write their own implementation.
-
-     Additionally, the global scheduler's default reuse blocker worker count is 
-     specified at library compile time by the compiler define 
-     `HCEGLOBALREUSEBLOCKPROCS` (which defaults to 1 thread). This value is used 
-     in the default implementation of `hce_global_config()`.
-
      The given Callable can access values owned by the coroutine's body (or 
      values on a thread's stack if called outside of a coroutine) by reference, 
      because the caller of `call()` will be blocked while awaiting the Callable 
@@ -1202,19 +1179,42 @@ struct scheduler : public printable {
         return c;
     }
 
-    /// return the current count of `block()`ing tasks
-    inline size_t blockers() const { 
+    /// return the current count of worker threads spawned for `block()`ing tasks
+    inline size_t block_workers() const { 
         auto c = blocking_.count(); 
-        HCE_TRACE_METHOD_BODY("blockers",c);
+        HCE_TRACE_METHOD_BODY("block_workers",c);
         return c;
     }
 
     /**
-     @return the count of `block()` worker threads the scheduler will keep in existence
+     Worker threads utilized by the `block()` mechanism can be reused by the 
+     scheduler, potentially increasing program efficiency when blocking calls 
+     need to be regularly made.
+
+     The default count of reused worker threads is 0 threads. However, any 
+     number of 0 or higher can be specified by `install()`ing the scheduler with 
+     an `hce::scheduler::config` with its `block_workers_reuse_pool` member set
+     to the desired count of worker threads to reuse. Consider configuring 
+     schedulers with a higher value `block_workers_reuse_pool` if blocking calls 
+     are made frequently.
+
+     The default global scheduler's reuse blocker worker count is specified by 
+     the `std::unique_ptr<hce::scheduler::config>` returned by global function 
+     `hce_global_config()`. `hce_global_config()` is an `extern` function, and 
+     it's library default implementation not compiled if compiler flag 
+     `HCECUSTOMGLOBALCONFIG` is provided during compilation of the library. This 
+     allows the user to write their own implementation.
+
+     Additionally, the global scheduler's default reuse blocker worker count is 
+     specified at library compile time by the compiler define 
+     `HCEGLOBALREUSEBLOCKPROCS` (which defaults to 1 thread). This value is used 
+     in the default implementation of `hce_global_config()`.
+
+     @return the minimum count of `block()` worker threads the scheduler will persist
      */
-    inline size_t block_reuse_pool() const { 
+    inline size_t block_workers_reuse_pool() const { 
         auto c = blocking_.reuse(); 
-        HCE_TRACE_METHOD_BODY("block_reuse_pool",c);
+        HCE_TRACE_METHOD_BODY("block_workers_reuse_pool",c);
         return c;
     }
     
@@ -1346,7 +1346,7 @@ private:
         std::weak_ptr<scheduler> parent_;
     };
 
-    struct blocking {
+    struct blocking : public hce::printable {
         // block workers implicitly start a scheduler on a new thread during 
         // construction and shutdown said scheduler during destruction.
         struct worker {
@@ -1414,8 +1414,12 @@ private:
 
         blocking(hce::scheduler& parent) : 
             reuse_cnt_(0),
+            count_(0),
             parent_(parent)
         { }
+
+        inline const char* nspace() const { return "hce::scheduler"; }
+        inline const char* name() const { return "blocking"; }
 
         inline void set_worker_reuse_count(size_t reuse_count) {
             reuse_cnt_ = reuse_count;
@@ -1425,12 +1429,16 @@ private:
         hce::awt<T>
         block(Callable&& cb, As&&... as) {
             if(!scheduler::in() || worker::tl_is_block()) {
+                HCE_TRACE_METHOD_BODY("block","executing current thread");
+                
                 /// we own the thread, call cb immediately and return the result
                 return hce::awt<T>::make(
                     new done<T>(cb(std::forward<As>(as)...)));
             } else {
+                HCE_TRACE_METHOD_BODY("block","executing on worker thread");
                 // get a contractor to do the work of managing threads
-                std::unique_ptr<contractor<T>> cr(new contractor<T>(parent_)); 
+                std::unique_ptr<contractor<T>> cr(
+                    new contractor<T>(parent_)); 
                 auto& sch = cr->scheduler(); // acquire the contractor's scheduler
 
                 // convert our Callable to a coroutine
@@ -1456,10 +1464,13 @@ private:
         hce::awt<void>
         block(Callable&& cb, As&&... as) {
             if(!scheduler::in() || worker::tl_is_block()) {
+                HCE_TRACE_METHOD_BODY("block","executing current thread");
                 cb(std::forward<As>(as)...);
                 return hce::awt<void>::make(new done<void>());
             } else {
-                std::unique_ptr<contractor<void>> cr(new contractor<void>(parent_)); 
+                HCE_TRACE_METHOD_BODY("block","executing on worker thread");
+                std::unique_ptr<contractor<void>> cr(
+                    new contractor<void>(parent_)); 
                 auto& sch = cr->scheduler(); 
 
                 hce::co<void> co = detail::scheduler::wrapper<void>(
@@ -1489,8 +1500,8 @@ private:
             size_t c;
 
             {
-                std::unique_lock<spinlock> lk(lk_);
-                c = workers_.size();
+                std::unique_lock<hce::spinlock> lk(lk_);
+                c = count_ + workers_.size();
             }
 
             HCE_TRACE_METHOD_BODY("count",c);
@@ -1501,7 +1512,10 @@ private:
         inline std::unique_ptr<worker> checkout_worker_() {
             std::unique_ptr<worker> w;
 
+            HCE_TRACE_METHOD_BODY("checkin_worker_","++count");
             std::unique_lock<spinlock> lk(lk_);
+            ++count_;
+
             if(workers_.size()) {
                 // get the first available worker
                 w = std::move(workers_.front());
@@ -1516,7 +1530,10 @@ private:
         }
 
         inline void checkin_worker_(std::unique_ptr<worker>&& w) {
+            HCE_TRACE_METHOD_BODY("checkin_worker_","--count");
             std::unique_lock<spinlock> lk(lk_);
+            --count_;
+
             if(workers_.size() < reuse_cnt_) {
                 workers_.push_back(std::move(w));
             } 
@@ -1526,6 +1543,7 @@ private:
 
         // reused block() worker thread count
         size_t reuse_cnt_; 
+        size_t count_;
         hce::scheduler& parent_;
 
         // worker memory
