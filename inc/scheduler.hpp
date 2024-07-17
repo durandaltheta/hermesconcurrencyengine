@@ -352,12 +352,12 @@ struct scheduler : public printable {
             }()) 
         { 
             HCE_ERROR_CONSTRUCTOR();
+            HCE_ERROR_METHOD_BODY("is_halted",estr.c_str());
         }
 
         inline const char* nspace() const { return "hce::scheduler"; }
         inline const char* name() const { return "is_halted"; }
         inline std::string content() const { return estr; }
-
         inline const char* what() const noexcept { return estr.c_str(); }
 
     private:
@@ -382,7 +382,7 @@ struct scheduler : public printable {
     };
 
     /**
-     @brief object for controlling the state of schedulers 
+     @brief object for controlling the lifecycle state of schedulers 
 
      When this object is assigned during a call to:
      ```
@@ -779,7 +779,7 @@ struct scheduler : public printable {
     static inline std::shared_ptr<scheduler> make() {
         HCE_HIGH_FUNCTION_ENTER("hce::scheduler::make");
         std::unique_ptr<lifecycle> lc;
-        auto s = make(lc);
+        auto s = scheduler::make(lc);
         lifecycle::manager::instance().registration(std::move(lc));
         return s;
     };
@@ -863,9 +863,7 @@ struct scheduler : public printable {
             auto& conf = *c;
             HCE_HIGH_METHOD_ENTER("install",conf);
             blocking_.set_worker_reuse_count(conf.block_workers_reuse_pool);
-
             conf.on_init.call(*this);
-            conf.on_init.clear();
 
             while(run_()) {
                 // Call suspend handlers every time run_() returns early due 
@@ -873,9 +871,7 @@ struct scheduler : public printable {
                 conf.on_suspend.call(*this);
             } 
 
-            conf.on_suspend.clear();
             conf.on_halt.call(*this);
-            conf.on_halt.clear();
         } else { 
             HCE_HIGH_METHOD_ENTER("install");
             while(run_()) { } 
@@ -1156,6 +1152,9 @@ struct scheduler : public printable {
         HCE_TRACE_METHOD_ENTER("log_level",level);
         schedule(scheduler::co_set_log_level(level));
     }
+
+    //--------------------------------------------------------------------------
+    // state access
 
     /// return the state of the scheduler
     inline state status() const {

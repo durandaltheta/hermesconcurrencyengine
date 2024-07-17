@@ -1773,7 +1773,7 @@ size_t block_T() {
 
     // thread block done immediately 
     {
-        auto schedule_blocking = [&](T&& t) {
+        auto schedule_blocking = [&](T t) {
             auto thd_id = std::this_thread::get_id();
             bool ids_identical = false;
             bool ids_identical2 = false;
@@ -1801,7 +1801,7 @@ size_t block_T() {
 
     // thread block for queue
     {
-        auto schedule_blocking = [&](T&& t) {
+        auto schedule_blocking = [&](T t) {
             test::queue<T> q;
             auto thd_id = std::this_thread::get_id();
             bool ids_identical = false;
@@ -1848,7 +1848,7 @@ size_t block_T() {
      'block_workers()' count the same as only calling block() once. 
      */
     {
-        auto schedule_blocking = [&](T&& t) {
+        auto schedule_blocking = [&](T t) {
             auto thd_id = std::this_thread::get_id();
             bool ids_identical = false;
             bool ids_identical2 = false;
@@ -1876,7 +1876,7 @@ size_t block_T() {
 
     // thread stacked block 
     {
-        auto schedule_blocking = [&](T&& t) {
+        auto schedule_blocking = [&](T t) {
             test::queue<T> q;
             auto thd_id = std::this_thread::get_id();
             bool ids_identical = false;
@@ -1922,7 +1922,7 @@ size_t block_T() {
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
 
-        auto schedule_blocking_co = [&](T&& t) {
+        auto schedule_blocking_co = [&](T t) {
             auto thd_id = std::this_thread::get_id();
             bool co_ids_identical = true;
             bool co_ids_identical2 = true;
@@ -1960,7 +1960,7 @@ size_t block_T() {
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
 
-        auto schedule_blocking_co = [&](T&& t) {
+        auto schedule_blocking_co = [&](T t) {
             auto thd_id = std::this_thread::get_id();
             bool co_ids_identical = true;
             bool co_ids_identical2 = true;
@@ -2001,7 +2001,7 @@ size_t block_T() {
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
 
-        auto schedule_blocking_co = [&](T&& t) {
+        auto schedule_blocking_co = [&](T t) {
             auto thd_id = std::this_thread::get_id();
             bool co_ids_identical = true;
             bool co_ids_identical2 = true;
@@ -2039,7 +2039,7 @@ size_t block_T() {
         auto sch = hce::scheduler::make(lf);
         std::thread thd([&]{ sch->install(); });
 
-        auto schedule_blocking_co = [&](T&& t) {
+        auto schedule_blocking_co = [&](T t) {
             auto thd_id = std::this_thread::get_id();
             bool co_ids_identical = true;
             bool co_ids_identical2 = true;
