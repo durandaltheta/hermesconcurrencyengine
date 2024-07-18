@@ -18,14 +18,14 @@ hce::scheduler::lifecycle::manager& hce::scheduler::lifecycle::manager::instance
     return m;
 }
 
-extern std::unique_ptr<hce::scheduler::config> hce_global_config();
+extern std::unique_ptr<hce::scheduler::config> hce_scheduler_global_config();
 
 #ifndef HCEGLOBALREUSEBLOCKPROCS
 #define HCEGLOBALREUSEBLOCKPROCS 1
 #endif 
 
 #ifndef HCECUSTOMGLOBALCONFIG
-std::unique_ptr<hce::scheduler::config> hce_global_config() {
+std::unique_ptr<hce::scheduler::config> hce_scheduler_global_config() {
     auto config = hce::scheduler::config::make();
     config->block_workers_reuse_pool = HCEGLOBALREUSEBLOCKPROCS;
     return config;
@@ -37,7 +37,7 @@ hce::scheduler& hce::scheduler::global_() {
         []() -> std::shared_ptr<hce::scheduler> {
             auto sch = hce::scheduler::make();
             std::thread([](std::shared_ptr<hce::scheduler> sch) mutable {
-                sch->install(hce_global_config()); 
+                sch->install(hce_scheduler_global_config()); 
             }, sch).detach();
             return sch;
         }());

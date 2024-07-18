@@ -491,7 +491,7 @@ struct scheduler : public printable {
 
         inline std::string content() const {
             std::stringstream ss;
-            if(parent_) { ss << parent_; }
+            if(parent_) { ss << *parent_; }
             return ss.str();
         }
 
@@ -526,7 +526,7 @@ struct scheduler : public printable {
         lifecycle() = delete;
 
         lifecycle(std::shared_ptr<hce::scheduler>& parent) : parent_(parent) {
-            HCE_HIGH_CONSTRUCTOR(*parent);
+            HCE_HIGH_CONSTRUCTOR();
         }
 
         std::shared_ptr<hce::scheduler> parent_;
@@ -1005,6 +1005,24 @@ struct scheduler : public printable {
     }
 
     /**
+     @brief start a timer on this scheduler 
+
+     Abstracts away the timer's id to block the awaiter for a time (no way to 
+     directly cancel this running timer).
+
+     The returned awaitable will result in `true` if the timer timeout was 
+     reached, else `false` will be returned if it was cancelled early.
+
+     @param as the arguments will be passed to `hce::chrono::duration()`
+     @return an awaitable to join with the timer timing out or being cancelled
+     */
+    template <typename... As>
+    inline hce::awt<bool> sleep(As&&... as) {
+        hce::id i;
+        return start(i, std::forward<As>(as)...);
+    }
+
+    /**
      @brief determine if a timer with the given id is running
      @return true if the timer is running, else false
      */
@@ -1067,24 +1085,6 @@ struct scheduler : public printable {
                 return false;
             }
         } else { return false; }
-    }
-
-    /**
-     @brief start a timer on this scheduler 
-
-     Abstracts away the timer's id to block the awaiter for a time (no way to 
-     directly cancel this running timer).
-
-     The returned awaitable will result in `true` if the timer timeout was 
-     reached, else `false` will be returned if it was cancelled early.
-
-     @param as the arguments will be passed to `hce::chrono::duration()`
-     @return an awaitable to join with the timer timing out or being cancelled
-     */
-    template <typename... As>
-    inline hce::awt<bool> sleep(As&&... as) {
-        hce::id i;
-        return start(i, std::forward<As>(as)...);
     }
 
     /**
@@ -1153,9 +1153,6 @@ struct scheduler : public printable {
         schedule(scheduler::co_set_log_level(level));
     }
 
-    //--------------------------------------------------------------------------
-    // state access
-
     /// return the state of the scheduler
     inline state status() const {
         HCE_MIN_METHOD_ENTER("status");
@@ -1199,15 +1196,17 @@ struct scheduler : public printable {
 
      The default global scheduler's reuse blocker worker count is specified by 
      the `std::unique_ptr<hce::scheduler::config>` returned by global function 
-     `hce_global_config()`. `hce_global_config()` is an `extern` function, and 
-     it's library default implementation not compiled if compiler flag 
-     `HCECUSTOMGLOBALCONFIG` is provided during compilation of the library. This 
-     allows the user to write their own implementation.
+     `hce_scheduler_global_config()`. `hce_scheduler_global_config()` is an 
+     `extern` function, and its library default implementation will not be 
+     compiled if compiler flag `HCECUSTOMGLOBALCONFIG` is provided during 
+     compilation of the library, allows the user to write and link against 
+     their own implementation.
 
-     Additionally, the global scheduler's default reuse blocker worker count is 
+     Additionally, the global scheduler's default 
+     `hce::scheduler::config::block_workers_reuse_pool` member's value is 
      specified at library compile time by the compiler define 
-     `HCEGLOBALREUSEBLOCKPROCS` (which defaults to 1 thread). This value is used 
-     in the default implementation of `hce_global_config()`.
+     `HCEGLOBALREUSEBLOCKPROCS` (which defaults to 1 thread). This value is 
+     used in the default implementation of `hce_global_config()`.
 
      @return the minimum count of `block()` worker threads the scheduler will persist
      */
@@ -1348,16 +1347,24 @@ private:
     struct blocking : public hce::printable {
         // block workers implicitly start a scheduler on a new thread during 
         // construction and shutdown said scheduler during destruction.
-        struct worker {
+        struct worker : public hce::printable {
             worker() : sch_([&]() -> std::shared_ptr<hce::scheduler> {
                     auto sch = hce::scheduler::make(lf_);
                     std::thread([sch]() mutable { sch->install(); }).detach();
                     return sch;
                 }())
-            { }
+            { 
+                HCE_MED_CONSTRUCTOR();
+            }
+
+            ~worker() { HCE_MED_DESTRUCTOR(); }
 
             // thread_local value defaults to false
             static bool& tl_is_block();
+
+            inline const char* nspace() const { return "hce::scheduler::blocking"; }
+            inline const char* name() const { return "worker"; }
+            inline std::string content() const { return sch_->to_string(); }
 
             // return the scheduler installed on the worker's thread
             hce::scheduler& scheduler() { return *sch_; }
@@ -1528,7 +1535,7 @@ private:
             return w;
         }
 
-        inline void checkin_worker_(std::unique_ptr<worker>&& w) {
+        inline void checkin_worker_(std::unique_ptr<worker> w) {
             HCE_TRACE_METHOD_BODY("checkin_worker_","--count");
             std::unique_lock<spinlock> lk(lk_);
             --count_;

@@ -49,7 +49,7 @@ TEST(coroutine, release) {
     EXPECT_TRUE(co);
     std::coroutine_handle<> hdl = co.release();
     EXPECT_FALSE(co);
-    co = hce::co<void>(hdl);
+    co = hce::co<void>(std::move(hdl));
     EXPECT_TRUE(co);
 }
 
@@ -249,10 +249,10 @@ TEST(coroutine, co_await_void) {
         EXPECT_FALSE(co);
         EXPECT_FALSE(flag);
 
-        co = hce::coroutine(hdl);
+        co = hce::coroutine(std::move(hdl));
         co.resume();
 
-        EXPECT_NE(nullptr, hdl.address());
+        EXPECT_EQ(nullptr, hdl.address());
         EXPECT_TRUE(co);
         EXPECT_TRUE(co.done());
         EXPECT_FALSE(flag);
@@ -342,10 +342,10 @@ TEST(coroutine, co_await_int) {
         EXPECT_FALSE(co);
         EXPECT_FALSE(flag);
 
-        co = hce::coroutine(hdl);
+        co = hce::coroutine(std::move(hdl));
         co.resume();
 
-        EXPECT_NE(nullptr, hdl.address());
+        EXPECT_EQ(nullptr, hdl.address());
         EXPECT_TRUE(co);
         EXPECT_TRUE(co.done());
         EXPECT_FALSE(flag);
@@ -435,10 +435,10 @@ TEST(coroutine, co_await_string) {
         EXPECT_FALSE(co);
         EXPECT_FALSE(flag);
 
-        co = hce::coroutine(hdl);
+        co = hce::coroutine(std::move(hdl));
         co.resume();
 
-        EXPECT_NE(nullptr, hdl.address());
+        EXPECT_EQ(nullptr, hdl.address());
         EXPECT_TRUE(co);
         EXPECT_TRUE(co.done());
         EXPECT_FALSE(flag);

@@ -71,20 +71,20 @@ struct coroutine : public printable {
         std::exception_ptr eptr = nullptr; // exception pointer
     };
 
-    coroutine() { 
-        HCE_MIN_CONSTRUCTOR("coroutine");
-    }
-
+    coroutine() { }
     coroutine(const coroutine&) = delete;
 
     coroutine(coroutine&& rhs) {
-        HCE_MED_CONSTRUCTOR("coroutine",rhs);
+        HCE_MED_LIFECYCLE_GUARD(rhs.handle_,HCE_MED_CONSTRUCTOR(rhs)); 
         swap(rhs); 
     }
 
     // construct the coroutine from a type erased handle
-    coroutine(std::coroutine_handle<> h) : handle_(h) { 
-        HCE_MIN_CONSTRUCTOR("coroutine");
+    coroutine(std::coroutine_handle<>&& h) : handle_(h) { 
+        HCE_MIN_LIFECYCLE_GUARD(h,HCE_MIN_CONSTRUCTOR(h));
+
+        // ensure source memory no longer has access to the handle
+        h = std::coroutine_handle<>();
     }
 
     inline coroutine& operator=(const coroutine&) = delete;
@@ -95,8 +95,8 @@ struct coroutine : public printable {
         return *this;
     }
 
-    ~coroutine() { 
-        HCE_MED_DESTRUCTOR();
+    ~coroutine() {
+        HCE_MED_LIFECYCLE_GUARD(handle_,HCE_MED_DESTRUCTOR()); 
         reset(); 
     }
 
@@ -105,9 +105,11 @@ struct coroutine : public printable {
 
     /// return our stringified coroutine handle's address
     inline std::string content() const { 
-        std::stringstream ss;
-        ss << handle_;
-        return ss.str();
+        if(handle_) {
+            std::stringstream ss;
+            ss << handle_;
+            return ss.str();
+        } else { return std::string(); }
     }
 
     /// return true if the handle is valid, else false
