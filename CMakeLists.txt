@@ -36,15 +36,16 @@ endif()
 set(HCE_HEADER_FILES 
     ${LOGURU_DIR}/loguru.hpp
     ${HCE_INCLUDE_DIR}/utility.hpp
-    ${HCE_INCLUDE_DIR}/chrono.hpp
-    ${HCE_INCLUDE_DIR}/atomic.hpp
-    ${HCE_INCLUDE_DIR}/circular_buffer.hpp
+    #${HCE_INCLUDE_DIR}/chrono.hpp
+    #${HCE_INCLUDE_DIR}/atomic.hpp
+    #${HCE_INCLUDE_DIR}/circular_buffer.hpp
     ${HCE_INCLUDE_DIR}/coroutine.hpp
     ${HCE_INCLUDE_DIR}/scheduler.hpp
     #${HCE_INCLUDE_DIR}/mutex.hpp
     #${HCE_INCLUDE_DIR}/condition_variable.hpp
-    ${HCE_INCLUDE_DIR}/channel.hpp
-    ${HCE_INCLUDE_DIR}/hce.hpp)
+    #${HCE_INCLUDE_DIR}/channel.hpp
+    #${HCE_INCLUDE_DIR}/hce.hpp
+)
 
 set(HCE_SOURCE_FILES
     ${LOGURU_DIR}/loguru.cpp
@@ -74,10 +75,14 @@ set(HCE_COMPILE_DEFS
     -DHCELOGLEVEL=${HCELOGLEVEL}
     -DHCEGLOBALREUSEBLOCKPROCS=${HCEGLOBALREUSEBLOCKPROCS})
 
+# if the user wants to implement their own logging initialization they should 
+# enable this option
 if(DEFINED ENV{HCECUSTOMLOGINIT})
     set(HCE_COMPILE_DEFS ${HCE_COMPILE_DEFS} -DHCECUSTOMLOGINIT)
 endif()
 
+# if the user wants to implement their own global configuration they should 
+# enable this option
 if(DEFINED ENV{HCECUSTOMGLOBALCONFIG})
     set(HCE_COMPILE_DEFS ${HCE_COMPILE_DEFS} -DHCECUSTOMGLOBALCONFIG)
 endif()

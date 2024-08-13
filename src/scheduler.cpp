@@ -35,16 +35,18 @@ std::unique_ptr<hce::scheduler::config> hce_scheduler_global_config() {
 hce::scheduler& hce::scheduler::global_() {
     static std::shared_ptr<hce::scheduler> sch(
         []() -> std::shared_ptr<hce::scheduler> {
-            auto sch = hce::scheduler::make();
-            std::thread([](std::shared_ptr<hce::scheduler> sch) mutable {
-                sch->install(hce_scheduler_global_config()); 
-            }, sch).detach();
+            std::unique_ptr<hce::scheduler::lifecycle> lc;
+            auto i = hce::scheduler::make(lc, hce_scheduler_global_config());
+            hce::scheduler::lifecycle::manager::instance().registration(
+                std::move(lc));
+            std::shared_ptr<hce::scheduler> sch = i->scheduler();
+            std::thread([](std::shared_ptr<hce::scheduler::install> i) { }, std::move(i)).detach();
             return sch;
         }());
     return *sch;
 }
 
-bool& hce::scheduler::blocking::worker::tl_is_block() {
+bool& hce::scheduler::block_manager::worker::tl_is_block() {
     thread_local bool ib = false;
     return ib;
 }

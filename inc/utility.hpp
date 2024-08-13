@@ -81,7 +81,7 @@
 #endif 
 
 // HCELOGLIMIT min value is -9
-#if HCELOGLIMIT < -10
+#if HCELOGLIMIT < -9
 #define HCELOGLIMIT -9
 #endif
 
@@ -402,6 +402,10 @@ struct printable {
 
     /**
      @brief set the thread local log level 
+
+     Maximum value: 9
+     Minimum value: -9
+
      @param the new log level for the calling thread
      */
     static void thread_log_level(int level);
@@ -594,7 +598,7 @@ private:
 namespace detail {
 namespace utility {
 
-/// convenience std::function->std::string conversion
+/// convenience Callable->std::string conversion
 template <typename Callable>
 inline std::string callable_to_string(Callable& f) {
     std::stringstream ss;
@@ -653,7 +657,7 @@ private:
 };
 
 // Arbitrary word sized allocated memory. The unique address of this 
-// memory is used as a unique value
+// memory is usable as a key
 struct id : public std::shared_ptr<bool>, public printable {
     template <typename... As>
     id(As&&... as) : std::shared_ptr<bool>(std::forward<As>(as)...) {
@@ -667,7 +671,14 @@ struct id : public std::shared_ptr<bool>, public printable {
 
     inline std::string content() const {
         std::stringstream ss;
-        ss << "unique@" << get();
+        auto addr = get();
+
+        if(addr) {
+            ss << "unique@" << addr;
+        } else {
+            ss << "nullptr";
+        }
+
         return ss.str();
     }
 };

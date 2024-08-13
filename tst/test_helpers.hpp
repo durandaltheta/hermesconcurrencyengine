@@ -55,6 +55,43 @@ private:
     std::deque<T> vals;
 };
 
+template <>
+struct queue<void> {
+    void push() {
+        HCE_TRACE_LOG("test::queue<T>::push()+");
+        {
+            std::lock_guard<hce::spinlock> lk(slk);
+            vals.push_back(0);
+        }
+        cv.notify_one();
+        HCE_TRACE_LOG("test::queue<T>::push()-");
+    }
+
+    void pop() {
+        HCE_TRACE_LOG("test::queue<T>::pop()+");
+        std::unique_lock<hce::spinlock> lk(slk);
+        while(!vals.size()) {
+            cv.wait(lk);
+        }
+
+        vals.pop_front();
+        HCE_TRACE_LOG("test::queue<T>::pop()-");
+        return;
+    }
+
+    size_t size() {
+        HCE_TRACE_LOG("test::queue<T>::size()+");
+        std::lock_guard<hce::spinlock> lk(slk);
+        HCE_TRACE_LOG("test::queue<T>::size()-");
+        return vals.size();
+    }
+
+private:
+    hce::spinlock slk;
+    std::condition_variable_any cv;
+    std::deque<int> vals;
+};
+
 /*
  Init is a special type created for the sole purpose of standardizing 
  initialization in templates from a number to type `T`. 

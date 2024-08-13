@@ -21,13 +21,13 @@
 #endif
 
 /// declaration of user replacable log initialization function
-extern void hce_log_initialize(int hceloglevel);
+extern void hce_log_initialize();
 
 #ifndef HCECUSTOMLOGINIT
 /// the default log initialization code is defined here
-void hce_log_initialize(int hceloglevel) {
+void hce_log_initialize() {
     std::stringstream ss;
-    ss << "-v" << hceloglevel;
+    ss << "-v" << HCELOGLEVEL;
     std::string process("hermesconcurrencyengine");
     std::string verbosity = ss.str();
     std::vector<char*> argv;
@@ -46,17 +46,17 @@ namespace detail {
 
 struct log_initializer {
     // responsible for initializing the loguru framework
-    log_initializer() { hce_log_initialize(HCELOGLEVEL); }
+    log_initializer() { hce_log_initialize(); }
     int loglevel() const { return loguru::current_verbosity_cutoff(); }
-} g_log_initializer;
+} g_log_initializer; // globals are initialized before entering main()
 
 }
 }
-    
+
 int hce::printable::default_log_level() { 
     return hce::detail::g_log_initializer.loglevel(); 
 }
-    
+
 int& hce::printable::tl_loglevel() {
     thread_local int level = hce::printable::default_log_level();
     return level;
@@ -67,5 +67,7 @@ int hce::printable::thread_log_level() { return hce::printable::tl_loglevel(); }
 
 /// set the thread local loglevel
 void hce::printable::thread_log_level(int level) {
+    if(level > 9) { level = 9; }
+    else if(level < -9) { level = -9; }
     hce::printable::tl_loglevel() = level;
 }

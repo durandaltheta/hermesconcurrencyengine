@@ -558,6 +558,8 @@ struct awaitable : public printable {
      */
     struct interface : public printable {
         interface() { HCE_LOW_CONSTRUCTOR(); }
+        interface(const interface& rhs) = delete;
+        interface(interface&& rhs) = delete;
 
         virtual ~interface() { 
             HCE_LOW_DESTRUCTOR();
@@ -573,6 +575,9 @@ struct awaitable : public printable {
                 HCE_ERROR_METHOD_BODY("~interface",ss.str().c_str());
             }
         }
+        
+        interface& operator=(const interface& rhs) = delete;
+        interface& operator=(interface&& rhs) = delete;
 
         inline const char* nspace() const { return "hce::awaitable"; }
         inline const char* name() const { return "interface"; }
@@ -644,18 +649,19 @@ struct awaitable : public printable {
             // call the custom resumption code
             this->on_resume(m); 
 
-            if(this->atp_) { 
-                HCE_TRACE_METHOD_BODY("resume","unblock");
-                // unblock the suspended thread 
-                if(rp == resume::policy::no_lock) { this->atp_->unblock(); }
-                else { this->atp_->unblock(*this); }
-            } else if(this->handle_) { 
+            if(this->handle_) { 
                 HCE_TRACE_METHOD_BODY("resume","destination");
                 // unblock the suspended coroutine and push the handle to its 
                 // destination
                 if(rp != resume::policy::no_lock) { this->unlock(); }
                 this->destination(this->handle_);
                 this->handle_ = std::coroutine_handle<>();
+            } else if(this->atp_) { 
+                HCE_TRACE_METHOD_BODY("resume","unblock");
+                // unblock the suspended thread 
+                if(rp == resume::policy::no_lock) { this->atp_->unblock(); }
+                else { this->atp_->unblock(*this); }
+                this->atp_ = nullptr;
             } else {
                 HCE_TRACE_METHOD_BODY("resume","not blocked");
                 // this was called before blocking occurred
