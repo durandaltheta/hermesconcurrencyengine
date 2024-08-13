@@ -72,7 +72,8 @@ TEST(scheduler, make_with_lifecycle) {
 
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        sch = hce::scheduler::make(lf);
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
         EXPECT_EQ(hce::scheduler::state::ready, sch->status());
     }
 
@@ -80,7 +81,8 @@ TEST(scheduler, make_with_lifecycle) {
 
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        sch = hce::scheduler::make(lf);
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
         EXPECT_EQ(hce::scheduler::state::ready, sch->status());
         lf->suspend();
         EXPECT_EQ(hce::scheduler::state::suspended, sch->status());
@@ -96,7 +98,8 @@ TEST(scheduler, conversions) {
 
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        sch = hce::scheduler::make(lf);
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
         EXPECT_EQ(hce::scheduler::state::ready, sch->status());
 
         hce::scheduler& sch_ref = *sch;
@@ -116,10 +119,11 @@ TEST(scheduler, install) {
     // halt with lifecycle 
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
         EXPECT_EQ(hce::scheduler::state::ready, sch->status());
 
-        std::thread thd([&]{ sch->install(); });
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         
         EXPECT_EQ(hce::scheduler::state::executing, sch->status());
@@ -133,7 +137,6 @@ TEST(scheduler, install) {
     {
         test::queue<hce::scheduler::state> state_q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
         auto config = hce::scheduler::config::make();
 
         // install 1 init handler
@@ -155,7 +158,9 @@ TEST(scheduler, install) {
             });
         }
 
-        std::thread thd([&]{ sch->install(std::move(config)); });
+        auto inst = hce::scheduler::make(lf, std::move(config));
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         EXPECT_EQ(hce::scheduler::state::executing, sch->status());
@@ -185,7 +190,6 @@ TEST(scheduler, install) {
     {
         test::queue<hce::scheduler::state> state_q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
         auto config = hce::scheduler::config::make();
 
         // install 1 init handler
@@ -207,7 +211,9 @@ TEST(scheduler, install) {
             });
         }
 
-        std::thread thd([&]{ sch->install(std::move(config)); });
+        auto inst = hce::scheduler::make(lf, std::move(config));
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         EXPECT_EQ(hce::scheduler::state::executing, sch->status());
@@ -249,8 +255,9 @@ size_t schedule_T(std::function<hce::co<T>(test::queue<T>& q, T t)> Coroutine) {
     {
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
         sch->schedule(Coroutine(q,test::init<T>(3)));
         sch->schedule(Coroutine(q,test::init<T>(2)));
@@ -273,8 +280,9 @@ size_t schedule_T(std::function<hce::co<T>(test::queue<T>& q, T t)> Coroutine) {
     {
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
         sch->schedule(Coroutine(q,test::init<T>(3)),
                       Coroutine(q,test::init<T>(2)),
@@ -297,8 +305,9 @@ size_t schedule_T(std::function<hce::co<T>(test::queue<T>& q, T t)> Coroutine) {
     {
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
         sch->schedule(hce::coroutine(Coroutine(q,test::init<T>(3))),
                       hce::coroutine(Coroutine(q,test::init<T>(2))),
@@ -321,8 +330,9 @@ size_t schedule_T(std::function<hce::co<T>(test::queue<T>& q, T t)> Coroutine) {
     {
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
         sch->schedule(Coroutine(q,test::init<T>(3)),
                       hce::coroutine(Coroutine(q,test::init<T>(2))),
@@ -345,8 +355,9 @@ size_t schedule_T(std::function<hce::co<T>(test::queue<T>& q, T t)> Coroutine) {
     {
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
         sch->schedule(Coroutine(q,test::init<T>(3)),
                       Coroutine(q,test::init<T>(2)));
@@ -369,8 +380,9 @@ size_t schedule_T(std::function<hce::co<T>(test::queue<T>& q, T t)> Coroutine) {
     {
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
         std::vector<hce::co<void>> cos;
         cos.push_back(Coroutine(q,test::init<T>(3)));
@@ -396,8 +408,9 @@ size_t schedule_T(std::function<hce::co<T>(test::queue<T>& q, T t)> Coroutine) {
     {
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
         std::list<hce::co<void>> cos;
         cos.push_back(Coroutine(q,test::init<T>(3)));
@@ -423,8 +436,9 @@ size_t schedule_T(std::function<hce::co<T>(test::queue<T>& q, T t)> Coroutine) {
     {
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
         std::forward_list<hce::co<void>> cos;
         cos.push_front(Coroutine(q,test::init<T>(3)));
@@ -508,8 +522,9 @@ TEST(scheduler, schedule_and_thread_locals) {
         test::queue<void*> sch_q;
         hce::scheduler* global_sch = &(hce::scheduler::global());
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
         try {
             sch->schedule(test::scheduler::co_scheduler_in_check(sch_q));
@@ -551,8 +566,9 @@ size_t join_T() {
     // join individually
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
         std::deque<hce::awt<T>> joins;
 
         joins.push_back(sch->join(
@@ -584,8 +600,9 @@ size_t join_T() {
     // join individually in reverse order
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
         std::deque<hce::awt<T>> joins;
 
         joins.push_back(sch->join(co_return_T<T>(test::init<T>(3))));
@@ -614,8 +631,9 @@ size_t join_T() {
     // join void
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
         std::deque<hce::awt<void>> joins;
 
         joins.push_back(sch->join(co_void()));
@@ -671,8 +689,9 @@ size_t scope_T() {
     // scope void individually
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
         std::deque<hce::awt<void>> scopes;
 
         scopes.push_back(sch->scope(co_void()));
@@ -699,8 +718,9 @@ size_t scope_T() {
     {
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
         std::deque<hce::awt<void>> scopes;
 
         scopes.push_back(sch->scope(co_push_T<T>(q,test::init<T>(3))));
@@ -731,8 +751,9 @@ size_t scope_T() {
     // scope void group
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
         std::deque<hce::awt<void>> scopes;
 
         scopes.push_back(sch->scope(
@@ -756,8 +777,9 @@ size_t scope_T() {
     {
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
         std::deque<hce::awt<void>> scopes;
 
         scopes.push_back(sch->scope(
@@ -785,8 +807,9 @@ size_t scope_T() {
     // scope void mixed
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
         std::deque<hce::awt<void>> scopes;
 
         scopes.push_back(sch->scope(
@@ -813,8 +836,9 @@ size_t scope_T() {
     {
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
         std::deque<hce::awt<void>> scopes;
 
         scopes.push_back(sch->scope(co_push_T<T>(q,test::init<T>(3))));
@@ -844,8 +868,9 @@ size_t scope_T() {
     // scope T individually
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
         std::deque<hce::awt<void>> scopes;
 
         scopes.push_back(sch->scope(co_return_T<T>(test::init<T>(3))));
@@ -872,8 +897,9 @@ size_t scope_T() {
     {
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
         std::deque<hce::awt<void>> scopes;
 
         scopes.push_back(sch->scope(co_push_T_return_T<T>(q,test::init<T>(3))));
@@ -904,8 +930,9 @@ size_t scope_T() {
     // scope T group
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
         std::deque<hce::awt<void>> scopes;
 
         scopes.push_back(sch->scope(
@@ -929,8 +956,9 @@ size_t scope_T() {
     {
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
         std::deque<hce::awt<void>> scopes;
 
         scopes.push_back(sch->scope(
@@ -958,8 +986,9 @@ size_t scope_T() {
     // scope T mixed
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
         std::deque<hce::awt<void>> scopes;
 
         scopes.push_back(sch->scope(co_return_T<T>(test::init<T>(3))));
@@ -985,8 +1014,9 @@ size_t scope_T() {
     {
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
         std::deque<hce::awt<void>> scopes;
 
         scopes.push_back(sch->scope(co_push_T_return_T<T>(q,test::init<T>(3))));
@@ -1057,8 +1087,9 @@ size_t start_As(As&&... as) {
     size_t success_count = 0;
 
     std::unique_ptr<hce::scheduler::lifecycle> lf;
-    auto sch = hce::scheduler::make(lf);
-    std::thread thd([&]{ sch->install(); });
+    auto inst = hce::scheduler::make(lf);
+    std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+    std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
     // thread timer timeout
     {
@@ -1315,8 +1346,9 @@ size_t sleep_As(As&&... as) {
     size_t success_count = 0;
 
     std::unique_ptr<hce::scheduler::lifecycle> lf;
-    auto sch = hce::scheduler::make(lf);
-    std::thread thd([&]{ sch->install(); });
+    auto inst = hce::scheduler::make(lf);
+    std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+    std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
     // thread timer timeout
     {
@@ -1563,8 +1595,9 @@ size_t cancel_As(As&&... as) {
     size_t success_count = 0;
 
     std::unique_ptr<hce::scheduler::lifecycle> lf;
-    auto sch = hce::scheduler::make(lf);
-    std::thread thd([&]{ sch->install(); });
+    auto inst = hce::scheduler::make(lf);
+    std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+    std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
     // thread timer cancel
     {
@@ -1996,8 +2029,9 @@ size_t block_T() {
         HCE_INFO_LOG("coroutine block done immediately+");
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
         auto schedule_blocking_co = [&](T t) {
             HCE_INFO_FUNCTION_ENTER("schedule_blocking_co");
@@ -2055,8 +2089,9 @@ size_t block_T() {
         HCE_INFO_LOG("coroutine block for queue+");
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
         auto schedule_blocking_co = [&](T t) {
             auto thd_id = std::this_thread::get_id();
@@ -2116,8 +2151,9 @@ size_t block_T() {
         HCE_INFO_LOG("coroutine stacked block done immediately+");
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
         auto schedule_blocking_co = [&](T t) {
             auto thd_id = std::this_thread::get_id();
@@ -2174,8 +2210,9 @@ size_t block_T() {
         HCE_INFO_LOG("coroutine stacked block+");
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-        std::thread thd([&]{ sch->install(); });
+        auto inst = hce::scheduler::make(lf);
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
         auto schedule_blocking_co = [&](T t) {
             auto thd_id = std::this_thread::get_id();
@@ -2273,13 +2310,11 @@ size_t block_workers_reuse_pool_T(const size_t pool_limit) {
     for(size_t reuse_cnt=0; reuse_cnt<pool_limit; ++reuse_cnt) {
         test::queue<T> q;
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto sch = hce::scheduler::make(lf);
-
-        std::thread thd([&]{ 
-            auto cfg = hce::scheduler::config::make();
-            cfg->block_workers_reuse_pool = reuse_cnt;
-            sch->install(std::move(cfg)); 
-        });
+        auto cfg = hce::scheduler::config::make();
+        cfg->block_workers_reuse_pool = reuse_cnt;
+        auto inst = hce::scheduler::make(lf, std::move(cfg));
+        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
         std::deque<hce::awt<T>> awts;
 

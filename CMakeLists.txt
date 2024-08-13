@@ -36,15 +36,15 @@ endif()
 set(HCE_HEADER_FILES 
     ${LOGURU_DIR}/loguru.hpp
     ${HCE_INCLUDE_DIR}/utility.hpp
-    #${HCE_INCLUDE_DIR}/chrono.hpp
-    #${HCE_INCLUDE_DIR}/atomic.hpp
-    #${HCE_INCLUDE_DIR}/circular_buffer.hpp
+    ${HCE_INCLUDE_DIR}/chrono.hpp
+    ${HCE_INCLUDE_DIR}/atomic.hpp
+    ${HCE_INCLUDE_DIR}/circular_buffer.hpp
     ${HCE_INCLUDE_DIR}/coroutine.hpp
     ${HCE_INCLUDE_DIR}/scheduler.hpp
     #${HCE_INCLUDE_DIR}/mutex.hpp
     #${HCE_INCLUDE_DIR}/condition_variable.hpp
-    #${HCE_INCLUDE_DIR}/channel.hpp
-    #${HCE_INCLUDE_DIR}/hce.hpp
+    ${HCE_INCLUDE_DIR}/channel.hpp
+    ${HCE_INCLUDE_DIR}/hce.hpp
 )
 
 set(HCE_SOURCE_FILES

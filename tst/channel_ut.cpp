@@ -344,8 +344,9 @@ size_t send_recv_close_T(const size_t count) {
         auto test = [&](hce::channel<T> ch) {
             test::queue<T> q;
             std::unique_ptr<hce::scheduler::lifecycle> lf;
-            auto sch = hce::scheduler::make(lf);
-            std::thread thd([&]{ sch->install(); });
+            auto inst = hce::scheduler::make(lf);
+            std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+            std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
             sch->schedule(test::channel::co_store_recv_till_close_return_void(ch,q));
 
             for(size_t i=count; i>0; --i) {
@@ -377,8 +378,9 @@ size_t send_recv_close_T(const size_t count) {
     {
         auto test = [&](hce::channel<T> ch){
             std::unique_ptr<hce::scheduler::lifecycle> lf;
-            auto sch = hce::scheduler::make(lf);
-            std::thread thd([&]{ sch->install(); });
+            auto inst = hce::scheduler::make(lf);
+            std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+            std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
             sch->schedule(test::channel::co_send_count_and_close_return_void(ch,count));
 
             T t;
@@ -408,8 +410,9 @@ size_t send_recv_close_T(const size_t count) {
         auto test = [&](hce::channel<T> ch){
             test::queue<T> q;
             std::unique_ptr<hce::scheduler::lifecycle> lf;
-            auto sch = hce::scheduler::make(lf);
-            std::thread thd([&]{ sch->install(); });
+            auto inst = hce::scheduler::make(lf);
+            std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+            std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
             sch->schedule(test::channel::co_send_count_and_close_return_void(ch,count));
             sch->schedule(test::channel::co_store_recv_till_close_return_void(ch,q));
 
@@ -531,8 +534,9 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
         auto test = [&](hce::channel<T> ch) {
             test::queue<T> q;
             std::unique_ptr<hce::scheduler::lifecycle> lf;
-            auto sch = hce::scheduler::make(lf);
-            std::thread thd([&]{ sch->install(); });
+            auto inst = hce::scheduler::make(lf);
+            std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+            std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
             sch->schedule(test::channel::co_store_recv_interrupt_with_close_return_void(ch,q));
 
             ch.close();
@@ -586,8 +590,9 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
     {
         auto test = [&](hce::channel<T> ch){
             std::unique_ptr<hce::scheduler::lifecycle> lf;
-            auto sch = hce::scheduler::make(lf);
-            std::thread thd([&]{ sch->install(); });
+            auto inst = hce::scheduler::make(lf);
+            std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+            std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
             sch->schedule(test::channel::co_send_count_interrupt_with_close_return_void(ch));
 
             T t;
@@ -640,8 +645,9 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
         auto test = [&](hce::channel<T> ch){
             test::queue<T> q;
             std::unique_ptr<hce::scheduler::lifecycle> lf;
-            auto sch = hce::scheduler::make(lf);
-            std::thread thd([&]{ sch->install(); });
+            auto inst = hce::scheduler::make(lf);
+            std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+            std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
             sch->schedule(test::channel::co_store_recv_interrupt_with_close_return_void(ch,q));
             sch->schedule(test::channel::co_send_count_interrupt_with_close_return_void(ch));
 
