@@ -69,20 +69,27 @@ inline hce::co<void> co_scheduler_global_check(test::queue<void*>& q) {
 
 TEST(scheduler, make_with_lifecycle) {
     std::shared_ptr<hce::scheduler> sch;
+    std::unique_ptr<hce::scheduler::install> inst;
 
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto inst = hce::scheduler::make(lf);
-        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        inst = hce::scheduler::make(lf);
+        sch = inst->scheduler();
+        EXPECT_TRUE(sch);
         EXPECT_EQ(hce::scheduler::state::ready, sch->status());
     }
 
+    // force install to run after lifecycle goes out of scope
+    inst.reset();
+
     EXPECT_EQ(hce::scheduler::state::halted, sch->status());
+    sch.reset();
 
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto inst = hce::scheduler::make(lf);
-        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        inst = hce::scheduler::make(lf);
+        sch = inst->scheduler();
+        EXPECT_TRUE(sch);
         EXPECT_EQ(hce::scheduler::state::ready, sch->status());
         lf->suspend();
         EXPECT_EQ(hce::scheduler::state::suspended, sch->status());
@@ -90,16 +97,20 @@ TEST(scheduler, make_with_lifecycle) {
         EXPECT_EQ(hce::scheduler::state::ready, sch->status());
     }
 
+    // force install to run after lifecycle goes out of scope
+    inst.reset();
+
     EXPECT_EQ(hce::scheduler::state::halted, sch->status());
 }
 
 TEST(scheduler, conversions) {
     std::shared_ptr<hce::scheduler> sch;
+    std::unique_ptr<hce::scheduler::install> inst;
 
     {
         std::unique_ptr<hce::scheduler::lifecycle> lf;
-        auto inst = hce::scheduler::make(lf);
-        std::shared_ptr<hce::scheduler> sch = inst->scheduler();
+        inst = hce::scheduler::make(lf);
+        sch = inst->scheduler();
         EXPECT_EQ(hce::scheduler::state::ready, sch->status());
 
         hce::scheduler& sch_ref = *sch;

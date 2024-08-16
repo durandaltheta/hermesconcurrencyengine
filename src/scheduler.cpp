@@ -46,7 +46,8 @@ hce::scheduler& hce::scheduler::global_() {
     return *sch;
 }
 
-bool& hce::scheduler::block_manager::worker::tl_is_block() {
-    thread_local bool ib = false;
-    return ib;
+hce::scheduler::block_manager::worker*& 
+hce::scheduler::block_manager::worker::tl_worker() {
+    thread_local hce::scheduler::block_manager::worker* wkr = nullptr;
+    return wkr;
 }
