@@ -2322,7 +2322,7 @@ size_t block_workers_reuse_pool_T(const size_t pool_limit) {
     size_t success_count = 0;
 
     for(size_t reuse_cnt=0; reuse_cnt<pool_limit; ++reuse_cnt) {
-        test::queue<T> q;
+        std::vector<test::queue<T>> q(pool_limit);
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto cfg = hce::scheduler::config::make();
         cfg->block_workers_reuse_pool = reuse_cnt;
@@ -2338,7 +2338,7 @@ size_t block_workers_reuse_pool_T(const size_t pool_limit) {
 
             for(size_t i=0; i<pool_limit; ++i) {
                 awts.push_back(sch->join(
-                    test::scheduler::co_block_for_queue_simple_T(q)));
+                    test::scheduler::co_block_for_queue_simple_T(q[i])));
             }
 
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -2347,7 +2347,7 @@ size_t block_workers_reuse_pool_T(const size_t pool_limit) {
             EXPECT_EQ(pool_limit, sch->block_workers());
             
             for(size_t i=0; i<pool_limit; ++i) {
-                q.push((T)test::init<T>(i));
+                q[i].push((T)test::init<T>(i));
             }
 
             for(size_t i=0; i<pool_limit; ++i) {

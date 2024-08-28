@@ -2,8 +2,8 @@ project(hce_ut)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-#set(CMAKE_BUILD_TYPE Release) 
-set(CMAKE_BUILD_TYPE Debug) 
+set(CMAKE_BUILD_TYPE Release) 
+#set(CMAKE_BUILD_TYPE Debug) 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -O3 -Wall")
 
 # set default HCELOGLIMIT
@@ -16,13 +16,13 @@ add_subdirectory(googletest)
 
 add_executable(hce_ut 
     test_helpers.hpp
-    #atomic_ut.cpp 
-    #circular_buffer_ut.cpp
-    #chrono_ut.cpp
-    #coroutine_ut.cpp
+    atomic_ut.cpp 
+    circular_buffer_ut.cpp
+    chrono_ut.cpp
+    coroutine_ut.cpp
     scheduler_ut.cpp
-    #channel_ut.cpp 
-    #comparison_ut.cpp
+    channel_ut.cpp 
+    comparison_ut.cpp
 )
 
 target_include_directories(hce_ut PUBLIC ${HCE_INCLUDE_DIR} PRIVATE ${LOG_SOURCE_DIR})
