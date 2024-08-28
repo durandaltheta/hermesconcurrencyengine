@@ -35,11 +35,9 @@ std::unique_ptr<hce::scheduler::config> hce_scheduler_global_config() {
 hce::scheduler& hce::scheduler::global_() {
     static std::shared_ptr<hce::scheduler> sch(
         []() -> std::shared_ptr<hce::scheduler> {
-            std::unique_ptr<hce::scheduler::lifecycle> lc;
-            auto i = hce::scheduler::make(lc, hce_scheduler_global_config());
-            hce::scheduler::lifecycle::manager::instance().registration(
-                std::move(lc));
+            auto i = hce::scheduler::make(hce_scheduler_global_config());
             std::shared_ptr<hce::scheduler> sch = i->scheduler();
+            HCE_WARNING_FUNCTION_BODY("hce::scheduler::global_",*sch);
             std::thread([](std::shared_ptr<hce::scheduler::install> i) { }, std::move(i)).detach();
             return sch;
         }());
