@@ -12,7 +12,6 @@
 #include <string>
 #include <sstream>
 #include <optional>
-#include <cstdlib>
 #include <thread>
 
 // local 
@@ -470,25 +469,7 @@ struct scheduler : public printable {
 
         private:
             manager() : state_(executing) { 
-                std::atexit(manager::atexit); 
                 HCE_HIGH_DESTRUCTOR();
-            }
-
-            static inline void atexit() { manager::instance().exit(); }
-
-            inline void exit() {
-                HCE_HIGH_METHOD_BODY("exit");
-                std::lock_guard<hce::spinlock> lk(lk_);
-
-                if(state_ != halted) {
-                    state_ = halted;
-
-                    for(auto& lptr : lptrs_) {
-                        HCE_WARNING_METHOD_BODY("exit",lptr->scheduler());
-                    }
-
-                    lptrs_.clear();
-                }
             }
 
             hce::spinlock lk_;
@@ -545,6 +526,10 @@ struct scheduler : public printable {
 
     private:
         lifecycle() = delete;
+        lifecycle(lifecycle&&) = delete;
+        lifecycle(const lifecycle&) = delete;
+        lifecycle& operator=(lifecycle&&) = delete;
+        lifecycle& operator=(const lifecycle&) = delete;
 
         lifecycle(std::shared_ptr<hce::scheduler>& sch) : sch_(sch) {
             HCE_HIGH_CONSTRUCTOR(sch_.get());
@@ -1755,10 +1740,10 @@ private:
             --count_;
 
             if(workers_.size() < reuse_cnt_) {
-                HCE_WARNING_METHOD_BODY("checkin_worker_","reused ",w.get());
+                HCE_TRACE_METHOD_BODY("checkin_worker_","reused ",w.get());
                 workers_.push_back(std::move(w)); // reuse worker
             } else { 
-                HCE_WARNING_METHOD_BODY("checkin_worker_","discarded ",w.get());
+                HCE_TRACE_METHOD_BODY("checkin_worker_","discarded ",w.get());
             }
         }
 
@@ -1992,11 +1977,16 @@ private:
         // check the thread local scheduler pointer to see if we're already in 
         // a scheduler and error out immediately if called improperly
         if(coroutine::in()) { throw cannot_install_in_a_coroutine(); }
-    
+   
+        // RAII thread log level management
         struct scoped_log_level {
-            scoped_log_level() : 
+            scoped_log_level(int requested_log_level) : 
+                // stash the current log level and restore when going out of scope
                 parent_log_level_(hce::printable::thread_log_level()) 
-            { }
+            { 
+                // ensure the proper log level is set at the point 
+                hce::printable::thread_log_level(requested_log_level);
+            }
 
             ~scoped_log_level() {
                 hce::printable::thread_log_level(parent_log_level_);
@@ -2006,11 +1996,8 @@ private:
             size_t parent_log_level_;
         };
 
-        // stash the current log level and restore when going out of scope
-        scoped_log_level sll;
-
-        // ensure the proper log level is set at the point 
-        hce::printable::thread_log_level(config_->log_level);
+        // set the necessary log level for the worker thread
+        scoped_log_level sll(config_->log_level);
         
         HCE_HIGH_METHOD_ENTER("run");
 
@@ -2038,6 +2025,7 @@ private:
 
         do {
             try {
+                // inner run call evaluates coroutines and timers
                 cont = run_();
             } catch(const std::exception& e) {
                 HCE_ERROR_METHOD_BODY("run","caught exception: ", e.what());
