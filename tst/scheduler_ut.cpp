@@ -135,7 +135,7 @@ TEST(scheduler, install) {
         EXPECT_EQ(hce::scheduler::state::ready, sch->status());
 
         std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(40));
         
         EXPECT_EQ(hce::scheduler::state::executing, sch->status());
 
@@ -173,19 +173,19 @@ TEST(scheduler, install) {
         std::shared_ptr<hce::scheduler> sch = inst->scheduler();
         std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(40));
         EXPECT_EQ(hce::scheduler::state::executing, sch->status());
 
         EXPECT_EQ(hce::scheduler::state::ready, state_q.pop());
 
         lf->suspend();
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(40));
         EXPECT_EQ(hce::scheduler::state::suspended, state_q.pop());
         EXPECT_EQ(hce::scheduler::state::suspended, state_q.pop());
         EXPECT_EQ(hce::scheduler::state::suspended, state_q.pop());
         
         lf->resume();
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(40));
         lf->suspend();
         EXPECT_EQ(hce::scheduler::state::suspended, state_q.pop());
         EXPECT_EQ(hce::scheduler::state::suspended, state_q.pop());
@@ -226,19 +226,19 @@ TEST(scheduler, install) {
         std::shared_ptr<hce::scheduler> sch = inst->scheduler();
         std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(40));
         EXPECT_EQ(hce::scheduler::state::executing, sch->status());
 
         EXPECT_EQ(hce::scheduler::state::ready, state_q.pop());
 
         lf->suspend();
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(40));
         EXPECT_EQ(hce::scheduler::state::suspended, state_q.pop());
         EXPECT_EQ(hce::scheduler::state::suspended, state_q.pop());
         EXPECT_EQ(hce::scheduler::state::suspended, state_q.pop());
         
         lf->resume();
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(40));
 
         lf.reset();
         EXPECT_EQ(hce::scheduler::state::halted, state_q.pop());
@@ -1889,7 +1889,6 @@ template <typename T>
 size_t block_T() {
     size_t success_count = 0;
 
-    /*
     {
         HCE_INFO_LOG("thread block done immediately+");
         auto schedule_blocking = [&](T t) {
@@ -2035,7 +2034,6 @@ size_t block_T() {
         }
         HCE_INFO_LOG("thread stacked block-");
     }
-    */
 
     {
         HCE_INFO_LOG("coroutine block done immediately+");
@@ -2134,7 +2132,7 @@ size_t block_T() {
                     co_ids_identical3, 
                     thd_id));
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::this_thread::sleep_for(std::chrono::milliseconds(40));
             EXPECT_EQ(3, sch->block_workers());
             q.push(t);
             q.push(t);
@@ -2202,7 +2200,7 @@ size_t block_T() {
             EXPECT_FALSE(co_ids_identical2);
             EXPECT_EQ(t, (T)std::move(awt3));
             EXPECT_FALSE(co_ids_identical3);
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::this_thread::sleep_for(std::chrono::milliseconds(40));
             EXPECT_EQ(0, sch->block_workers());
         };
 
@@ -2255,7 +2253,7 @@ size_t block_T() {
                     co_ids_identical3, 
                     thd_id));
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::this_thread::sleep_for(std::chrono::milliseconds(40));
             EXPECT_EQ(3, sch->block_workers());
             q.push(t);
             q.push(t);
@@ -2289,8 +2287,8 @@ size_t block_T() {
 }
 
 TEST(scheduler, block_and_block_workers) {
-    //const size_t expected = 8;
-    const size_t expected = 4;
+    const size_t expected = 8;
+    //const size_t expected = 4;
     EXPECT_EQ(expected, test::scheduler::block_T<int>());
     EXPECT_EQ(expected, test::scheduler::block_T<unsigned int>());
     EXPECT_EQ(expected, test::scheduler::block_T<size_t>());
@@ -2341,7 +2339,7 @@ size_t block_workers_reuse_pool_T(const size_t pool_limit) {
                     test::scheduler::co_block_for_queue_simple_T(q[i])));
             }
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::this_thread::sleep_for(std::chrono::milliseconds(40));
 
             EXPECT_EQ(reuse_cnt, sch->block_workers_reuse_pool());
             EXPECT_EQ(pool_limit, sch->block_workers());
