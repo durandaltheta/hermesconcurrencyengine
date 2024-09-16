@@ -1,7 +1,7 @@
-//SPDX-License-Identifier: Apache-2.0
+//SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HCE_COROUTINE_ENGINE_CHRONO__
-#define __HCE_COROUTINE_ENGINE_CHRONO__
+#ifndef __HERMES_COROUTINE_ENGINE_CHRONO__
+#define __HERMES_COROUTINE_ENGINE_CHRONO__
 
 #include <chrono>
 #include <sstream>
@@ -17,7 +17,7 @@ namespace detail {
  duration to stream implementation is needed;
  */
 template <typename Rep, typename Period>
-std::string to_string(const std::chrono::duration<Rep, Period>& d) {
+inline std::string to_string(const std::chrono::duration<Rep, Period>& d) {
     std::stringstream ss;
     ss << d.count() << " ";
 
@@ -41,7 +41,7 @@ std::string to_string(const std::chrono::duration<Rep, Period>& d) {
 }
 
 template <typename Rep, typename Period>
-std::string to_string(const std::chrono::time_point<Rep, Period>& t) {
+inline std::string to_string(const std::chrono::time_point<Rep, Period>& t) {
     return to_string(t.time_since_epoch());
 }
 
@@ -64,7 +64,7 @@ struct duration :
     }
 
     template <typename A>
-    duration(A&& a) : std::chrono::steady_clock::duration(a) { 
+    inline duration(A&& a) : std::chrono::steady_clock::duration(a) { 
         HCE_TRACE_CONSTRUCTOR(detail::to_string(a));
     }
 

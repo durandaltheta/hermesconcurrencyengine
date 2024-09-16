@@ -1,7 +1,7 @@
-//SPDX-License-Identifier: Apache-2.0
+//SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HCE_COROUTINE_ENGINE_ATOMIC__
-#define __HCE_COROUTINE_ENGINE_ATOMIC__
+#ifndef __HERMES_COROUTINE_ENGINE_ATOMIC__
+#define __HERMES_COROUTINE_ENGINE_ATOMIC__
 
 #include <atomic>
 
@@ -10,7 +10,7 @@
 namespace hce {
 
 /**
-@brief Core mechanism for atomic synchronization. 
+@brief core mechanism for atomic synchronization. 
 */
 struct spinlock : public printable {
     spinlock() { 
@@ -18,7 +18,7 @@ struct spinlock : public printable {
         lock_.clear(); 
     }
 
-    ~spinlock() { HCE_MIN_DESTRUCTOR(); }
+    virtual ~spinlock() { HCE_MIN_DESTRUCTOR(); }
 
     inline void lock() {
         HCE_MIN_METHOD_ENTER("lock");
@@ -42,10 +42,12 @@ private:
     std::atomic_flag lock_;
 };
 
-/// a lockless lockable implementation
+/**
+ @brief lockless lockable implementation
+ */
 struct lockfree : public printable {
     lockfree() { HCE_MIN_CONSTRUCTOR(); }
-    ~lockfree() { HCE_MIN_DESTRUCTOR(); }
+    virtual ~lockfree() { HCE_MIN_DESTRUCTOR(); }
 
     inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "lockfree"; }

@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: Apache-2.0
+//SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
 #ifndef __HERMES_COROUTINE_ENGINE_CIRCULAR_BUFFER__
 #define __HERMES_COROUTINE_ENGINE_CIRCULAR_BUFFER__

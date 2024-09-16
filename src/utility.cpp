@@ -1,3 +1,5 @@
+//SPDX-License-Identifier: MIT
+//Author: Blayne Dennis 
 #include <cstring>
 #include <vector>
 
@@ -28,7 +30,7 @@ extern void hce_log_initialize();
 void hce_log_initialize() {
     std::stringstream ss;
     ss << "-v" << HCELOGLEVEL;
-    std::string process("hermesconcurrencyengine");
+    std::string process("hce");
     std::string verbosity = ss.str();
     std::vector<char*> argv;
     argv.push_back(process.data());

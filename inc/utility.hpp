@@ -1,7 +1,7 @@
-//SPDX-License-Identifier: Apache-2.0
+//SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HCE_COROUTINE_ENGINE_UTILITY__
-#define __HCE_COROUTINE_ENGINE_UTILITY__
+#ifndef __HERMES_COROUTINE_ENGINE_UTILITY__
+#define __HERMES_COROUTINE_ENGINE_UTILITY__
 
 #include <utility>
 #include <functional>
@@ -15,8 +15,8 @@
 
 #include "loguru.hpp"
 
-#ifndef HCE_LOGGING_MACROS
-#define HCE_LOGGING_MACROS
+#ifndef __HERMES_COROUTINE_ENGINE_LOGGING_MACROS__
+#define __HERMES_COROUTINE_ENGINE_LOGGING_MACROS__
 
 /**
  User compile time macro determining compiled log code. Keeping this low ensures 
@@ -33,7 +33,8 @@
  A lot of the slightly odd design of the logging mechanics is to enforce "no 
  compile unless required" behavior, along with standardizing output to a high 
  degree. This enables consistent printing of identifying information, such as 
- object addresses and optional object internal state for debugging purposes.
+ object and thread addresses and optional object internal state for debugging 
+ purposes.
 
  The reason most of these functions concatenate arguments rather than pass them 
  to a formatting string is because it allows the log functions to ingest 
@@ -45,7 +46,7 @@
  called by implementors of `hce::printable`.  However, `FUNCTION` and `LOG` 
  macros can be called anywhere. `CONSTRUCTOR`, `DESTRUCTOR`, and `METHOD` 
  logging macros will print details about their object, such as its `this` 
- pointer and function namespaces.
+ pointer and namespace.
 
  `ENTER` and `CONSTRUCTOR` (for object constructors specifically) macros are for 
  describing functions as they are being entered, all arguments to the macro are 
@@ -299,7 +300,7 @@
 #define HCE_TRACE_LOG(...) (void)0
 #endif
 
-#endif
+#endif // __HERMES_COROUTINE_ENGINE_LOGGING_MACROS__
 
 namespace hce {
 namespace detail {
@@ -387,7 +388,7 @@ struct printable {
 
     /**
      @brief the process wide default_log_level
-     
+
      Set to compiler define HCELOGLEVEL. Threads inherit this log level.
 
      @return the thread local log level
@@ -414,7 +415,7 @@ struct printable {
     // The following public methods should be called by macros *ONLY*
     
     template <typename... As>
-    void log_constructor__(int verbosity, const char* file, int line, As&&... as) const {
+    inline void log_constructor__(int verbosity, const char* file, int line, As&&... as) const {
         if(verbosity <= printable::thread_log_level()) {
             std::stringstream ss;
             printable::ingest_args_(ss, std::forward<As>(as)...);
@@ -444,7 +445,7 @@ struct printable {
     }
 
     template <typename... As>
-    void log_method_enter__(int verbosity, const char* file, int line, const char* method_name, As&&... as) const {
+    inline void log_method_enter__(int verbosity, const char* file, int line, const char* method_name, As&&... as) const {
         if(verbosity <= printable::thread_log_level()) {
             std::stringstream ss;
             printable::ingest_args_(ss, std::forward<As>(as)...);
@@ -461,7 +462,7 @@ struct printable {
     }
 
     template <typename... As>
-    void log_method_body__(int verbosity, const char* file, int line, const char* method_name, As&&... as) const {
+    inline void log_method_body__(int verbosity, const char* file, int line, const char* method_name, As&&... as) const {
         if(verbosity <= printable::thread_log_level()) {
             std::stringstream ss;
             printable::ingest_(ss, std::forward<As>(as)...);
@@ -478,7 +479,7 @@ struct printable {
     }
 
     template <typename... As>
-    static void log_function_enter__(int verbosity, const char* file, int line, const char* method_name, As&&... as) {
+    static inline void log_function_enter__(int verbosity, const char* file, int line, const char* method_name, As&&... as) {
         if(verbosity <= printable::thread_log_level()) {
             std::stringstream ss;
             printable::ingest_(ss, std::forward<As>(as)...);
@@ -493,7 +494,7 @@ struct printable {
     }
 
     template <typename... As>
-    static void log_function_body__(int verbosity, const char* file, int line, const char* method_name, As&&... as) {
+    static inline void log_function_body__(int verbosity, const char* file, int line, const char* method_name, As&&... as) {
         if(verbosity <= printable::thread_log_level()) {
             std::stringstream ss;
             printable::ingest_(ss, std::forward<As>(as)...);
@@ -513,7 +514,7 @@ private:
 
     // ingest a container of items, prints like: [elem1, elem2, elem3]
     template <typename A>
-    static void ingest_item_disambiguation_(std::true_type, std::stringstream& ss, A&& container) {
+    static inline void ingest_item_disambiguation_(std::true_type, std::stringstream& ss, A&& container) {
         auto it = container.begin();
         auto end = container.end();
         
@@ -535,13 +536,13 @@ private:
 
     // ingest a single item
     template <typename A>
-    static void ingest_item_disambiguation_(std::false_type, std::stringstream& ss, A&& a) {
+    static inline void ingest_item_disambiguation_(std::false_type, std::stringstream& ss, A&& a) {
         ss << std::forward<A>(a);
     }
    
     // catch any variant of `std::basic_string<>` (IE, `std::string`)
     template <typename CharT, typename Traits, typename Alloc>
-    static void ingest_item_(
+    static inline void ingest_item_(
             std::stringstream& ss, 
             const std::basic_string<CharT, Traits, Alloc>& s) {
         ss << s;
@@ -549,7 +550,7 @@ private:
     
     // catch any variant of `std::basic_string<>` (IE, `std::string`)
     template <typename CharT, typename Traits, typename Alloc>
-    static void ingest_item_(
+    static inline void ingest_item_(
             std::stringstream& ss, 
             std::basic_string<CharT, Traits, Alloc>&& s) {
         ss << s;
@@ -557,7 +558,7 @@ private:
 
     // disambiguate between containers and other printable items
     template <typename A>
-    static void ingest_item_(std::stringstream& ss, A&& a) {
+    static inline void ingest_item_(std::stringstream& ss, A&& a) {
         ingest_item_disambiguation_(
             detail::is_container<typename std::decay<A>::type>(),
             ss,
@@ -568,7 +569,7 @@ private:
 
     // in argument lists, begin inserting "," between arguments
     template <typename A, typename... As>
-    static void ingest_rest_of_args_(std::stringstream& ss, A&& a, As&&... as) {
+    static inline void ingest_rest_of_args_(std::stringstream& ss, A&& a, As&&... as) {
         ss << ", "; 
         ingest_item_(ss,std::forward<A>(a));
         ingest_rest_of_args_(ss, std::forward<As>(as)...);
@@ -579,7 +580,7 @@ private:
 
     // for ingesting a list of function or method arguments
     template <typename A, typename... As>
-    static void ingest_args_(std::stringstream& ss, A&& a, As&&... as) {
+    static inline void ingest_args_(std::stringstream& ss, A&& a, As&&... as) {
         ingest_item_(ss,std::forward<A>(a));
         ingest_rest_of_args_(ss, std::forward<As>(as)...);
     }
@@ -589,7 +590,7 @@ private:
 
     // for ingesting arbitrary data into a logline
     template <typename A, typename... As>
-    static void ingest_(std::stringstream& ss, A&& a, As&&... as) {
+    static inline void ingest_(std::stringstream& ss, A&& a, As&&... as) {
         ingest_item_(ss,std::forward<A>(a));
         ingest_(ss, std::forward<As>(as)...);
     }
@@ -656,15 +657,19 @@ private:
     std::deque<std::unique_ptr<handler>> handlers_; 
 };
 
-// Arbitrary word sized allocated memory. The unique address of this 
-// memory is usable as a key
+/**
+ @brief unique identifier object
+
+ Arbitrary word sized allocated memory. The unique address of this memory is 
+ usable as a key 
+ */
 struct id : public std::shared_ptr<bool>, public printable {
     template <typename... As>
     id(As&&... as) : std::shared_ptr<bool>(std::forward<As>(as)...) {
         HCE_TRACE_CONSTRUCTOR();
     }
 
-    ~id() { HCE_TRACE_DESTRUCTOR(); }
+    virtual ~id() { HCE_TRACE_DESTRUCTOR(); }
 
     inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "id"; }
@@ -706,7 +711,7 @@ inline std::ostream& operator<<(std::ostream& out, const hce::printable* p) {
 
 /// :: ostream writing for generic coroutine_handle
 template <typename PROMISE>
-std::ostream& operator<<(std::ostream& out, const std::coroutine_handle<PROMISE>& h) {
+inline std::ostream& operator<<(std::ostream& out, const std::coroutine_handle<PROMISE>& h) {
     out << "std::coroutine_handle@" << h.address();
     return out;
 }

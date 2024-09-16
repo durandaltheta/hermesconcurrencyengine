@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: Apache-2.0
+//SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
 #ifndef __HERMES_COROUTINE_ENGINE_CHANNEL__
 #define __HERMES_COROUTINE_ENGINE_CHANNEL__
@@ -687,6 +687,8 @@ struct channel : public printable {
     channel(const channel<T>& rhs) = default;
     channel(channel<T>&& rhs) = default;
 
+    virtual ~channel(){ }
+
     channel<T>& operator=(const channel<T>& rhs) = default;
     channel<T>& operator=(channel<T>&& rhs) = default;
 
@@ -731,7 +733,7 @@ struct channel : public printable {
      all but extreme edgecases.
      */
     template <typename LOCK=hce::spinlock>
-    channel<T>& construct() {
+    inline channel<T>& construct() {
         HCE_MIN_METHOD_ENTER("construct");
         context_ = std::shared_ptr<interface>(
             static_cast<interface*>(
@@ -744,7 +746,7 @@ struct channel : public printable {
      @param sz the size of the buffer
      */
     template <typename LOCK=hce::spinlock>
-    channel<T>& construct(int sz) {
+    inline channel<T>& construct(int sz) {
         HCE_MIN_METHOD_ENTER("construct",sz);
         context_ = std::shared_ptr<interface>(
             static_cast<interface*>(
@@ -757,7 +759,7 @@ struct channel : public printable {
      @return the constructed channel
      */
     template <typename LOCK=hce::spinlock, typename... As>
-    static channel<T> make(As&&... as) {
+    inline static channel<T> make(As&&... as) {
         HCE_MIN_FUNCTION_ENTER("make", as...);
         channel<T> ch;
         ch.construct<LOCK>(std::forward<As>(as)...);

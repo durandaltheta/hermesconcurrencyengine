@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: Apache-2.0
+//SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
 #ifndef __HERMES_COROUTINE_ENGINE_MUTEX__
 #define __HERMES_COROUTINE_ENGINE_MUTEX__
@@ -10,12 +10,17 @@
 #include "utility.hpp"
 #include "atomic.hpp"
 #include "coroutine.hpp"
-#include "block.hpp"
+#include "scheduler.hpp"
 
 namespace hce {
 
 /**
- @brief a mutex capable of synchronizing any combination of coroutines and non-coroutines
+ @brief a mutex capable of synchronizing any combination of coroutines and non-coroutines 
+
+ It should be noted that other high level mechanisms (`hce::join()`, 
+ `hce::scope()`, `hce::channel<T>`, etc.) may be more useful (and more 
+ efficient) than implementing custom mechanisms with `hce::mutex`. `hce::mutex` 
+ is most useful when integrating this library into existing user code.
  */
 struct mutex : public printable {
     struct already_unlocked_exception : public std::exception {
@@ -42,7 +47,7 @@ struct mutex : public printable {
     mutex(const mutex&) = delete;
     mutex(mutex&&) = delete;
 
-    ~mutex(){ HCE_MIN_DESTRUCTOR(); }
+    virtual ~mutex(){ HCE_MIN_DESTRUCTOR(); }
     
     mutex& operator=(const mutex&) = delete;
     mutex& operator=(mutex&&) = delete;
@@ -50,7 +55,7 @@ struct mutex : public printable {
     inline const char* nspace() const { return "hce"; }
     inline const char* name() const { return "mutex"; }
 
-    /// lock the mutex, returning true if the lock operation succeeded
+    /// awaitably lock the mutex 
     inline awt<void> lock() {
         HCE_MIN_METHOD_ENTER("lock");
         return awt<void>::make(new lock_awt>(this));
@@ -127,10 +132,10 @@ private:
 namespace detail {
 namespace unique_lock {
 
-/// safely lock any lockable type
+/// innefficiently, but safely, lock any lockable type
 template <typename Lock>
 static inline hce::awt<void> lock_impl(void* lk) {
-    return blocking::call([=]() mutable { ((Lock*)lk)->lock(); }
+    return hce::block([=]() mutable { ((Lock*)lk)->lock(); }
 }
 
 /// more efficiently lock hce::mutex
@@ -159,8 +164,13 @@ struct unique_lock : public printable {
     unique_lock(const unique_lock<Lock>& rhs) = delete;
 
     unique_lock(unique_lock<Lock>&& rhs) {
-        HCE_MIN_CONSTRUCTOR(,rhs);
+        HCE_MIN_CONSTRUCTOR(rhs);
         swap(rhs);
+    }
+
+    virtual ~unique_lock() {
+        HCE_MIN_DESTRUCTOR();
+        if(acquired_) { unlock(); } 
     }
 
     unique_lock<Lock>& operator=(const unique_lock<Lock>& rhs) = delete;
@@ -173,13 +183,17 @@ struct unique_lock : public printable {
 
     /// construct a unique_lock which assumes it has not acquired the mutex
     unique_lock(Lock& mtx, std::defer_lock_t t) noexcept : 
-        acquired_(false) 
+        lk_(&mtx),
+        acquired_(false)
     { 
         HCE_MIN_CONSTRUCTOR();
     }
 
     /// construct a unique_lock which assumes it has acquired the mutex
-    unique_lock(Lock& mtx, std::adopt_lock_t t) : acquired_(true) { 
+    unique_lock(Lock& mtx, std::adopt_lock_t t) : 
+        lk_(&mtx),
+        acquired_(true) 
+    {
         HCE_MIN_CONSTRUCTOR();
     }
 
@@ -189,14 +203,7 @@ struct unique_lock : public printable {
      This static operation replaces constructor `unique_lock(Lock&)`
      */
     static inline awt<hce::unique_lock<Lock>> make(Lock& mtx) {
-        typedef hce::unique_lock<Lock> T;
-        auto co = acquire::op(&mtx);
-        return join(std::move(co)); 
-    }
-
-    ~unique_lock() { 
-        HCE_MIN_DESTRUCTOR();
-        if(acquired_) { unlock(); } 
+        return hce::join(acquire::op(&mtx)); 
     }
     
     inline const char* nspace() const { return "hce"; }
@@ -204,45 +211,45 @@ struct unique_lock : public printable {
 
     /// return our stringified mutex address
     inline std::string content() const { 
-        return std::string("mutex@") + 
-               std::to_string(mtx_) +
+        return std::string("lock@") + 
+               std::to_string((void*)lk_) +
                ", acquired:" +
                std::to_string(acquired_);
     }
 
-    /// return an awaitable to lock the Lock
     inline awt<void> lock() { 
         HCE_MIN_METHOD_ENTER("lock");
         acquired_ = true;
-        return detail::mutex::lock_impl<Lock>(mtx_); 
+        return detail::mutex::lock_impl<Lock>(lk_); 
     }
 
     inline bool try_lock() { 
         HCE_MIN_METHOD_ENTER("try_lock");
-        return mtx_->try_lock(); 
+        return lk_->try_lock(); 
     }
 
     inline void unlock() { 
         HCE_MIN_METHOD_ENTER("unlock");
-        mtx_->unlock(); 
+        lk_->unlock(); 
     }
 
     inline void swap(unique_lock<Lock>& rhs) {
-        std::swap(mtx_, rhs.mtx_);
+        HCE_TRACE_METHOD_ENTER("swap",rhs);
+        std::swap(lk_, rhs.lk_);
         std::swap(acquired_, rhs.acquired_);
     }
 
     inline Lock* release() {
         HCE_MIN_METHOD_ENTER("release");
-        auto mtx = mtx_;
-        mtx_ = nullptr;
+        auto mtx = lk_;
+        lk_ = nullptr;
         acquired_ = false;
         return mtx;
     }
 
     inline Lock* mutex() { 
         HCE_MIN_METHOD_ENTER("mutex");
-        return mtx_; 
+        return lk_; 
     }
 
     inline bool owns_lock() { 
@@ -257,14 +264,14 @@ struct unique_lock : public printable {
 
 private:
     struct acquire {
-        static inline hce::co<hce::unique_lock<Lock>> op(Lock* lk, acquire* a) {
+        static inline hce::co<hce::unique_lock<Lock>> op(Lock* lk) {
             // block until locked
             co_await detail::mutex::lock_impl<Lock>(lk);
-            a->resume(nullptr);
+            co_return hce::unique_lock<Lock>(*lk, std::adopt_lock_t());
         }
     };
 
-    Lock* mtx_;
+    Lock* lk_;
     bool acquired_;
 };
 

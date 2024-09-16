@@ -1,7 +1,7 @@
-//SPDX-License-Identifier: Apache-2.0
+//SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HCE_COROUTINE_ENGINE_COROUTINE__
-#define __HCE_COROUTINE_ENGINE_COROUTINE__
+#ifndef __HERMES_COROUTINE_ENGINE_COROUTINE__
+#define __HERMES_COROUTINE_ENGINE_COROUTINE__
 
 // c++
 #include <memory>
@@ -12,7 +12,6 @@
 #include <string>
 #include <ostream>
 #include <sstream>
-#include <optional>
 #include <functional>
 
 // local 
@@ -25,7 +24,7 @@ struct coroutine;
 namespace detail {
 namespace coroutine {
 
-// always points to the coroutine running on the scheduler on this thread
+// always points to the coroutine running on this thread
 hce::coroutine*& tl_this_coroutine();
 
 }
@@ -66,7 +65,10 @@ struct coroutine : public printable {
         inline void unhandled_exception() { eptr = std::current_exception(); }
 
         /// return actual co<T>::promise_type type
-        virtual const std::type_info& type_info() = 0;
+        virtual const std::type_info& type_info() = 0; 
+
+        /// execute any cleanup before handle is destroyed
+        virtual void cleanup() = 0;
 
         std::exception_ptr eptr = nullptr; // exception pointer
     };
@@ -222,14 +224,15 @@ struct coroutine : public printable {
 protected:
     inline void destroy() {
         HCE_MED_FUNCTION_BODY("destroy", handle_);
+        // handle cleanup
+        std::coroutine_handle<promise_type>::from_address(handle_.address())
+            .promise().cleanup();
+        // free memory
         handle_.destroy(); 
     }
 
     // the coroutine's managed handle
     std::coroutine_handle<> handle_;
-
-    std::optional<void*> str_addr_;
-    mutable std::string str_;
 };
 
 /** 
@@ -246,11 +249,13 @@ template <typename T>
 struct co : public coroutine {
     struct promise_type : public coroutine::promise_type {
         /// ensure cleanup handlers are run before promise_type destructs
-        virtual ~promise_type(){ cleanup_.reset(); }
+        virtual ~promise_type(){ }
 
         inline const std::type_info& type_info() { 
             return typeid(co<T>::promise_type); 
         }
+
+        inline void cleanup() { cleanup_.reset(); }
 
         /**
          @brief store the result of `co_return` 
@@ -267,6 +272,9 @@ struct co : public coroutine {
         /// install a co<T>::promise_type::cleanup::handler
         template <typename HANDLER>
         inline void install(HANDLER&& hdl) {
+            // Only allocate cleanup if necessary. Since most coroutines will 
+            // only ever have `install()` called once, checking every time is 
+            // an inconsequential cost.
             if(!cleanup_) { 
                 cleanup_ = 
                     std::unique_ptr<hce::cleanup<promise_type&>>(
@@ -318,15 +326,16 @@ template <>
 struct co<void> : public coroutine {
     struct promise_type : public coroutine::promise_type {
         /// ensure cleanup handlers are run before promise_type destructs
-        virtual ~promise_type(){ cleanup_.reset(); }
+        virtual ~promise_type(){ }
 
         inline const std::type_info& type_info() { 
             return typeid(co<void>::promise_type); 
         }
 
+        inline void cleanup() { cleanup_.reset(); }
+
         inline void return_void() {}
 
-        /// install a co<T>::promise_type::cleanup::handler
         template <typename HANDLER>
         inline void install(HANDLER&& hdl) {
             if(!cleanup_) { 
@@ -373,25 +382,37 @@ struct co<void> : public coroutine {
     }
 };
 
+// for some reason templates sometimes need this derived template to function
+template <typename T>
+using co_promise_type = typename hce::co<T>::promise_type;
+
+// for some reason templates sometimes need this derived template to function
+template <typename T>
+using co_cleanup_handler = hce::cleanup<hce::co_promise_type<T>&>::handler;
+
 namespace detail {
 namespace coroutine {
 
 /// thread_local block/unblock functionality
-struct this_thread {
+struct this_thread : public printable {
+    inline const char* nspace() const { return "hce::detail::"; }
+    inline const char* name() const { return "this_thread"; }
+
     // get the this_thread object associated with the calling thread
     static this_thread* get();
 
     // can only block the calling thread
     template <typename LOCK>
     static inline void block(LOCK& lk) {
+        HCE_TRACE_FUNCTION_ENTER("block",typeid(LOCK).name());
         auto tt = this_thread::get();
-        HCE_TRACE_LOG("hce::this_thread@%p::block(LOCK&)",tt);
+        HCE_TRACE_FUNCTION_BODY("block",tt);
         tt->block_(lk);
     }
     
     // unblock an arbitrary this_thread
     inline void unblock() {
-        HCE_TRACE_LOG("hce::this_thread@%p::unblock()",this);
+        HCE_TRACE_METHOD_ENTER("unblock");
         ready = true;
         cv.notify_one();
     }
@@ -399,7 +420,7 @@ struct this_thread {
     // unblock an arbitrary this_thread
     template <typename LOCK>
     inline void unblock(LOCK& lk) {
-        HCE_TRACE_LOG("hce::this_thread@%p::unblock(LOCK&)",this);
+        HCE_TRACE_METHOD_ENTER("unblock",typeid(LOCK).name());
         ready = true;
         lk.unlock();
         cv.notify_one();
@@ -449,7 +470,6 @@ struct yield : public hce::printable {
 
 private:
     bool awaited_ = false;
-    static std::string str_;
 };
 
 }
@@ -461,12 +481,13 @@ private:
 
  This object is used to suspend execution to the caller of `coroutine::resume()` 
  in order to let other coroutines run. `coroutine::done()` will `== false` after 
- suspending in this manner, so the coroutine can be requeued immediately.
+ suspending in this manner, so the coroutine can be requeued immediately. This 
+ may be necessary to prevent CPU starvation due to long running coroutines 
+ preventing evaluation of other coroutines.
 
  Even though the name of this object is `yield`, it does *NOT* use the 
  `co_yield` keyword. `yield<T>` returns a value `T` to the *caller of co_await* 
- (*not* coroutine::resume()!) which is returned on resumption. 
-
+ (*not* coroutine::resume()!). 
 
  If used by non-coroutines no suspend will occur, and the value is returned 
  immediately. Unlike `awt<T>`, which requires an implementation, this object 
@@ -518,26 +539,26 @@ struct yield<void> : public detail::yield {
  by another object (IE, `hce::awt<T>`) which implements the `await_resume()` 
  method.
 
- `hce::awaitable` objects are transient, they are neither default constructable, 
- copiable nor movable so that the cannot stay in existence. In fact, they are 
+ `hce::awaitable` objects are transient, they are neither default constructable 
+ nor copiable and are intended to not stay in existence long. In fact, they are 
  not intended to be directly constructable, being returned by `awt<T>` `make()` 
- functions to further enforce transience. This design is to force users to 
- either `co_await` the result (if in a coroutine), immediately convert to output 
- `T` or let the awaitable go out of scope (blocking the thread or coroutine 
- until the operation completes).
+ functions to further encourage transience. Their intended usage is to either 
+ `co_await` the result (if in a coroutine), immediately convert to output `T` 
+ (or let the awaitable go out of scope, blocking the thread or the operation 
+ completes).
 
- This object requires implementation of various interfaces. It does this as a 
- type erasure strategy that allows for maintenance of a single unique pointer 
- to an underlying implementation. Because of this it can be a bit awkward to 
- write new implementations, but the utilities in this library should accomodate 
- most user needs without requiring additional implementations.
+ This object manages an implementation of an pure virtual interface. It does 
+ this as a type erasure strategy that allows for maintenance of a single unique 
+ pointer. It can be a bit awkward to write new implementations, but the higher 
+ level objects and utilities in this library should accomodate most user needs 
+ without requiring additional implementations.
  */
 struct awaitable : public printable { 
     struct await {
         /// determines how locking is accomplished by an awaiter of an awaitable
         enum policy {
-            adopt, //< assume the lock as locked during construction
-            defer //< assume the lock as unlocked but lock it when necessary
+            adopt, //< assume the lock is already locked
+            defer //< assume the lock is unlocked but lock it when necessary
         };
     };
 
@@ -612,7 +633,7 @@ struct awaitable : public printable {
             // still locked from await_ready()
 
             if(h) {
-                HCE_TRACE_METHOD_BODY("await_suspend","h:",h);
+                HCE_TRACE_METHOD_BODY("await_suspend",h);
                 // assign the handle to our member
                 this->handle_ = h; 
                 // the current coroutine no longer manages the handle
@@ -653,9 +674,9 @@ struct awaitable : public printable {
                 HCE_TRACE_METHOD_BODY("resume","destination");
                 // unblock the suspended coroutine and push the handle to its 
                 // destination
-                if(rp != resume::policy::no_lock) { this->unlock(); }
                 this->destination(this->handle_);
                 this->handle_ = std::coroutine_handle<>();
+                if(rp != resume::policy::no_lock) { this->unlock(); }
             } else if(this->atp_) { 
                 HCE_TRACE_METHOD_BODY("resume","unblock");
                 // unblock the suspended thread 
@@ -668,33 +689,30 @@ struct awaitable : public printable {
                 if(rp != resume::policy::no_lock) { this->unlock(); }
             }
         }
-       
-        /**
-         This value is necessary to introspect when determining if lock() needs
-         to be called initially by the `co_await`er.
 
-         @return true of the implementation is constructed locked, else false
+        /**
+         This value is necessary to introspect when determining how lock() needs
+         to be called by the `co_await`er.
+
+         @return the lock policy for the `co_await`er
          */
         virtual await::policy await_policy() const = 0;
 
         /**
-         @return true if calls to resume() require a lock synchronization
+         This value is necessary to introspect when determining how lock() needs
+         to be called by the `resume()`er.
+
+         @return the lock policy for the `resume()`er
          */
         virtual resume::policy resume_policy() const = 0;
 
-        /**
-         @brief acquire the awaitable's lock
-         
-         The implementation *MUST* use proper state tracking to only *actually* 
-         lock() the underlying synchronization primative if it is not already 
-         synchronize_await by the implementation.
-         */
+        /// acquire the awaitable's lock
         virtual void lock() = 0;
 
         /// release the awaitable's lock
         virtual void unlock() = 0;
 
-        /// destination for coroutine_handle on resume
+        /// pass the coroutine_handle to the implementation during resume()
         virtual void destination(std::coroutine_handle<>) = 0;
 
         /**
@@ -706,7 +724,7 @@ struct awaitable : public printable {
         virtual bool on_ready() = 0;
 
         /**
-         User inner method called when resume()ing the suspended operation.  
+         @brief called when resume()ing the suspended operation.  
 
          It is passed whatever arbitary memory is passed to resume(). The 
          implementation may use this memory to complete the operation, in 
@@ -803,8 +821,8 @@ struct awaitable : public printable {
      */
     inline bool valid() const { return (bool)impl_; }
 
-    /// return a reference to the implementation
-    inline interface& implementation() { return *impl_; }
+    /// return the underlying implementation pointer
+    interface& implementation() { return *impl_; }
 
     /// release control of the underlying implementation pointer
     inline interface* release() { return impl_.release(); }
@@ -894,11 +912,35 @@ template <typename T>
 struct awt : public awaitable {
     // the necessary operations required by an instance of awaitable<T>
     struct interface : public awaitable::interface {
-        // ensure destructor is virtual to properly destruct
-        virtual ~interface() { }
+        // Ensure destructor is virtual to properly destruct. If any cleanup 
+        // handlers exist, execute them
+        virtual ~interface() { cleanup_.reset(); }
+
+        /**
+         @brief install an awaitable::interface::cleanup::handler 
+
+         `awaitable`s can have optional cleanup handlers in the same fashion as 
+         coroutines.
+         */
+        template <typename HANDLER>
+        inline void install(HANDLER&& hdl) {
+            // Only allocate cleanup if necessary. Since most awaitables will 
+            // only ever have `install()` called once, checking every time is 
+            // an inconsequential cost.
+            if(!cleanup_) { 
+                cleanup_ = 
+                    std::unique_ptr<hce::cleanup<interface&>>(
+                        new hce::cleanup<interface&>(*this)); 
+            }
+
+            cleanup_->install(std::forward<HANDLER>(hdl));
+        }
 
         ///return the final result of the `awaitable<T>`
         virtual T get_result() = 0;
+
+    private:
+        std::unique_ptr<hce::cleanup<interface&>> cleanup_;
     };
 
     typedef T value_type;
@@ -908,7 +950,7 @@ struct awt : public awaitable {
     awt(awt<T>&& rhs) = default;
 
     template <typename IMPLEMENTATION>
-    static awt<T> make(IMPLEMENTATION* i) { 
+    static inline awt<T> make(IMPLEMENTATION* i) { 
         return awt<T>(i); 
     }
     
@@ -921,8 +963,7 @@ struct awt : public awaitable {
      Return the final result of `awt<T>`
      */
     inline T await_resume(){ 
-        return dynamic_cast<awt<T>::interface&>(
-            this->implementation()).get_result();
+        return dynamic_cast<interface&>(this->implementation()).get_result();
     }
 
     /**
@@ -937,7 +978,7 @@ private:
     template <typename IMPLEMENTATION>
     awt(IMPLEMENTATION* i) : 
         // must be able to cast the implementation to the required parent type
-        awaitable(dynamic_cast<awt<T>::interface*>(i)) 
+        awaitable(dynamic_cast<interface*>(i)) 
     { }
 };
 
@@ -963,7 +1004,21 @@ private:
 template <>
 struct awt<void> : public awaitable {
     struct interface : public awaitable::interface {
-        virtual ~interface() { }
+        virtual ~interface() { cleanup_.reset(); }
+
+        template <typename HANDLER>
+        inline void install(HANDLER&& hdl) {
+            if(!cleanup_) { 
+                cleanup_ = 
+                    std::unique_ptr<hce::cleanup<interface&>>(
+                        new hce::cleanup<interface&>(*this)); 
+            }
+
+            cleanup_->install(std::forward<HANDLER>(hdl));
+        }
+
+    private:
+        std::unique_ptr<hce::cleanup<interface&>> cleanup_;
     };
 
     typedef void value_type;
@@ -974,7 +1029,7 @@ struct awt<void> : public awaitable {
 
     /// construct an awt<void> from an awaitable implementation
     template <typename IMPLEMENTATION>
-    static awt<void> make(IMPLEMENTATION* i) { 
+    static inline awt<void> make(IMPLEMENTATION* i) { 
         return awt<void>(i); 
     }
 
@@ -997,6 +1052,10 @@ private:
 // for some reason templates sometimes need this derived template to function
 template <typename T>
 using awt_interface = typename hce::awt<T>::interface;
+
+// for some reason templates sometimes need this derived template to function
+template <typename T>
+using awt_cleanup_handler = hce::cleanup<hce::awt_interface<T>&>::handler;
 
 }
 

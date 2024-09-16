@@ -2288,7 +2288,6 @@ size_t block_T() {
 
 TEST(scheduler, block_and_block_workers) {
     const size_t expected = 8;
-    //const size_t expected = 4;
     EXPECT_EQ(expected, test::scheduler::block_T<int>());
     EXPECT_EQ(expected, test::scheduler::block_T<unsigned int>());
     EXPECT_EQ(expected, test::scheduler::block_T<size_t>());
