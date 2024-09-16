@@ -205,7 +205,7 @@ $
 Generate `Doxygen` documentation to see more for `hce::scheduler` creation, configuration and management.
 
 ## Communication 
-This library allows communication between coroutines, threads, and any combination there-in using `hce::channel`s. 
+This library allows communication between coroutines, threads, and any combination there-in using `hce::channel`s. `hce::channel<T>` can be templated to send any type `T`.
 
 `hce::channel` is a specialized communication mechanism which works correctly for both `hce` coroutines and system threads.
 
@@ -252,7 +252,7 @@ main joined with my_coroutine and received 17
 $
 ```
 
-Generate `Doxygen` documentation to see more, specifically for `hce::channel<T>` unbuffered/buffered creation on other API.
+Generate `Doxygen` documentation to see more, specifically for `hce::channel<T>` unbuffered/buffered creation and other API.
 
 ## Thread Blocking Calls
 Arbitrary functions which may block a calling coroutine are unsafe to use directly by a coroutine because they will block the calling thread. Doing this will stop the processing of coroutines and in the worst case cause system deadlock. 
