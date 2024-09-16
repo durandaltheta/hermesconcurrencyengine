@@ -142,7 +142,13 @@ hce::co<int> outer_frame() {
 }
 ```
 
-### Example Coroutines
+When an `hce` coroutine is first invoked, it does not immediately run. Instead it constructs the `hce::co<T>` return object. This object can be passed to a `hce` scheduling operation, such as `hce::schedule()` and `hce::join()` so that it will actually execute.
+
+WARNING: `lambda` functions, as well as Functors (objects with implement the Call operator `()`), can be coroutines. HOWEVER, there are very specific rules on what data is available to the coroutine function when it executes. The shorthand is: do not use `lambda` captures or object members within a coroutine body, pass them in as arguments somehow. For Functors, ensure the coroutine is a `static` function. See https://en.cppreference.com/w/cpp/language/coroutines for complicated details.
+
+Generate `Doxygen` documentation to see more for `hce` coroutine creation.
+
+### Additional Examples
 ```
 #include <string> 
 #include <hce>
@@ -159,12 +165,6 @@ hce::co<std::string> coroutine_with_arguments(int arg1, std::string arg2) {
     co_return std::to_string(arg1) + arg2;
 }
 ```
-
-When an `hce` coroutine is first invoked, it does not immediately run. Instead it constructs the `hce::co<T>` return object. This object can be passed to a `hce` scheduling operation, such as `hce::schedule()` and `hce::join()` so that it will actually execute.
-
-WARNING: `lambda` functions, as well as Functors (objects with implement the Call operator `()` implemented), can be coroutines. HOWEVER, there are very specific rules on what data is available to the coroutine function when it executes. The shorthand is: do not use `lambda` captures or object members within a coroutine body, pass them in as arguments somehow. For Functors, ensure the coroutine is a `static` function. See https://en.cppreference.com/w/cpp/language/coroutines for complicated details.
-
-Generate `Doxygen` documentation to see more for `hce` coroutine creation.
 
 ## Scheduling
 This library includes high level scheduling operations:
