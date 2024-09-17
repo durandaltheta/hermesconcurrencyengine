@@ -914,33 +914,10 @@ struct awt : public awaitable {
     struct interface : public awaitable::interface {
         // Ensure destructor is virtual to properly destruct. If any cleanup 
         // handlers exist, execute them
-        virtual ~interface() { cleanup_.reset(); }
-
-        /**
-         @brief install an awaitable::interface::cleanup::handler 
-
-         `awaitable`s can have optional cleanup handlers in the same fashion as 
-         coroutines.
-         */
-        template <typename HANDLER>
-        inline void install(HANDLER&& hdl) {
-            // Only allocate cleanup if necessary. Since most awaitables will 
-            // only ever have `install()` called once, checking every time is 
-            // an inconsequential cost.
-            if(!cleanup_) { 
-                cleanup_ = 
-                    std::unique_ptr<hce::cleanup<interface&>>(
-                        new hce::cleanup<interface&>(*this)); 
-            }
-
-            cleanup_->install(std::forward<HANDLER>(hdl));
-        }
+        virtual ~interface() { }
 
         ///return the final result of the `awaitable<T>`
         virtual T get_result() = 0;
-
-    private:
-        std::unique_ptr<hce::cleanup<interface&>> cleanup_;
     };
 
     typedef T value_type;
@@ -1004,21 +981,7 @@ private:
 template <>
 struct awt<void> : public awaitable {
     struct interface : public awaitable::interface {
-        virtual ~interface() { cleanup_.reset(); }
-
-        template <typename HANDLER>
-        inline void install(HANDLER&& hdl) {
-            if(!cleanup_) { 
-                cleanup_ = 
-                    std::unique_ptr<hce::cleanup<interface&>>(
-                        new hce::cleanup<interface&>(*this)); 
-            }
-
-            cleanup_->install(std::forward<HANDLER>(hdl));
-        }
-
-    private:
-        std::unique_ptr<hce::cleanup<interface&>> cleanup_;
+        virtual ~interface() { }
     };
 
     typedef void value_type;

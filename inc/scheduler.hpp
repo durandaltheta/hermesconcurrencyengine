@@ -656,8 +656,8 @@ struct scheduler : public printable {
             std::stringstream ss;
             ss << "log_level:"
                << log_level
-               << ", block_workers_reuse_pool: "
-               << block_workers_reuse_pool
+               << ", block_workers_reuse_count: "
+               << block_workers_reuse_count
                << ", on_init: " 
                << on_init 
                << ", on_suspend: " 
@@ -682,7 +682,7 @@ struct scheduler : public printable {
          The count of worker threads used by `block()` the scheduler will 
          persist for reuse. No workers are created until they are required.
          */
-        size_t block_workers_reuse_pool;
+        size_t block_workers_reuse_count;
 
         /**
          Handlers to be called on initialization (before executing coroutines) 
@@ -716,7 +716,7 @@ struct scheduler : public printable {
     private:
         config() :
             log_level(hce::printable::default_log_level()),
-            block_workers_reuse_pool(0)
+            block_workers_reuse_count(0)
         { 
             HCE_HIGH_CONSTRUCTOR(); 
         }
@@ -980,7 +980,7 @@ struct scheduler : public printable {
     /**
      @return the scheduler thread's log level
      */
-    inline int log_level() {
+    inline int log_level() const {
         auto l = config_->log_level;
         HCE_TRACE_METHOD_BODY("log_level",l);
         return l;
@@ -1037,14 +1037,20 @@ struct scheduler : public printable {
     }
 
     /**
-     Useful heuristic for determining ideal `block_workers_reuse_pool()` size.
+     Useful heuristic for determining ideal `block_workers_reuse_count()` size.
 
      @return the current count of worker threads spawned for `block()`ing tasks 
      */
-    inline size_t block_workers() const {
-        auto c = block_worker_count_(); 
-        HCE_MIN_METHOD_BODY("block_workers",c);
-        return c;
+    inline size_t block_workers_count() const {
+        size_t c;
+
+        {
+            std::lock_guard<hce::spinlock> lk(lk_);
+            c = checked_out_worker_count_ + reusable_workers_.size();
+        }
+
+        HCE_MIN_METHOD_BODY("block_worker_count",c);
+        return c; 
     }
 
     /**
@@ -1055,9 +1061,9 @@ struct scheduler : public printable {
      The default count of reused worker threads is 0 threads (except for the 
      global scheduler which has a default of 1 thread). However, any number of 0 
      or higher can be specified by `install()`ing the scheduler with an 
-     `hce::scheduler::config` with its `block_workers_reuse_pool` member set to 
+     `hce::scheduler::config` with its `block_workers_reuse_count` member set to 
      the desired count of worker threads to reuse. Consider configuring 
-     schedulers with a higher value `block_workers_reuse_pool` if blocking calls 
+     schedulers with a higher value `block_workers_reuse_count` if blocking calls 
      are made frequently.
 
      The default global scheduler's reuse blocker worker count is specified by 
@@ -1067,14 +1073,14 @@ struct scheduler : public printable {
      compiled if compiler flag `HCECUSTOMGLOBALCONFIG` is provided during 
      compilation of the library, allowing the user to write and link against 
      their own implementation. The default implementation's `config` returned by 
-     `hce_scheduler_global_config()` has its `block_workers_reuse_pool` member 
+     `hce_scheduler_global_config()` has its `block_workers_reuse_count` member 
      specified at library compile time by the compiler define 
      `HCEGLOBALREUSEBLOCKPROCS` (which defaults to 1 thread). 
 
      @return the minimum count of `block()` worker threads the scheduler will persist
      */
-    inline size_t block_workers_reuse_pool() const { 
-        HCE_MIN_METHOD_BODY("block_workers_reuse_pool",worker_thread_reuse_cnt_);
+    inline size_t block_workers_reuse_count() const { 
+        HCE_MIN_METHOD_BODY("block_workers_reuse_count",worker_thread_reuse_cnt_);
         return worker_thread_reuse_cnt_;
     }
 
@@ -2038,19 +2044,6 @@ private:
         }
         
         halt_notify_();
-    }
-
-    // return the current count of managed block_manager threads
-    inline size_t block_worker_count_() const { 
-        size_t c;
-
-        {
-            std::unique_lock<hce::spinlock> lk(lk_);
-            c = checked_out_worker_count_ + reusable_workers_.size();
-        }
-
-        HCE_TRACE_METHOD_BODY("block_worker_count_",c);
-        return c; 
     }
 
     template <typename Callable, typename... As>

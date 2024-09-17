@@ -27,7 +27,7 @@ extern std::unique_ptr<hce::scheduler::config> hce_scheduler_global_config();
 #ifndef HCECUSTOMGLOBALCONFIG
 std::unique_ptr<hce::scheduler::config> hce_scheduler_global_config() {
     auto config = hce::scheduler::config::make();
-    config->block_workers_reuse_pool = HCEGLOBALREUSEBLOCKPROCS;
+    config->block_workers_reuse_count = HCEGLOBALREUSEBLOCKPROCS;
     return config;
 }
 #endif
@@ -60,7 +60,7 @@ void hce::scheduler::configure_(
     else { config_ = config::make(); }
 
     // set our block reuse threadpool
-    worker_thread_reuse_cnt_ = config_->block_workers_reuse_pool;
+    worker_thread_reuse_cnt_ = config_->block_workers_reuse_count;
 }
 
 void hce::scheduler::run() {

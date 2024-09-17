@@ -1896,14 +1896,14 @@ size_t block_T() {
             bool ids_identical = false;
             bool ids_identical2 = false;
             bool ids_identical3 = false;
-            EXPECT_EQ(0, hce::scheduler::get().block_workers());
+            EXPECT_EQ(0, hce::scheduler::get().block_workers_count());
             EXPECT_EQ(t, (T)hce::scheduler::get().block(block_done_immediately_T<T>,t,std::ref(ids_identical), thd_id));
             EXPECT_TRUE(ids_identical);
             EXPECT_EQ(t, (T)hce::scheduler::get().block(block_done_immediately_T<T>,t,std::ref(ids_identical2), thd_id));
             EXPECT_TRUE(ids_identical2);
             EXPECT_EQ(t, (T)hce::block(block_done_immediately_T<T>,t,std::ref(ids_identical3), thd_id));
             EXPECT_TRUE(ids_identical3);
-            EXPECT_EQ(0, hce::scheduler::get().block_workers());
+            EXPECT_EQ(0, hce::scheduler::get().block_workers_count());
         };
 
         try {
@@ -1929,12 +1929,12 @@ size_t block_T() {
 
             auto launch_sender_thd = [&]{
                 std::thread([&](T t){
-                    EXPECT_EQ(0, hce::scheduler::get().block_workers());
+                    EXPECT_EQ(0, hce::scheduler::get().block_workers_count());
                     q.push(std::move(t));
                 },t).detach();
             };
 
-            EXPECT_EQ(0, hce::scheduler::get().block_workers());
+            EXPECT_EQ(0, hce::scheduler::get().block_workers_count());
             launch_sender_thd();
             launch_sender_thd();
             launch_sender_thd();
@@ -1944,7 +1944,7 @@ size_t block_T() {
             EXPECT_TRUE(ids_identical2);
             EXPECT_EQ(t, (T)hce::block(block_for_queue_T<T>,std::ref(q),std::ref(ids_identical3), thd_id));
             EXPECT_TRUE(ids_identical3);
-            EXPECT_EQ(0, hce::scheduler::get().block_workers());
+            EXPECT_EQ(0, hce::scheduler::get().block_workers_count());
         };
 
         try {
@@ -1964,7 +1964,7 @@ size_t block_T() {
 
     // When block() calls are stacked (block() calls block()), the inner block()
     // call should execute immediately on the current thread, leaving the 
-    // 'block_workers()' count the same as only calling block() once. 
+    // 'block_workers_count()' count the same as only calling block() once. 
     {
         HCE_INFO_LOG("thread stacked block done immediately+");
         auto schedule_blocking = [&](T t) {
@@ -1972,14 +1972,14 @@ size_t block_T() {
             bool ids_identical = false;
             bool ids_identical2 = false;
             bool ids_identical3 = false;
-            EXPECT_EQ(0, hce::scheduler::get().block_workers());
+            EXPECT_EQ(0, hce::scheduler::get().block_workers_count());
             EXPECT_EQ(t, (T)hce::scheduler::get().block(block_done_immediately_stacked_outer_T<T>,t,std::ref(ids_identical), thd_id));
             EXPECT_TRUE(ids_identical);
             EXPECT_EQ(t, (T)hce::scheduler::get().block(block_done_immediately_stacked_outer_T<T>,t,std::ref(ids_identical2), thd_id));
             EXPECT_TRUE(ids_identical2);
             EXPECT_EQ(t, (T)hce::block(block_done_immediately_stacked_outer_T<T>,t,std::ref(ids_identical3), thd_id));
             EXPECT_TRUE(ids_identical3);
-            EXPECT_EQ(0, hce::scheduler::get().block_workers());
+            EXPECT_EQ(0, hce::scheduler::get().block_workers_count());
         };
 
         try {
@@ -2005,12 +2005,12 @@ size_t block_T() {
 
             auto launch_sender_thd = [&]{
                 std::thread([&](T t){
-                    EXPECT_EQ(0, hce::scheduler::get().block_workers());
+                    EXPECT_EQ(0, hce::scheduler::get().block_workers_count());
                     q.push(std::move(t));
                 },t).detach();
             };
 
-            EXPECT_EQ(0, hce::scheduler::get().block_workers());
+            EXPECT_EQ(0, hce::scheduler::get().block_workers_count());
             launch_sender_thd();
             launch_sender_thd();
             launch_sender_thd();
@@ -2020,7 +2020,7 @@ size_t block_T() {
             EXPECT_TRUE(ids_identical2);
             EXPECT_EQ(t, (T)hce::block(block_for_queue_stacked_outer_T<T>,std::ref(q),std::ref(ids_identical3), thd_id));
             EXPECT_TRUE(ids_identical3);
-            EXPECT_EQ(0, hce::scheduler::get().block_workers());
+            EXPECT_EQ(0, hce::scheduler::get().block_workers_count());
         };
 
         try {
@@ -2043,7 +2043,7 @@ size_t block_T() {
         std::shared_ptr<hce::scheduler> sch = inst->scheduler();
         std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
 
-        EXPECT_EQ(0, sch->block_workers_reuse_pool());
+        EXPECT_EQ(0, sch->block_workers_reuse_count());
 
         auto schedule_blocking_co = [&](T t) {
             HCE_INFO_FUNCTION_ENTER("schedule_blocking_co");
@@ -2080,7 +2080,7 @@ size_t block_T() {
             EXPECT_EQ(t, (T)std::move(awt3));
             EXPECT_FALSE(co_ids_identical3);
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            EXPECT_EQ(0, sch->block_workers());
+            EXPECT_EQ(0, sch->block_workers_count());
         };
 
         try {
@@ -2133,7 +2133,7 @@ size_t block_T() {
                     thd_id));
 
             std::this_thread::sleep_for(std::chrono::milliseconds(40));
-            EXPECT_EQ(3, sch->block_workers());
+            EXPECT_EQ(3, sch->block_workers_count());
             q.push(t);
             q.push(t);
             q.push(t);
@@ -2201,7 +2201,7 @@ size_t block_T() {
             EXPECT_EQ(t, (T)std::move(awt3));
             EXPECT_FALSE(co_ids_identical3);
             std::this_thread::sleep_for(std::chrono::milliseconds(40));
-            EXPECT_EQ(0, sch->block_workers());
+            EXPECT_EQ(0, sch->block_workers_count());
         };
 
         try {
@@ -2254,7 +2254,7 @@ size_t block_T() {
                     thd_id));
 
             std::this_thread::sleep_for(std::chrono::milliseconds(40));
-            EXPECT_EQ(3, sch->block_workers());
+            EXPECT_EQ(3, sch->block_workers_count());
             q.push(t);
             q.push(t);
             q.push(t);
@@ -2315,14 +2315,14 @@ hce::co<T> co_block_for_queue_simple_T(test::queue<T>& q) {
 }
 
 template <typename T>
-size_t block_workers_reuse_pool_T(const size_t pool_limit) {
+size_t block_workers_reuse_count_T(const size_t pool_limit) {
     size_t success_count = 0;
 
     for(size_t reuse_cnt=0; reuse_cnt<pool_limit; ++reuse_cnt) {
         std::vector<test::queue<T>> q(pool_limit);
         std::unique_ptr<hce::scheduler::lifecycle> lf;
         auto cfg = hce::scheduler::config::make();
-        cfg->block_workers_reuse_pool = reuse_cnt;
+        cfg->block_workers_reuse_count = reuse_cnt;
         auto inst = hce::scheduler::make(lf, std::move(cfg));
         std::shared_ptr<hce::scheduler> sch = inst->scheduler();
         std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
@@ -2330,8 +2330,8 @@ size_t block_workers_reuse_pool_T(const size_t pool_limit) {
         std::deque<hce::awt<T>> awts;
 
         try {
-            EXPECT_EQ(reuse_cnt, sch->block_workers_reuse_pool());
-            EXPECT_EQ(0, sch->block_workers());
+            EXPECT_EQ(reuse_cnt, sch->block_workers_reuse_count());
+            EXPECT_EQ(0, sch->block_workers_count());
 
             for(size_t i=0; i<pool_limit; ++i) {
                 awts.push_back(sch->join(
@@ -2340,8 +2340,8 @@ size_t block_workers_reuse_pool_T(const size_t pool_limit) {
 
             std::this_thread::sleep_for(std::chrono::milliseconds(40));
 
-            EXPECT_EQ(reuse_cnt, sch->block_workers_reuse_pool());
-            EXPECT_EQ(pool_limit, sch->block_workers());
+            EXPECT_EQ(reuse_cnt, sch->block_workers_reuse_count());
+            EXPECT_EQ(pool_limit, sch->block_workers_count());
             
             for(size_t i=0; i<pool_limit; ++i) {
                 q[i].push((T)test::init<T>(i));
@@ -2352,8 +2352,8 @@ size_t block_workers_reuse_pool_T(const size_t pool_limit) {
                 awts.pop_front();
             }
 
-            EXPECT_EQ(reuse_cnt, sch->block_workers_reuse_pool());
-            EXPECT_EQ(reuse_cnt, sch->block_workers());
+            EXPECT_EQ(reuse_cnt, sch->block_workers_reuse_count());
+            EXPECT_EQ(reuse_cnt, sch->block_workers_count());
 
             lf.reset();
             thd.join();
@@ -2369,15 +2369,15 @@ size_t block_workers_reuse_pool_T(const size_t pool_limit) {
 }
 }
 
-TEST(scheduler, block_workers_and_block_workers_reuse_pool) {
+TEST(scheduler, block_workers_and_block_workers_reuse_count) {
     const size_t expected = 10;
-    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_pool_T<int>(10));
-    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_pool_T<unsigned int>(10));
-    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_pool_T<size_t>(10));
-    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_pool_T<float>(10));
-    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_pool_T<double>(10));
-    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_pool_T<char>(10));
-    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_pool_T<void*>(10));
-    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_pool_T<std::string>(10));
-    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_pool_T<test::CustomObject>(10));
+    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_count_T<int>(10));
+    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_count_T<unsigned int>(10));
+    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_count_T<size_t>(10));
+    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_count_T<float>(10));
+    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_count_T<double>(10));
+    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_count_T<char>(10));
+    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_count_T<void*>(10));
+    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_count_T<std::string>(10));
+    EXPECT_EQ(expected, test::scheduler::block_workers_reuse_count_T<test::CustomObject>(10));
 }
