@@ -2,14 +2,13 @@
 import argparse
 import sys
 import os
-import hce_utility
+from datetime import datetime, timedelta
+from hce_utility import execute
 
 CURRENT_DIRECTORY = os.getcwd()
-SCRIPT_DIRECTORY = os.path.dirname(os.path.realpath(__file__))
-PROJECT_ROOT = os.path.dirname(SCRIPT_PATH/..)
+SCRIPT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIRECTORY)
 SEPARATOR_REQUIRED = False 
-SELECTEDCC=None 
-SELECTEDCXX=None 
 RUNINFOS = []
 
 class runinfo:
@@ -37,61 +36,60 @@ class runinfo:
     def __str__(self):
         return self.stringify()
 
-class log:
-    def __call__(string):
-        if isinstance(string, str):
-            sys.stdout.write(string)
+def log(s, newline=True):
+    if isinstance(s, str):
+        sys.stdout.write(s)
 
-            if newline:
-                sys.stdout.write('\n')
+        if newline:
+            sys.stdout.write('\n')
 
-            sys.stdout.flush()
+        sys.stdout.flush()
 
-    class strings:
-        def section():
-            return '---------------------------------------------------------------------------------'
+class strings:
+    def section():
+        return '---------------------------------------------------------------------------------'
 
-        def separator():
-            return '[----------] '
+    def separator():
+        return '[----------] '
 
-        def run():
-            return '[ RUN      ] '
+    def run():
+        return '[ RUN      ] '
 
-        def ok():
-            return '[       OK ] '
+    def ok():
+        return '[       OK ] '
 
-        def stderr():
-            return '[  STDERR  ] '
+    def stderr():
+        return '[  STDERR  ] '
 
-        def failed():
-            return '[  FAILED  ] ' 
+    def failed():
+        return '[  FAILED  ] ' 
 
-    class command:
-        def separator():
-            global SEPARATOR_REQUIRED
-            if SEPARATOR_REQUIRED == False:
-                SEPARATOR_REQUIRED = True 
-            else:
-                log('')
+class command:
+    def separator():
+        global SEPARATOR_REQUIRED
+        if SEPARATOR_REQUIRED == False:
+            SEPARATOR_REQUIRED = True 
+        else:
+            log('')
+            log(strings.separator())
+
+    def prepend(string):
+        log(strings.run()+string)
+
+    def result(code, string, err=''):
+        if code == 0:
+            log(strings.ok()+string)
+        else:
+            if err != '':
                 log(strings.separator())
+                log(strings.stderr())
+                log(err)
+            log(strings.failed()+string)
+            log('    ErrorCode: '+str(code));
 
-        def prepend(string):
-            log(strings.run()+string+'\n')
-
-        def result(code, string, err=''):
-            if code == 0:
-                log(strings.ok()+string+'\n')
-            else:
-                if err != '':
-                    log(strings.separator())
-                    log(strings.stderr())
-                    log(err)
-                log(strings.failed()+string)
-                log('    ErrorCode: '+str(code)+'\n');
-
-def process_exit(success)
+def process_exit(success):
     global RUNINFOS
-    log(log.strings.section())
+    log(strings.section())
     log('test run information:')
 
     for r in RUNINFOS:
@@ -107,16 +105,24 @@ def process_exit(success)
         sys.exit(1)
 
 def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-cc','--c-compiler', type=str, default=None, required=True, help='Specify the path to a C compiler to build and test with')
-    parser.add_argument('-cxx','--cxx-compiler', type=str, default=None, required=True, help='Specify the path to a C++ compiler to build and test with')
+    parser = argparse.ArgumentParser('A validation script for running HCE project unit tests to try and dynamically find runtime problems. Useful for helping verify the project is stable. Runs 3 types of tests: default (unit tests with default options), jitter (unit tests run in various loglevels and loglimits to ensure consistent behavior with different timings), and memcheck (unit tests run in valgrind to check for memory leaks)')
+    parser.add_argument('-cc','--c-compiler', type=str, required=True, help='Specify the path to a C compiler to build and test with')
+    parser.add_argument('-cxx','--cxx-compiler', type=str, required=True, help='Specify the path to a C++ compiler to build and test with')
     parser.add_argument('-m','--minimal', action='store_true', help='Execute unit tests only once with default options')
-    parser.add_argument('-ff','--failfast', action='store_true', help='Cause unit testing to exit as soon as an error is detected')
-    parser.add_argument('-lmtb','--loglimit-break', type=int, default=10, help='Skip tests past the specified loglimit. IE, if -lmtb=5, test loop will break when the loglimit reaches a count of 5')
-    parser.add_argument('-lvlb','--loglevel-break', type=int, default=10, help='Skip tests past the specified loglevel. IE, if -lvlb=5, test loop will break when the loglevel reaches a count of 5')
+    parser.add_argument('-nd','--no-default', action='store_true', help='Skip default validation')
+    parser.add_argument('-nj','--no-jitter', action='store_true', help='Skip jitter validation')
     parser.add_argument('-nm','--no-memcheck', action='store_true', help='Skip memory validation')
-    parser.add_argument('-otc','--override-test-command', type=str, default=None, help='If specified, the given system command will be executed to run the compiled unit tests. The path to the compiled unit test will be passed as its only argument. The command is expected to return 0 on success, and non-0 on failure')
-    parser.add_argument('-omc','--override-memcheck-command', type=str, default=None, help='If specified, the given system command will be executed to run the compiled unit tests when memory verification (valgrind) is expected. The path to the compiled unit test will be passed as its only argument. The command is expected to return 0 on success, and non-0 on failure')
+    parser.add_argument('-lmr','--loop-minute-runtime', type=int, default=0, help='A count of minutes to continuously loop execution of each built test. If the value is 30, for example, then each built test executable will be run for 30 minutes continuously before progressing to the next test. Useful for running long tests when attempting to thoroughly validate. If a test errors at any point, looping will cease.')
+    parser.add_argument('-ff','--failfast', action='store_true', help='Cause unit testing to exit as soon as an error is detected')
+    parser.add_argument('-jlmts','--jitter-loglimit-start', type=int, default=0, help='Specify the initial jitter test loglimit. IE, if -lmts=2, test loop will start at loglimit==2')
+    parser.add_argument('-jlmtb','--jitter-loglimit-break', type=int, default=10, help='Skip tests past the specified jitter test loglimit. IE, if -lmtb=5, test loop will break when the loglimit reaches a count of 5')
+    parser.add_argument('-jlvls','--jitter-loglevel-start', type=int, default=0, help='Specify the initial jitter test loglimit. IE, if -lvls=2, test loop will start at loglevel==2')
+    parser.add_argument('-jlvlb','--jitter-loglevel-break', type=int, default=10, help='Skip tests past the specified jitter test loglevel. IE, if -lvlb=5, test loop will break when the loglevel reaches a count of 5')
+    parser.add_argument('-otc','--override-test-command', type=str, default=None, help='If specified, the given system command will be executed to run the compiled unit tests. This can be used to implement running unit tests over a connection (like ssh) on target hardware and returning the result. The path to the compiled unit test will be passed as its only argument. The command is expected to return 0 on success, and non-0 on failure')
+    parser.add_argument('-omc','--override-memcheck-command', type=str, default=None, help='If specified, the given system command will be executed to run the compiled unit tests when memory verification (valgrind) is expected.. This can be used to implement running unit tests over a connection (like ssh) on target hardware and returning the result. The path to the compiled unit test will be passed as its only argument. The command is expected to return 0 on success, and non-0 on failure')
+    parser.add_argument('-deflg','--default-logfile', type=str, default=None, help='If specified, is the path to where default test output should be written')
+    parser.add_argument('-jitlg','--jitter-logfile', type=str, default=None, help='If specified, is the path to where jitter test output should be written')
+    parser.add_argument('-memlg','--memcheck-logfile', type=str, default=None, help='If specified, is the path to where memcheck test output should be written')
     return parser.parse_args()
 
 def inspect_environment(args):
@@ -137,91 +143,89 @@ def inspect_environment(args):
 
         return None
 
-    global SELECTEDCC
-    SELECTEDCC = which(args.c_compiler)
-
-    if not SELECTEDCC:
-        log(f'Critical Error: No c compiler {args.c_compiler} found!')
-        sys.exit(1)
-
-    global CUSTOMCXX
-    CUSTOMCXX = which(args.cxx_compiler)
-
-    if not CUSTOMCXX:
-        log(f'Critical Error: No c++ compiler {args.cxx_compiler} found!')
-        sys.exit(1)
-
 def validate_command(string):
     # indirectly write to this for logfile purposes
-    stdout=''
+    command.prepend(string)
 
-    def print_func(line, flush=True, end=''):
-        print(line,flush,end)
-        stdout += line
-
-    log.command.prepend(string)
+    env = os.environ
 
     # execute command with the correct environment and print function
-    code, err = execute(string.split(), print_func=print_func, env=env)
+    code, err, out = execute(string.split(), env=env)
 
     if code == 0:
-        log.command.result(code, string)
-        return True, stdout
+        command.result(code, string)
+        return True, out
     else:
-        log.command.result(code, string, err)
-        return False, stdout
+        command.result(code, string, err)
+        return False, out
 
 def validate_commands(commands):
     success = True
-    stdout = ''
+    outs = ''
 
     for com in commands:
-        success, stdout = validate_command(com) 
-        stdouts += stdout
+        success, out = validate_command(com) 
+        outs += out
 
         if not success:
             break 
 
-    return success, stdouts
+    return success, outs
 
-def build_and_test(args, memcheck)
-    global SELECTEDCC
-    global SELECTEDCXX
+def build_and_test(args, memcheck, logfile=None):
+    global PROJECT_ROOT
 
-    log(log.strings.section())
-    log(f'cc:{args.cc}\ncxx:{args.cxx}\nHCELOGLIMIT:{HCELOGLIMIT}\nHCELOGLEVEL:{HCELOGLEVEL}')
-
-    os.environ['CC'] = SELECTEDCC
-    os.environ['CXX'] = SELECTEDCXX
-    success = False
-    hce_ut_path = os.path.abspath(os.path.join('tst','hce_ut'))
-    cmake_cmd = f'cmake {PROJECT_ROOT}'
-    clean_cmd = f'make clean'
-    make_cmd = f'make hce_ut'
-    commands = [ cmake_cmd, clean_cmd, make_cmd ]
-
-    if memcheck:
-        if args.override_memcheck_command:
-            commands.append(f'args.override_memcheck_command {hce_ut_path}')
-        else:
-            memcheck_cmd = f'valgrind --leak-check=full {hce_ut_path}'
-            commands.append(memcheck_cmd)
-    else:
-        if args.override_test_command:
-            commands.append(f'args.override_test_command {hce_ut_path}')
-        else:
-            test_cmd = f'{hce_ut_path}'
-            commands.append(test_cmd)
+    log(strings.section())
+    loglimit = os.environ['HCELOGLIMIT']
+    loglevel = os.environ['HCELOGLEVEL']
+    log(f'cc:{args.c_compiler}\ncxx:{args.cxx_compiler}\nHCELOGLIMIT:{loglimit}\nHCELOGLEVEL:{loglevel}')
 
     start = datetime.now()
-    success, stdout = validate_commands(commands)
+    os.environ['CC'] = args.c_compiler
+    os.environ['CXX'] = args.cxx_compiler
+    success = False
+    hce_ut_path = os.path.abspath(os.path.join('tst','hce_ut'))
+    cmake_cmd = f'cmake {PROJECT_ROOT} -DHCELOGLIMIT={loglimit} -DHCELOGLEVEL={loglevel}'
+    clean_cmd = f'make clean'
+    make_cmd = f'make -j hce_ut'
+    commands = [ cmake_cmd, clean_cmd, make_cmd ]
 
-    if memcheck:
-        memcheck_log = os.path.join(PROJECT_ROOT,f'memcheck.log')
+    success, out = validate_commands(commands)
 
-        with open(memcheck_log,'w') as f:
-            log(f'writing memcheck build and test output to {memcheck_log}')
-            f.write(stdout)
+    if success:
+        now = datetime.now()
+        testend = now + timedelta(minutes=args.loop_minute_runtime)
+        commands = []
+        if memcheck:
+            if args.override_memcheck_command:
+                commands.append(f'args.override_memcheck_command {hce_ut_path}')
+            else:
+                memcheck_cmd = f'valgrind --leak-check=full {hce_ut_path}'
+                commands.append(memcheck_cmd)
+        else:
+            if args.override_test_command:
+                commands.append(f'args.override_test_command {hce_ut_path}')
+            else:
+                test_cmd = f'{hce_ut_path}'
+                commands.append(test_cmd)
+
+        while True:
+            success, test_out = validate_commands(commands)
+            out += test_out
+            now = datetime.now()
+
+            if now >= testend:
+                break 
+            else:
+                remaining = testend - now
+                loop_str = f'loop time remaining:{remaining}, re-executing test'
+                out += loop_str
+                log(loop_str)
+
+    if logfile:
+        with open(logfile,'a') as f:
+            log(f'writing command output to {logfile}')
+            f.write(out)
 
     now = datetime.now()
     global RUNINFOS
@@ -237,71 +241,70 @@ def build_and_test(args, memcheck)
     return success
 
 def execute_tests(args):
-    from datetime import datetime
     success = True
-    log.command.separator('build and run unit test code')
 
-    def minimal_test():
-        log(f'executing unit tests')
+    def default_test():
+        if not args.no_default:
+            log(strings.section())
+            log(f'executing default unit tests')
 
-        os.environ['HCELOGLIMIT'] = -1
-        os.environ['HCELOGLEVEL'] = -1
-        built_and_test(args,False)
+            os.environ['HCELOGLIMIT'] = str(-1)
+            os.environ['HCELOGLEVEL'] = str(-1)
+            build_and_test(args,False,args.default_logfile)
 
-        if args.minimal:
-            process_exit(success)
+            if args.minimal:
+                process_exit(success)
+
+    def jitter_test():
+        if not args.no_jitter:
+            log(strings.section())
+            log(f'executing unit tests with processing jitter')
+
+            # Run the tests with various loglimits, loglevels and compiler toolchains.
+            #
+            # Executing tests under these all these variations is to:
+            # A) verify code correctness 
+            # B) smoke out timing bugs by adding semi-random performance jitter
+            #
+            # Because this will execute the tests potentially hundreds of times, its 
+            # important that tests are not written to take a long time. 
+            loglevel = args.jitter_loglevel_start
+            loglimit = args.jitter_loglimit_start
+
+            while loglevel < 10:
+                if args.jitter_loglevel_break == loglevel:
+                    log(f'reached loglevel breakpoint{args.jitter_loglevel_break}')
+                    break;
+                
+                while loglimit < 10:
+                    if args.jitter_loglimit_break == loglimit:
+                        log(f'reached loglimit breakpoint{args.jitter_loglimit_break}')
+                        break;
+
+                    os.environ['HCELOGLIMIT'] = str(loglimit)
+                    os.environ['HCELOGLEVEL'] = str(loglevel)
+                    build_and_test(args,False,args.jitter_logfile)
+
+                    loglimit=loglimit+1
+
+                loglevel=loglevel+1
 
     def memcheck_test():
         if not args.no_memcheck:
             log(f'executing unit tests with memcheck')
-            os.environ['HCELOGLIMIT'] = -1
-            os.environ['HCELOGLEVEL'] = -1
-            build_and_test(args,True)
+            os.environ['HCELOGLIMIT'] = str(-1)
+            os.environ['HCELOGLEVEL'] = str(-1)
+            build_and_test(args,True,args.memcheck_logfile)
 
-    def jitter_test():
-        log(f'executing unit tests with processing jitter')
-
-        # Run the tests with various loglimits, loglevels and compiler toolchains.
-        #
-        # Executing tests under these all these variations is to:
-        # A) verify code correctness 
-        # B) smoke out timing bugs by adding semi-random performance jitter
-        #
-        # Because this will execute the tests potentially hundreds of times, its 
-        # important that tests are not written to take a long time. 
-        loglevel = -1
-
-        while loglevel < 10:
-            if args.loglevel_break == loglevel:
-                log(f'reached loglevel breakpoint{args.loglevel_break}')
-                break;
-
-            if loglevel:
-                log(log.strings.section())
-
-            loglimit = -1; 
-            
-            while loglimit < 10:
-                if args.loglimit_break == loglimit:
-                    log(f'reached loglimit breakpoint{args.loglimit_break}')
-                    break;
-
-                os.environ['HCELOGLIMIT'] = loglimit
-                os.environ['HCELOGLEVEL'] = loglevel
-                build_and_test(args,False)
-
-                loglimit=loglimit+1
-
-            loglevel=loglevel+1
-
-    minimal_test()
-    memcheck_test()
+    default_test()
     jitter_test()
+    memcheck_test()
     process_exit(success)
 
 def main():
     global PROJECT_ROOT
     args = parse_args()
+    print(args)
     inspect_environment(args)
     os.chdir(PROJECT_ROOT)
     execute_tests(args)

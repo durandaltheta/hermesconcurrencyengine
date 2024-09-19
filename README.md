@@ -2,6 +2,45 @@
 C++20 Stackless Coroutine Concurrency Engine 
 
 ## Rationale
+`c++20` `coroutines` are an extremely powerful and efficient mechanism for writing concurrent code. They are also one of the most difficult parts of the language to use correctly.
+
+This framework is designed to make using `c++20` `coroutines` in real code easy and to make integration into existing codebases simple.
+
+### Example
+A simple example where a coroutine is constructed, scheduled, and communicated with asynchronously. 
+
+[example_001 source](ex/src/example_001.cpp)
+```
+#include <iostream>
+#include <hce.hpp>
+
+hce::co<void> my_coroutine(hce::channel<int> ch) {
+    int i;
+
+    while(co_await ch.recv(i)) {
+        std::cout << "received: " << i << std::endl;
+    }
+}
+
+int main() {
+    auto ch = hce::channel<int>::make();
+    hce::schedule(my_coroutine(ch));
+    ch.send(1);
+    ch.send(2);
+    ch.send(3);
+    ch.close();
+    return 0;
+}
+```
+
+Usage and output (after building with `make hce_ex`):
+```
+$ ./ex/example_001
+received: 1
+received: 2
+received: 3
+$
+```
 
 ## License 
 This project utilizes the MIT license.
@@ -145,7 +184,7 @@ hce::co<int> outer_frame() {
 ### Example Coroutines
 ```
 #include <string> 
-#include <hce>
+#include <hce.hpp>
 
 hce::co<void> void_return_coroutine() {
     co_return;
@@ -179,7 +218,7 @@ hce::block(Callable, args...): Call a function which may block the calling threa
 A simple example program:
 ```
 #include <iostream>
-#include <hce> 
+#include <hce.hpp> 
 
 // c++20 coroutines valid for this framework return `hce::co<COROUTINE_RETURN_TYPE>`
 hce::co<int> my_coroutine(int arg) {
@@ -212,7 +251,7 @@ This library allows communication between coroutines, threads, and any combinati
 A simple example program:
 ```
 #include <iostream>
-#include <hce> 
+#include <hce.hpp> 
 
 hce::co<void> my_coroutine(hce::channel<int> in_ch, hce::channel<int> out_ch) {
     int i;
@@ -263,7 +302,7 @@ A simple example program:
 ```
 #include <iostream>
 #include <chrono>
-#include <hce> 
+#include <hce.hpp> 
 
 int my_blocking_function(int arg) {
     // sleep for 5 seconds blocking the calling thread

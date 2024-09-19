@@ -1,11 +1,14 @@
 import subprocess 
 
-def execute(cmd, cwd=None, print_func=print, env=env):
+def execute(cmd, cwd=None, env=None):
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,cwd=cwd, env=env)
+    stdout = ''
 
     for line in process.stdout:
-        print_func(str(line, 'utf-8'), flush=True, end='')
+        fmt_line=str(line, 'utf-8')
+        stdout+=fmt_line
+        print(fmt_line, flush=True, end='')
     
-    stdout, stderr = process.communicate()
+    stub_stdout, stderr = process.communicate()
     
-    return process.returncode, stderr
+    return process.returncode, stderr, stdout
