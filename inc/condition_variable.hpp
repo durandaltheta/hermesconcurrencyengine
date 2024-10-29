@@ -11,6 +11,7 @@
 
 // local
 #include "utility.hpp"
+#include "logging.hpp"
 #include "atomic.hpp"
 #include "chrono.hpp"
 #include "coroutine.hpp"
@@ -42,8 +43,13 @@ struct condition_variable_any : public printable {
     condition_variable_any& operator=(const condition_variable_any&) = delete;
     condition_variable_any& operator=(condition_variable_any&&) = delete;
 
-    inline const char* nspace() const { return "hce"; }
-    inline const char* name() const { return "condition_variable_any"; }
+    static inline hce::string info_name() { 
+        return type::templatize<T>("hce::condition_variable_any"); 
+    }
+
+    inline hce::string name() const { 
+        return condition_variable_any::info_name(); 
+    }
 
     template <typename Lock>
     hce::awt<void> wait(hce::unique_lock<Lock>& lk) {
@@ -271,11 +277,14 @@ struct condition_variable : public printable {
 
     virtual ~condition_variable(){ }
 
+    static inline hce::string info_name() { 
+        return type::templatize<T>("hce::condition_variable"); 
+    }
+
+    inline hce::string name() const { return condition_variable::info_name(); }
+
     condition_variable& operator=(const condition_variable&) = delete;
     condition_variable& operator=(condition_variable&&) = delete;
-    
-    inline const char* nspace() const { return "hce"; }
-    inline const char* name() const { return "condition_variable"; }
     
     inline hce::awt<void> wait(hce::unique_lock<hce::mutex>& lk) {
         return cv_.wait(lk);

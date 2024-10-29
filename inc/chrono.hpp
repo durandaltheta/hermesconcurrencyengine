@@ -6,7 +6,7 @@
 #include <chrono>
 #include <sstream>
 
-#include "utility.hpp"
+#include "logging.hpp"
 
 namespace hce {
 namespace chrono {
@@ -17,8 +17,8 @@ namespace detail {
  duration to stream implementation is needed;
  */
 template <typename Rep, typename Period>
-inline std::string to_string(const std::chrono::duration<Rep, Period>& d) {
-    std::stringstream ss;
+inline hce::string to_string(const std::chrono::duration<Rep, Period>& d) {
+    hce::stringstream ss;
     ss << d.count() << " ";
 
     if (std::ratio_equal<Period, std::nano>::value) {
@@ -41,7 +41,7 @@ inline std::string to_string(const std::chrono::duration<Rep, Period>& d) {
 }
 
 template <typename Rep, typename Period>
-inline std::string to_string(const std::chrono::time_point<Rep, Period>& t) {
+inline hce::string to_string(const std::chrono::time_point<Rep, Period>& t) {
     return to_string(t.time_since_epoch());
 }
 
@@ -57,7 +57,7 @@ typedef std::chrono::nanoseconds nanoseconds;
 /// project wide duration type
 struct duration : 
         public std::chrono::steady_clock::duration,
-        public hce::printable
+        public printable
 {
     duration() : std::chrono::steady_clock::duration() { 
         HCE_TRACE_CONSTRUCTOR();
@@ -65,14 +65,14 @@ struct duration :
 
     template <typename A>
     inline duration(A&& a) : std::chrono::steady_clock::duration(a) { 
-        HCE_TRACE_CONSTRUCTOR(detail::to_string(a));
+        HCE_TRACE_CONSTRUCTOR(hce::chrono::detail::to_string(a));
     }
 
     ~duration() { HCE_TRACE_DESTRUCTOR(); }
 
-    inline std::string content() const { return detail::to_string(*this); }
-    inline const char* nspace() const { return "hce"; }
-    inline const char* name() const { return "duration"; }
+    static inline hce::string info_name() { return "hce::chrono::duration"; }
+    inline hce::string name() const { return duration::info_name(); }
+    inline hce::string content() const { return hce::chrono::detail::to_string(*this); }
 
     /**
      @brief convert to a duration to the approximate count of a specified DURATION unit type
@@ -96,20 +96,20 @@ struct duration :
 /// project wide time_point type
 struct time_point : 
         public std::chrono::steady_clock::time_point,
-        public hce::printable
+        public printable
 {
     time_point() { HCE_TRACE_CONSTRUCTOR(); }
 
     template <typename A>
     time_point(A&& a) : std::chrono::steady_clock::time_point(a) { 
-        HCE_TRACE_CONSTRUCTOR(detail::to_string(a));
+        HCE_TRACE_CONSTRUCTOR(hce::chrono::detail::to_string(a));
     }
 
     ~time_point() { HCE_TRACE_DESTRUCTOR(); }
 
-    inline std::string content() const { return detail::to_string(*this); }
-    inline const char* nspace() const { return "hce"; }
-    inline const char* name() const { return "time_point"; }
+    static inline hce::string info_name() { return "hce::chrono::time_point"; }
+    inline hce::string name() const { return time_point::info_name(); }
+    inline hce::string content() const { return hce::chrono::detail::to_string(*this); }
 
     /// trivial conversion to a duration
     inline operator duration() { return time_since_epoch(); }

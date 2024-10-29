@@ -1,0 +1,431 @@
+//SPDX-License-Identifier: MIT
+//Author: Blayne Dennis 
+#ifndef __HERMES_COROUTINE_ENGINE_list__
+#define __HERMES_COROUTINE_ENGINE_list__
+
+#include <sstream>
+#include <iterator>
+#include <tuple>
+
+#include "utility.hpp"
+#include "logging.hpp"
+#include "pool_allocator.hpp"
+
+namespace hce {
+
+/**
+ @brief a singly linked list
+
+ This object is optimized for the needs of this project without all the features
+ of a more broad-use list. 
+
+ This object is used in performance critical code of the coroutine scheduler, 
+ design choices and optimizations are made with that in mind.
+
+ Design Aims:
+ - singly linked (faster manipulation than doubly linked)
+ - constant time iteration
+ - constant time append
+ - constant time whole-list concatenation 
+ - consumption iteration (front() + pop()) is very efficient
+ - iterator support
+ - push on head or tail (LIFO or FIFO)
+ - size/length tracking
+ - potential allocation reuse
+ - lazy allocated value construction
+
+ Design Limitations:
+ - can only iterate from front to back (singly linked)
+ - can only read and pop from head (singly linked)
+ - iterator iteration is *very, very slighly* slower in order to support erasure
+ - no support for arbitrary insertion 
+
+ This is preferred by this project over `std::deque<T>` because it doesn't have 
+ fast concatenation which directly impacts the processing loop of 
+ hce::scheduler.
+
+ The allocator for this object is an `hce::pool_allocator`, limiting the 
+ synchronization cost of frequent allocations/deallocations. `block_limit` can 
+ be specified during construction to set the maximum count of elements the 
+ allocator can cache for reuse.
+ */
+template <typename T, typename Allocator = hce::pool_allocator<T>>
+struct list : public printable {
+    using value_type = T;
+
+    struct iterator : public std::forward_iterator_tag, public printable {
+        typedef T value_type; //< iterator templated value type
+
+        iterator() : prev_(nullptr), node_(nullptr) { } 
+        iterator(const iterator& rhs) : prev_(rhs.prev_), node_(rhs.node_) { } 
+
+        static inline hce::string info_name() { 
+            return hce::list<T>::info_name() + "::iterator"; 
+        }
+
+        inline hce::string name() const { return iterator::info_name(); }
+
+        inline hce::string content() const {
+            hce::stringstream ss;
+            ss << "prev:" << (void*)prev_ << ", node:" << (void*)node_;
+            return ss.str();
+        }
+
+        /// lvalue iterator assignment
+        inline const iterator& operator=(const iterator& rhs) const {
+            prev_ = rhs.prev_;
+            node_ = rhs.node_;
+            return *this;
+        }
+
+        /// lvalue iterator comparison
+        inline bool operator==(const iterator& rhs) const {
+            return node_ == rhs.node_;
+        }
+
+        /// rvalue iterator comparison
+        inline bool operator==(iterator&& rhs) const { return *this == rhs; }
+
+        /// lvalue iterator not comparison
+        inline bool operator!=(const iterator& rhs) const { return !(*this == rhs); }
+
+        /// rvalue iterator not comparison
+        inline bool operator!=(iterator&& rhs) const { return *this != rhs; }
+
+        /// retrieve reference to cached value T
+        inline T& operator*() const { return node_->value; }
+
+        /// retrieve pointer to cached value T
+        inline T* operator->() const { return &(node_->value); }
+
+        /// retrieve data from the channel iterator
+        inline const iterator& operator++() const {
+            prev_ = node_;
+            node_ = node_->next;
+            return *this;
+        }
+
+        /// retrieve data from the channel iterator
+        inline const iterator operator++(int) const {
+            prev_ = node_;
+            node_ = node_->next;
+            return *this;
+        }
+
+    private:
+        iterator(typename hce::list<T>::node* p,
+                 typename hce::list<T>::node* n) : 
+            prev_(p),
+            node_(n) 
+        { }
+
+        typename hce::list<T>::node* prev_;
+        typename hce::list<T>::node* node_;
+    };
+
+
+    list() { HCE_MIN_CONSTRUCTOR(); }
+
+    list(const Allocator& allocator) : 
+        allocator_(allocator) { 
+        HCE_MIN_CONSTRUCTOR(allocator); 
+    }
+
+    list(const list<T>& rhs) {
+        HCE_MIN_CONSTRUCTOR(rhs);
+        copy_(rhs); 
+    }
+
+    list(list<T>&& rhs) {
+        HCE_MIN_CONSTRUCTOR(rhs);
+        move_(std::move(rhs));
+    }
+
+    ~list() { 
+        HCE_MIN_DESTRUCTOR();
+        node* cur = head_;
+
+        // destruct and deallocate all nodes
+        while(cur) [[likely]] { 
+            node* old = cur;
+            cur = cur->next;
+            old->~node();
+            allocator_.deallocate(old, 1); 
+        } 
+    }
+
+    static inline hce::string info_name() { 
+        return type::templatize<T>("hce::list"); 
+    }
+
+    inline hce::string name() const { return list<T>::info_name(); }
+
+    inline hce::string content() const {
+        hce::stringstream ss;
+        ss << "size:" << size_ << ", " << allocator_;
+        return ss.str();
+    }
+
+    inline list<T>& operator=(const list<T>& rhs) { 
+        HCE_MIN_METHOD_ENTER("operator=", rhs);
+        copy_(rhs); 
+        return *this;
+    }
+
+    inline list<T>& operator=(list<T>&& rhs) {
+        HCE_MIN_METHOD_ENTER("operator=", rhs);
+        move_(std::move(rhs));
+        return *this;
+    }
+
+    /**
+     @return the current length of the list
+     */
+    inline size_t size() const { 
+        HCE_TRACE_METHOD_ENTER("size");
+        return size_; 
+    }
+
+    /**
+     @return true if empty, else false
+     */
+    inline bool empty() const { 
+        HCE_TRACE_METHOD_ENTER("empty");
+        return !size_; 
+    }
+
+    /**
+     @return a reference to the front of the list
+     */
+    inline T& front() { 
+        HCE_TRACE_METHOD_ENTER("front");
+        return head_->value; 
+    }
+
+    /**
+     @brief emplace an element on the back of the list 
+     */
+    template <typename... As>
+    inline void emplace_back(As&&... as) {
+        HCE_MIN_METHOD_ENTER("emplace_back");
+        node* next = allocator_.allocate(1);
+
+        // placement new construction
+        new(next) node(std::forward<As>(as)...);
+
+        if(size_) [[likely]] {
+            tail_->next = next;
+            tail_ = next;
+        } else [[unlikely]] {
+            head_ = next;
+            tail_ = next;
+        } 
+            
+        ++size_;
+    }
+
+    /**
+     @brief emplace an element on the front of the list 
+     */
+    template <typename... As>
+    inline void emplace_front(As&&... as) {
+        HCE_MIN_METHOD_ENTER("emplace_front");
+        node* next = allocator_.allocate(1);
+
+        // placement new construction
+        new(next) node(std::forward<As>(as)...);
+
+        if(size_) [[likely]] {
+            next->next = head_;
+            head_ = next;
+        } else [[unlikely]] {
+            head_ = next;
+            tail_ = next;
+        } 
+            
+        ++size_;
+    }
+    
+    /**
+     @brief lvalue push an element on the back of the list 
+     */
+    inline void push_back(const T& t) { 
+        HCE_MIN_METHOD_ENTER("push_back");
+        emplace_back(t); 
+    }
+    
+    /**
+     @brief rvalue push an element on the back of the list 
+     */
+    inline void push_back(T&& t) { 
+        HCE_MIN_METHOD_ENTER("push_back");
+        emplace_back(std::move(t)); 
+    }
+    
+    /**
+     @brief lvalue push an element on the front of the list 
+     */
+    inline void push_front(const T& t) { 
+        HCE_MIN_METHOD_ENTER("push_front");
+        emplace_front(t); 
+    }
+    
+    /**
+     @brief rvalue push an element on the front of the list 
+     */
+    inline void push_front(T&& t) { 
+        HCE_MIN_METHOD_ENTER("push_front");
+        emplace_front(std::move(t)); 
+    }
+
+    /**
+     @brief pop off the front of the list
+     */
+    inline void pop() {
+        HCE_MIN_METHOD_ENTER("pop");
+        node* old = head_;
+        head_ = head_->next;
+        old->~node();
+        allocator_.deallocate(old, 1);
+        --size_;
+    }
+
+    /**
+     @return an iterator to the head of the list
+     */
+    inline iterator begin() const { return { nullptr, head_ }; }
+
+    /**
+     @return an iterator past the end the list
+     */
+    inline iterator end() const { return { tail_, nullptr }; }
+    
+    /**
+     @brief iterate the list front to back and find the first `t == element`
+
+     The returned iterator will == end() if no matching t was found. 
+
+     @param t a comparison value
+     @return the iterator pointing to the found element, if any 
+     */
+    inline iterator find(const T& t) {
+        HCE_MIN_METHOD_ENTER("find");
+        auto prev = nullptr;
+        auto cur = head_;
+
+        while(cur && cur->value != t) {
+            prev = cur;
+            cur = cur->next;
+        }
+
+        return { prev, cur };
+    }
+
+    /**
+     @brief erase the element pointed to by it
+     @param it the iterator to element to erase 
+     */
+    inline void erase(iterator it) {
+        HCE_MIN_METHOD_ENTER("erase", it);
+        it.prev_->next = it.node_->next;
+        it.node_->~node();
+        allocator_.deallocate(it.node_, 1); 
+    }
+
+    /**
+     @brief insert an element after the element pointed to by it
+     @param it the iterator to element to insert after
+     @param as constructor arguments for type T that will be inserted
+     */
+    template <typename... As>
+    inline void insert(iterator it, As&&... as) {
+        HCE_MIN_METHOD_ENTER("insert", it);
+
+        node* next = allocator_.allocate(1);
+
+        // placement new construction
+        new(next) node(std::forward<As>(as)...);
+
+        if(size_) [[likely]] {
+            next->next = it.node_->next;
+            it.node_->next = next;
+        } else [[unlikely]] {
+            head_ = next;
+            tail_ = next;
+        } 
+            
+        ++size_;
+    }
+
+    /**
+     @brief steal the elements of the argument list and concatenate them to the end 
+
+     This is not tied to the RAII lifecycle of either object. The argument list 
+     will still be valid after this call.
+
+     @param rhs list to concatenate
+     */
+    inline void concatenate(list<T>& rhs) {
+        HCE_MIN_METHOD_ENTER("concatenate");
+        if(rhs.size_) {
+            if(size_) { // our head_ & tail_ are initialized
+                tail_->next = rhs.head_;
+                tail_ = rhs.tail_;
+                size_ += rhs.size_;
+                rhs.head_ = nullptr;
+                rhs.tail_ = nullptr;
+                rhs.size_ = 0;
+            } else { // lhs is empty, swap values
+                std::swap(head_, rhs.head_);
+                std::swap(tail_, rhs.tail_);
+                std::swap(size_, rhs.size_);
+                // do NOT swap allocator
+            }
+        } // else nothing to do
+    }
+
+private:
+    // element in the list
+    struct node : public printable {
+        template <typename... As>
+        node(As&&... as) : value(std::forward<As>(as)...), next(nullptr) { }
+
+        static inline hce::string info_name() { 
+            return hce::list<T>::info_name() + "::node"; 
+        }
+
+        inline hce::string name() const { return node::info_name(); }
+
+        T value;
+        node* next;
+    };
+
+    // deep copy the argument list's elements
+    inline void copy_(const list<T>& rhs) {
+        node* rhs_head = rhs.head_;
+
+        while(rhs_head) [[likely]] {
+            push_back(rhs_head->value); // deep copy the value
+            rhs_head = rhs_head->next;
+        }
+
+        // ignore the allocator
+    }
+
+    // move swap members
+    inline void move_(list<T>&& rhs) {
+        std::swap(head_, rhs.head_);
+        std::swap(tail_, rhs.tail_);
+        std::swap(size_, rhs.size_);
+        std::swap(allocator_, rhs.allocator_);
+    }
+
+    node* head_ = nullptr; // head of list
+    node* tail_ = nullptr; // tail of list
+    size_t size_ = 0; // length of list 
+    typename Allocator::rebind<node>::other allocator_; // memory allocator
+};
+
+}
+
+#endif

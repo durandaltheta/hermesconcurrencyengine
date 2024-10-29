@@ -29,6 +29,31 @@ inline hce::co<T*> co_ptr(T* t) {
     co_return t;
 }
 
+template <typename T>
+inline void co_return_value_T() {
+    {
+        T t = test::init<T>(3);
+        hce::co<T> co = test::coroutine::co(&t);
+        EXPECT_TRUE(co);
+        EXPECT_FALSE(co.done());
+        co.resume();
+        EXPECT_TRUE(co.done());
+        EXPECT_EQ((T)test::init<T>(3), *(hce::get_promise(co).result));
+        EXPECT_NE(&t, hce::get_promise(co).result.get());
+    }
+
+    // type erased
+    {
+        T t = test::init<T>(3);
+        hce::coroutine co = test::coroutine::co(&t);
+        EXPECT_TRUE(co);
+        EXPECT_FALSE(co.done());
+        co.resume();
+        EXPECT_TRUE(co.done());
+        EXPECT_EQ((T)test::init<T>(3), *(static_cast<typename hce::co<T>::promise_type&>(hce::get_promise(co)).result));
+        EXPECT_NE(&t, static_cast<typename hce::co<T>::promise_type&>(hce::get_promise(co)).result.get());
+    }
+}
 }
 }
 
@@ -97,80 +122,34 @@ TEST(coroutine, swap) {
 }
 
 TEST(coroutine, co_return_void) {
-    hce::co<void> co = test::coroutine::co_void();
-    EXPECT_TRUE(co);
-    EXPECT_FALSE(co.done());
-    co.resume();
-    EXPECT_TRUE(co.done());
+    {
+        hce::co<void> co = test::coroutine::co_void();
+        EXPECT_TRUE(co);
+        EXPECT_FALSE(co.done());
+        co.resume();
+        EXPECT_TRUE(co.done());
+    }
+
+    // type erased
+    {
+        hce::coroutine co = test::coroutine::co_void();
+        EXPECT_TRUE(co);
+        EXPECT_FALSE(co.done());
+        co.resume();
+        EXPECT_TRUE(co.done());
+    }
 }
 
 TEST(coroutine, co_return_value) {
-    {
-        int i = 3;
-        hce::co<int> co = test::coroutine::co(&i);
-        EXPECT_TRUE(co);
-        EXPECT_FALSE(co.done());
-        co.resume();
-        EXPECT_TRUE(co.done());
-        EXPECT_EQ(3, *(co.promise().result));
-        EXPECT_NE(&i, co.promise().result.get());
-    }
-
-    {
-        std::string s = "3";
-        hce::co<std::string> co = test::coroutine::co(&s);
-        EXPECT_TRUE(co);
-        EXPECT_FALSE(co.done());
-        co.resume();
-        EXPECT_TRUE(co.done());
-        EXPECT_EQ("3", *(co.promise().result));
-        EXPECT_NE(&s, co.promise().result.get());
-    }
-}
-
-TEST(coroutine, co_return_value_erased) {
-    {
-        int i = 3;
-        hce::coroutine co = test::coroutine::co(&i);
-        EXPECT_TRUE(co);
-        EXPECT_FALSE(co.done());
-        co.resume();
-        EXPECT_TRUE(co.done());
-        EXPECT_EQ(3, *(co.to_promise<hce::co<int>>().result));
-        EXPECT_NE(&i, co.to_promise<hce::co<int>>().result.get());
-    }
-    {
-        int i = 3;
-        hce::coroutine co = test::coroutine::co_ptr(&i);
-        EXPECT_TRUE(co);
-        EXPECT_FALSE(co.done());
-        co.resume();
-        EXPECT_TRUE(co.done());
-        EXPECT_EQ(3, **(co.to_promise<hce::co<int*>>().result));
-        EXPECT_EQ(&i, *(co.to_promise<hce::co<int*>>().result));
-    }
-
-    {
-        std::string s = "3";
-        hce::coroutine co = test::coroutine::co(&s);
-        EXPECT_TRUE(co);
-        EXPECT_FALSE(co.done());
-        co.resume();
-        EXPECT_TRUE(co.done());
-        EXPECT_EQ("3", *(co.to_promise<hce::co<std::string>>().result));
-        EXPECT_NE(&s, co.to_promise<hce::co<std::string>>().result.get());
-    }
-
-    {
-        std::string s = "3";
-        hce::coroutine co = test::coroutine::co_ptr(&s);
-        EXPECT_TRUE(co);
-        EXPECT_FALSE(co.done());
-        co.resume();
-        EXPECT_TRUE(co.done());
-        EXPECT_EQ("3", **(co.to_promise<hce::co<std::string*>>().result));
-        EXPECT_EQ(&s, *(co.to_promise<hce::co<std::string*>>().result));
-    }
+    test::coroutine::co_return_value_T<int>();
+    test::coroutine::co_return_value_T<unsigned int>();
+    test::coroutine::co_return_value_T<size_t>();
+    test::coroutine::co_return_value_T<float>();
+    test::coroutine::co_return_value_T<double>();
+    test::coroutine::co_return_value_T<char>();
+    test::coroutine::co_return_value_T<void*>();
+    test::coroutine::co_return_value_T<std::string>();
+    test::coroutine::co_return_value_T<test::CustomObject>();
 }
 
 TEST(coroutine, co_await_void) {
@@ -466,23 +445,23 @@ void co_await_yield_T(const int init) {
     // yield void
     {
         const int value = init + 1;
-        T i = test::init<T>(init);
+        T t = test::init<T>(init);
         hce::co<void> co(
-            test::coroutine::co_yield_void_and_return_void(i,(T)test::init<T>(value)));
+            test::coroutine::co_yield_void_and_return_void(t,(T)test::init<T>(value)));
 
         // expect unrun state
         EXPECT_FALSE(co.done());
-        EXPECT_EQ((T)test::init<T>(init),i);
+        EXPECT_EQ((T)test::init<T>(init),t);
         co.resume();
 
         // expect yielded state
         EXPECT_FALSE(co.done());
-        EXPECT_EQ((T)test::init<T>(init),i);
+        EXPECT_EQ((T)test::init<T>(init),t);
         co.resume();
 
         // expect completed state
         EXPECT_TRUE(co.done());
-        EXPECT_EQ((T)test::init<T>(value),i);
+        EXPECT_EQ((T)test::init<T>(value),t);
     }
 
     // yield T

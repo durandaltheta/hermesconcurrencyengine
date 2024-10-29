@@ -21,10 +21,12 @@ struct queue {
     template <typename TSHADOW>
     void push(TSHADOW&& t) {
         HCE_TRACE_LOG("test::queue<T>::push()+");
+
         {
             std::lock_guard<hce::spinlock> lk(slk);
             vals.push_back(std::forward<TSHADOW>(t));
         }
+
         cv.notify_one();
         HCE_TRACE_LOG("test::queue<T>::push()-");
     }

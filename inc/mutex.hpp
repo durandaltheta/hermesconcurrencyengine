@@ -5,9 +5,10 @@
 
 // c++
 #include <mutex>
+#include <deque>
 
 // local
-#include "utility.hpp"
+#include "logging.hpp"
 #include "atomic.hpp"
 #include "coroutine.hpp"
 #include "scheduler.hpp"
@@ -25,8 +26,8 @@ namespace hce {
 struct mutex : public printable {
     struct already_unlocked_exception : public std::exception {
         already_unlocked_exception(mutex* m) :
-            estr([&]() -> std::string {
-                std::stringstream ss;
+            estr([&]() -> hce::string {
+                hce::stringstream ss;
                 ss << "cannot unlock already unlocked"
                    << m->to_string()
                    << "]";
@@ -40,7 +41,7 @@ struct mutex : public printable {
         }
 
     private:
-        const std::string estr;
+        const hce::string estr;
     };
 
     mutex(){ HCE_MIN_CONSTRUCTOR(); }
@@ -48,17 +49,17 @@ struct mutex : public printable {
     mutex(mutex&&) = delete;
 
     virtual ~mutex(){ HCE_MIN_DESTRUCTOR(); }
+
+    static inline hce::string info_name() { return "hce::mutex"; }
+    inline hce::string name() const { return mutex::info_name(); }
     
     mutex& operator=(const mutex&) = delete;
     mutex& operator=(mutex&&) = delete;
 
-    inline const char* nspace() const { return "hce"; }
-    inline const char* name() const { return "mutex"; }
-
     /// awaitably lock the mutex 
     inline awt<void> lock() {
         HCE_MIN_METHOD_ENTER("lock");
-        return awt<void>::make(new lock_awt>(this));
+        return awt<void>::make(new hce::mutex::acquire(this));
     }
    
     /// return true if the mutex is successfully locked, else false
@@ -66,9 +67,10 @@ struct mutex : public printable {
         HCE_MIN_METHOD_ENTER("try_lock");
 
         std::unique_lock<mce::spinlock> lk(lk_);
-        if(acquired_) {
+
+        if(acquired_) [[unlikely]] {
             return false;
-        } else { 
+        } else [[likely]] { 
             acquired_ = true; 
             return true;
         }
@@ -79,14 +81,15 @@ struct mutex : public printable {
         HCE_MIN_METHOD_ENTER("unlock");
 
         std::unique_lock<spinlock> lk(lk_);
-        if(acquired_) {
+
+        if(acquired_) [[likely]] {
             acquired_ = false;
+
             if(blocked_queue_.size()) {
-                blocked_queue_.front()->resume((void*)1);
+                blocked_queue_.front()->resume(nullptr);
                 blocked_queue_.pop_front();
             }
-        }
-        else{ throw already_unlocked_exception(this); }
+        } else [[unlikely]] { throw already_unlocked_exception(this); }
     }
 
 private:
@@ -106,7 +109,10 @@ private:
             parent_(parent) 
         { }
 
+        // returns true if acquired, else we need to suspend
         inline bool on_ready() { return parent_->lock_(this); }
+
+        // only returns when acquired
         inline void on_resume(void* m) { }
 
     private:
@@ -114,10 +120,10 @@ private:
     };
 
     inline bool lock_(acquire* lw) {
-        if(acquired_) {
+        if(acquired_) [[unlikely]] {
             blocked_queue_.push_back(lw);
             return false;
-        } else { 
+        } else [[likely]] { 
             acquired_ = true; 
             return true;
         }
@@ -125,7 +131,7 @@ private:
 
     hce::spinlock slk_;
     bool acquired_;
-    std::deque<acquire*> blocked_queue_;
+    std:deque<acquire*> blocked_queue_;
     friend struct acquire;
 };
 
@@ -173,6 +179,12 @@ struct unique_lock : public printable {
         if(acquired_) { unlock(); } 
     }
 
+    static inline hce::string info_name() { 
+        return type::templatize<Lock>("hce::mutex"); 
+    }
+
+    inline hce::string name() const { return unique_lock<Lock>::info_name(); }
+
     unique_lock<Lock>& operator=(const unique_lock<Lock>& rhs) = delete;
 
     unique_lock<Lock>& operator=(unique_lock<Lock>&& rhs) {
@@ -205,13 +217,10 @@ struct unique_lock : public printable {
     static inline awt<hce::unique_lock<Lock>> make(Lock& mtx) {
         return hce::join(acquire::op(&mtx)); 
     }
-    
-    inline const char* nspace() const { return "hce"; }
-    inline const char* name() const { return "unique_lock"; }
 
     /// return our stringified mutex address
-    inline std::string content() const { 
-        return std::string("lock@") + 
+    inline hce::string content() const { 
+        return hce::string("lock@") + 
                std::to_string((void*)lk_) +
                ", acquired:" +
                std::to_string(acquired_);
