@@ -5,12 +5,14 @@
 
 #include <atomic>
 
-#include "utility.hpp"
+#include "logging.hpp"
 
 namespace hce {
 
 /**
 @brief core mechanism for atomic synchronization. 
+
+Implements atomic lock API without operating system blocking.
 */
 struct spinlock : public printable {
     spinlock() { 
@@ -18,7 +20,10 @@ struct spinlock : public printable {
         lock_.clear(); 
     }
 
-    virtual ~spinlock() { HCE_MIN_DESTRUCTOR(); }
+    ~spinlock() { HCE_MIN_DESTRUCTOR(); }
+
+    static inline std::string info_name() { return "hce::spinlock"; }
+    inline std::string name() const { return spinlock::info_name(); }
 
     inline void lock() {
         HCE_MIN_METHOD_ENTER("lock");
@@ -35,22 +40,22 @@ struct spinlock : public printable {
         lock_.clear(std::memory_order_release); 
     }
 
-    inline const char* nspace() const { return "hce"; }
-    inline const char* name() const { return "spinlock"; }
-
 private:
     std::atomic_flag lock_;
 };
 
 /**
- @brief lockless lockable implementation
+ @brief lockless lockable implementation 
+
+ For use when an object implement lock API is required but no atomic 
+ locking is actually desired.
  */
 struct lockfree : public printable {
     lockfree() { HCE_MIN_CONSTRUCTOR(); }
-    virtual ~lockfree() { HCE_MIN_DESTRUCTOR(); }
+    ~lockfree() { HCE_MIN_DESTRUCTOR(); }
 
-    inline const char* nspace() const { return "hce"; }
-    inline const char* name() const { return "lockfree"; }
+    static inline std::string info_name() { return "hce::lockfree"; }
+    inline std::string name() const { return lockfree::info_name(); }
 
     inline void lock() { HCE_MIN_METHOD_ENTER("lock"); }
 

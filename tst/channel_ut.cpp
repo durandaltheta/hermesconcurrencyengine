@@ -30,7 +30,7 @@ void context_construct_capacity_T() {
         ch.construct();
         EXPECT_EQ(ch.type_info(), typeid(hce::unbuffered<T,hce::spinlock>));
         EXPECT_NE(ctx, ch.context());
-        EXPECT_EQ(0,ch.capacity());
+        EXPECT_EQ(0,ch.size());
 
         auto ctx2 = ch.context();
         ch.template construct<hce::spinlock>();
@@ -48,7 +48,7 @@ void context_construct_capacity_T() {
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::unbuffered<T,hce::lockfree>));
         EXPECT_EQ(ctx, ch.context());
-        EXPECT_EQ(0,ch.capacity());
+        EXPECT_EQ(0,ch.size());
 
         ch.template construct<hce::lockfree>();
         EXPECT_EQ(ch.type_info(), typeid(hce::unbuffered<T,hce::lockfree>));
@@ -64,7 +64,7 @@ void context_construct_capacity_T() {
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::unbuffered<T,std::mutex>));
         EXPECT_EQ(ctx, ch.context());
-        EXPECT_EQ(0,ch.capacity());
+        EXPECT_EQ(0,ch.size());
 
         ch.template construct<std::mutex>();
         EXPECT_EQ(ch.type_info(), typeid(hce::unbuffered<T,std::mutex>));
@@ -84,19 +84,19 @@ void context_construct_capacity_T() {
         ch.construct(1);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::spinlock>));
         EXPECT_NE(ctx, ch.context());
-        EXPECT_EQ(1,ch.capacity());
+        EXPECT_EQ(1,ch.size());
 
         ch.construct(0);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::spinlock>));
         EXPECT_NE(ctx, ch.context());
-        EXPECT_EQ(1,ch.capacity());
+        EXPECT_EQ(1,ch.size());
 
         auto ctx2 = ch.context();
         ch.template construct<hce::spinlock>(1337);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::spinlock>));
         EXPECT_NE(ctx, ch.context());
         EXPECT_NE(ctx2, ch.context());
-        EXPECT_EQ(1337,ch.capacity());
+        EXPECT_EQ(1337,ch.size());
     }
 
     // buffered lockfree size 1
@@ -112,17 +112,17 @@ void context_construct_capacity_T() {
         ch.template construct<hce::lockfree>(1);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::lockfree>));
         EXPECT_NE(ctx, ch.context());
-        EXPECT_EQ(1,ch.capacity());
+        EXPECT_EQ(1,ch.size());
 
         ch.template construct<hce::lockfree>(0);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::lockfree>));
         EXPECT_NE(ctx, ch.context());
-        EXPECT_EQ(1,ch.capacity());
+        EXPECT_EQ(1,ch.size());
 
         ch.template construct<hce::lockfree>(1337);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::lockfree>));
         EXPECT_NE(ctx, ch.context());
-        EXPECT_EQ(1337,ch.capacity());
+        EXPECT_EQ(1337,ch.size());
     }
 
     // buffered std::mutex size 1
@@ -138,17 +138,17 @@ void context_construct_capacity_T() {
         ch.template construct<std::mutex>(1);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,std::mutex>));
         EXPECT_NE(ctx, ch.context());
-        EXPECT_EQ(1,ch.capacity());
+        EXPECT_EQ(1,ch.size());
 
         ch.template construct<std::mutex>(0);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,std::mutex>));
         EXPECT_NE(ctx, ch.context());
-        EXPECT_EQ(1,ch.capacity());
+        EXPECT_EQ(1,ch.size());
 
         ch.template construct<std::mutex>(1337);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,std::mutex>));
         EXPECT_NE(ctx, ch.context());
-        EXPECT_EQ(1337,ch.capacity());
+        EXPECT_EQ(1337,ch.size());
     }
 }
 
@@ -183,7 +183,7 @@ void make_capacity_T() {
         ch = hce::channel<T>::template make<hce::spinlock>();
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::unbuffered<T,hce::spinlock>));
-        EXPECT_EQ(ch.capacity(),0);
+        EXPECT_EQ(ch.size(),0);
     }
 
     // unbuffered lockfree
@@ -202,7 +202,7 @@ void make_capacity_T() {
         ch = hce::channel<T>::template make<std::mutex>();
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::unbuffered<T,std::mutex>));
-        EXPECT_EQ(ch.capacity(),0);
+        EXPECT_EQ(ch.size(),0);
     }
 
     // buffered spinlock size 1
@@ -212,17 +212,17 @@ void make_capacity_T() {
         ch = hce::channel<T>::template make<hce::spinlock>(1);
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::spinlock>));
-        EXPECT_EQ(ch.capacity(),1);
+        EXPECT_EQ(ch.size(),1);
 
         ch = hce::channel<T>::template make<hce::spinlock>(0);
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::spinlock>));
-        EXPECT_EQ(ch.capacity(),1);
+        EXPECT_EQ(ch.size(),1);
 
         ch = hce::channel<T>::template make<hce::spinlock>(1337);
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::spinlock>));
-        EXPECT_EQ(ch.capacity(),1337);
+        EXPECT_EQ(ch.size(),1337);
     }
 
     // buffered lockfree
@@ -232,17 +232,17 @@ void make_capacity_T() {
         ch = hce::channel<T>::template make<hce::lockfree>(1);
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::lockfree>));
-        EXPECT_EQ(ch.capacity(),1);
+        EXPECT_EQ(ch.size(),1);
 
         ch = hce::channel<T>::template make<hce::lockfree>(0);
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::lockfree>));
-        EXPECT_EQ(ch.capacity(),1);
+        EXPECT_EQ(ch.size(),1);
 
         ch = hce::channel<T>::template make<hce::lockfree>(1337);
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::lockfree>));
-        EXPECT_EQ(ch.capacity(),1337);
+        EXPECT_EQ(ch.size(),1337);
     }
 
     // buffered std::mutex
@@ -252,17 +252,17 @@ void make_capacity_T() {
         ch = hce::channel<T>::template make<std::mutex>(1);
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,std::mutex>));
-        EXPECT_EQ(ch.capacity(),1);
+        EXPECT_EQ(ch.size(),1);
 
         ch = hce::channel<T>::template make<std::mutex>(0);
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,std::mutex>));
-        EXPECT_EQ(ch.capacity(),1);
+        EXPECT_EQ(ch.size(),1);
 
         ch = hce::channel<T>::template make<std::mutex>(1337);
         EXPECT_TRUE(ch);
         EXPECT_EQ(ch.type_info(), typeid(hce::buffered<T,std::mutex>));
-        EXPECT_EQ(ch.capacity(),1337);
+        EXPECT_EQ(ch.size(),1337);
     }
 }
 
@@ -343,8 +343,8 @@ size_t send_recv_close_T(const size_t count) {
     {
         auto test = [&](hce::channel<T> ch) {
             test::queue<T> q;
-            std::unique_ptr<hce::scheduler::lifecycle> lf;
-            auto inst = hce::scheduler::make(lf);
+            auto inst = hce::scheduler::make();
+            auto lf = std::move(inst->lifecycle());
             std::shared_ptr<hce::scheduler> sch = inst->scheduler();
             std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
             sch->schedule(test::channel::co_store_recv_till_close_return_void(ch,q));
@@ -377,8 +377,8 @@ size_t send_recv_close_T(const size_t count) {
     // coroutine to thread
     {
         auto test = [&](hce::channel<T> ch){
-            std::unique_ptr<hce::scheduler::lifecycle> lf;
-            auto inst = hce::scheduler::make(lf);
+            auto inst = hce::scheduler::make();
+            auto lf = std::move(inst->lifecycle());
             std::shared_ptr<hce::scheduler> sch = inst->scheduler();
             std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
             sch->schedule(test::channel::co_send_count_and_close_return_void(ch,count));
@@ -409,8 +409,8 @@ size_t send_recv_close_T(const size_t count) {
     {
         auto test = [&](hce::channel<T> ch){
             test::queue<T> q;
-            std::unique_ptr<hce::scheduler::lifecycle> lf;
-            auto inst = hce::scheduler::make(lf);
+            auto inst = hce::scheduler::make();
+            auto lf = std::move(inst->lifecycle());
             std::shared_ptr<hce::scheduler> sch = inst->scheduler();
             std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
             sch->schedule(test::channel::co_send_count_and_close_return_void(ch,count));
@@ -533,8 +533,8 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
     {
         auto test = [&](hce::channel<T> ch) {
             test::queue<T> q;
-            std::unique_ptr<hce::scheduler::lifecycle> lf;
-            auto inst = hce::scheduler::make(lf);
+            auto inst = hce::scheduler::make();
+            auto lf = std::move(inst->lifecycle());
             std::shared_ptr<hce::scheduler> sch = inst->scheduler();
             std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
             sch->schedule(test::channel::co_store_recv_interrupt_with_close_return_void(ch,q));
@@ -589,8 +589,8 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
     // coroutine to thread
     {
         auto test = [&](hce::channel<T> ch){
-            std::unique_ptr<hce::scheduler::lifecycle> lf;
-            auto inst = hce::scheduler::make(lf);
+            auto inst = hce::scheduler::make();
+            auto lf = std::move(inst->lifecycle());
             std::shared_ptr<hce::scheduler> sch = inst->scheduler();
             std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
             sch->schedule(test::channel::co_send_count_interrupt_with_close_return_void(ch));
@@ -644,8 +644,8 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
     {
         auto test = [&](hce::channel<T> ch){
             test::queue<T> q;
-            std::unique_ptr<hce::scheduler::lifecycle> lf;
-            auto inst = hce::scheduler::make(lf);
+            auto inst = hce::scheduler::make();
+            auto lf = std::move(inst->lifecycle());
             std::shared_ptr<hce::scheduler> sch = inst->scheduler();
             std::thread thd([](std::unique_ptr<hce::scheduler::install> i){ }, std::move(inst));
             sch->schedule(test::channel::co_store_recv_interrupt_with_close_return_void(ch,q));
