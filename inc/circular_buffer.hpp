@@ -3,140 +3,196 @@
 #ifndef __HERMES_COROUTINE_ENGINE_CIRCULAR_BUFFER__
 #define __HERMES_COROUTINE_ENGINE_CIRCULAR_BUFFER__
 
-// c++
-#include <vector> 
-#include <exception> 
+#include <cstdlib>
+#include <algorithm>
+#include <sstream>
 
 // local
-#include "utility.hpp"
+#include "logging.hpp"
+#include "memory.hpp"
 
 namespace hce {
 
 /**
- @brief a simple circular_buffer implementation
+ @brief a simple, highly efficient circular_buffer implementation
+
+ This object is to serve the needs of this project and is not intended to 
+ implement all the features of a more broad use container. It is designed for 
+ speed and leaves error detection to the caller.
+
+ Design Aims:
+ - one time allocation
+ - fast iteration (non-reentrant)
+ - lazy T construction/destruction
+ - 0 size buffer possible
+
+ Design Limitations:
+ - only supports FIFO push/front/pop 
+ - no deep copy support
+ - no iterators/reentrant iteration
+ - no validity/error checking on emplace/push/pop
+ - not directly resizable 
+
+ "Resize" of a circular_buffer<T> is indirectly possible. Algorithm:
+ - construct a local circular_buffer<T> of the same or greater size 
+ - copy/move all elements from one buffer to the other. 
+ - move swap the buffers
+
+ IE:
+ ```
+ // new buffer has an equal or larger size than the old buffer for amortized growth
+ hce::circular_buffer<T> new_buffer(old_buffer.size() * 2);
+
+ while(old_buffer.used()) {
+    // copy may be faster than swap for small types of T
+    new_buffer.emplace(std::move(old_buffer.front()));
+    old_buffer.pop();
+ }
+
+ // swap the buffers
+ old_buffer = std::move(new_buffer);
+ ```
  */
 template <typename T>
 struct circular_buffer : public printable {
-    struct push_on_full : public std::exception {
-        const char* what() const noexcept { 
-            const char* s = "cannot call push() when the buffer is full";
-            HCE_ERROR_LOG("%s",s);
-            return s; 
-        }
-    };
+    using value_type = T;
 
-    struct front_on_empty : public std::exception {
-        const char* what() const noexcept { 
-            const char* s = "cannot call front() when the buffer is empty"; 
-            HCE_ERROR_LOG("%s",s);
-            return s;
-        }
-    };
-
-    struct pop_on_empty : public std::exception {
-        const char* what() const noexcept { 
-            const char* s = "cannot call pop() when the buffer is empty"; 
-            HCE_ERROR_LOG("%s",s);
-            return s;
-        }
-    };
-
-    circular_buffer(size_t sz = 1) : 
-        buffer_(sz ? sz : 1), // enforce a minimum buffer size of 1
-        size_(0),
-        back_idx_(0),
-        front_idx_(0)
+    constexpr circular_buffer(size_t sz) noexcept :
+        size_(sz),
+        buffer_(size_ ? hce::allocate<T>(size_) : nullptr)
     { 
         HCE_MIN_CONSTRUCTOR();
     }
 
-    circular_buffer(const circular_buffer<T>&) = default;
-    circular_buffer(circular_buffer<T>&&) = default;
+    circular_buffer(const circular_buffer<T>& rhs) = delete;
 
-    ~circular_buffer() { HCE_MIN_DESTRUCTOR(); }
-    
-    circular_buffer& operator=(const circular_buffer<T>&) = default;
-    circular_buffer& operator=(circular_buffer<T>&&) = default;
-
-    inline const char* nspace() const { return "hce"; }
-    inline const char* name() const { return "circular_buffer"; }
-
-    /// return the maximum size of the buffer 
-    inline size_t capacity() const { 
-        HCE_MIN_METHOD_ENTER("capacity");
-        return buffer_.size(); 
+    circular_buffer(circular_buffer<T>&& rhs) : size_(0), buffer_(nullptr) {
+        HCE_MIN_CONSTRUCTOR(rhs.to_string() + "&&");
+        swap_(std::move(rhs));
     }
 
-    /// return the current size of the buffer
+    ~circular_buffer() { 
+        HCE_MIN_DESTRUCTOR(); 
+
+        if(buffer_) [[likely]] {
+            // destruct memory
+            while(used()) [[likely]] { pop(); }
+
+            // free buffer
+            hce::deallocate<T>(buffer_, size_);
+        }
+    }
+   
+    circular_buffer<T>& operator=(const circular_buffer<T>& rhs) = delete;
+
+    inline circular_buffer<T>& operator=(circular_buffer<T>&& rhs) {
+        HCE_MIN_METHOD_ENTER("operator=", rhs.to_string() + "&&");
+        swap_(std::move(rhs));
+        return *this;
+    }
+
+    static inline hce::string info_name() { 
+        return type::templatize<T>("hce::circular_buffer"); 
+    }
+
+    inline hce::string name() const { return circular_buffer<T>::info_name(); }
+
+    inline hce::string content() const {
+        hce::stringstream ss;
+        ss << "size: " << size_ << ", used: " << used_;
+        return ss.str();
+    }
+
+    /// return the maximum size of the buffer 
     inline size_t size() const { 
-        HCE_MIN_METHOD_ENTER("size");
+        HCE_TRACE_METHOD_ENTER("size");
         return size_; 
+    }
+
+    /// return the count of used elements of the buffer
+    inline size_t used() const { 
+        HCE_TRACE_METHOD_ENTER("used");
+        return used_; 
     }
 
     /// return the available slots in the buffer
     inline size_t remaining() const { 
-        HCE_MIN_METHOD_ENTER("remaining");
-        return capacity() - size(); 
+        HCE_TRACE_METHOD_ENTER("remaining");
+        return size_ - used_; 
     }
 
     /// return true if the buffer is empty, else false
     inline bool empty() const { 
-        HCE_MIN_METHOD_ENTER("empty");
-        return 0 == size(); 
+        HCE_TRACE_METHOD_ENTER("empty");
+        return 0 == used_; 
     }
     
     /// return true if the buffer is full, else false
     inline bool full() const { 
-        HCE_MIN_METHOD_ENTER("full");
-        return capacity() == size(); 
+        HCE_TRACE_METHOD_ENTER("full");
+        return size_ == used_; 
     }
 
     /// return a reference to the element at the front of the buffer
     inline T& front() { 
-        HCE_MIN_METHOD_ENTER("front");
-        if(empty()) { throw front_on_empty(); }
-        return buffer_[front_idx_]; 
+        HCE_TRACE_METHOD_ENTER("front");
+        return *(at_(front_idx_)); 
+    }
+
+    /**
+     @brief emplace a new T 
+     @param as... arguments for T constructor
+     */
+    template <typename... As>
+    inline void emplace(As&&... as) {
+        HCE_TRACE_METHOD_ENTER("emplace");
+
+        // placement new construction
+        new(at_(back_idx_)) T(std::forward<As>(as)...); 
+        back_idx_ = (back_idx_ + 1) % size_;
+        ++used_;
     }
 
     /// lvalue push an element on the back of the buffer
     inline void push(const T& t) {
-        HCE_MIN_METHOD_ENTER("push");
-        if(!full()) {
-            buffer_[back_idx_] = t;
-            increment(back_idx_);
-            ++size_;
-        } else { throw push_on_full(); }
+        HCE_TRACE_METHOD_ENTER("push");
+        emplace(t);
     }
 
     /// rvalue push an element on the back of the buffer
     inline void push(T&& t) {
-        HCE_MIN_METHOD_ENTER("push");
-        if(!full()) {
-            buffer_[back_idx_] = std::move(t);
-            increment(back_idx_);
-            ++size_;
-        } else { throw push_on_full(); }
+        HCE_TRACE_METHOD_ENTER("push");
+        emplace(std::move(t));
     }
 
     /// pop the front element off the buffer
     inline void pop() {
-        HCE_MIN_METHOD_ENTER("pop");
-        if(!empty()) {
-            increment(front_idx_);
-            --size_;
-        } else { throw pop_on_empty(); }
+        HCE_TRACE_METHOD_ENTER("pop");
+
+        // destruct the memory
+        at_(front_idx_)->~T(); 
+        front_idx_ = (front_idx_ + 1) % size_;
+        --used_;
     }
 
 private:
-    inline void increment(size_t& idx) { 
-        size_t test_idx = idx + 1;
-        idx = test_idx < capacity() ? test_idx : 0; 
+    // swap members
+    inline void swap_(circular_buffer<T>&& rhs) {
+        std::swap(size_, rhs.size_);
+        std::swap(used_, rhs.used_);
+        std::swap(front_idx_, rhs.front_idx_);
+        std::swap(back_idx_, rhs.back_idx_);
+        std::swap(buffer_, rhs.buffer_);
     }
 
-    std::vector<T> buffer_; // the buffer
-    size_t size_; // count of used buffer indexes
-    size_t back_idx_; // index of the back of the buffer
-    size_t front_idx_; // index of the front of the buffer
+    // return the pointer to T at a given index
+    inline T* at_(size_t idx) const { return static_cast<T*>(buffer_) + idx; }
+
+    size_t size_; // buffer size
+    size_t used_ = 0; // count of used buffer indices
+    size_t back_idx_ = 0; // index of the back of the queue
+    size_t front_idx_ = 0; // index of the front of the queue
+    void* buffer_; // allocated contiguous buffer
 };
 
 }

@@ -90,8 +90,8 @@ void concurrent_simple_communication_op_hce_spinlock(
 
     for(std::uint64_t c=0; c<repeat; ++c) {
         hce::channel<int> ch0, ch1;
-        ch0.construct();
-        ch1.construct();
+        ch0.construct(0);
+        ch1.construct(0);
         hce::schedule(ops::t0(ch0,ch1,recv_total,done_ch));
     }
 
@@ -141,8 +141,8 @@ void concurrent_simple_communication_op_hce_lockfree(
 
     for(std::uint64_t c=0; c<repeat; ++c) {
         hce::channel<int> ch0, ch1;
-        ch0.construct<hce::lockfree>();
-        ch1.construct<hce::lockfree>();
+        ch0.construct<hce::lockfree>(0);
+        ch1.construct<hce::lockfree>(0);
         hce::schedule(ops::t0(ch0,ch1,recv_total,done_ch));
     }
 
@@ -192,8 +192,8 @@ void concurrent_simple_communication_op_std_mutex(
 
     for(std::uint64_t c=0; c<repeat; ++c) {
         hce::channel<int> ch0, ch1;
-        ch0.construct<std::mutex>();
-        ch1.construct<std::mutex>();
+        ch0.construct<std::mutex>(0);
+        ch1.construct<std::mutex>(0);
         hce::schedule(ops::t0(ch0,ch1,recv_total,done_ch));
     }
 

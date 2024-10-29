@@ -5,23 +5,34 @@
 
 // c++
 #include <typeinfo>
-#include <deque>
 #include <mutex>
-#include <iterator>
 
 // local
+#include "utility.hpp"
+#include "logging.hpp"
 #include "atomic.hpp"
 #include "circular_buffer.hpp"
+#include "list.hpp"
 #include "coroutine.hpp"
 #include "scheduler.hpp"
 
 namespace hce {
+namespace config {
+namespace channel {
+
+/**
+ Specify the resource pool allocation limit for allocated channel interfaces.
+ */
+extern size_t resource_limit();
+
+}
+}
 
 /// result of a channel try operation
 enum result {
     closed = 0, /// channel is closed
     failure, /// channel operation failed
-    success /// channel operation succeeded
+    success /// channel operation success
 };
 
 namespace detail {
@@ -39,14 +50,14 @@ struct interface : public printable {
      @brief maximum capacity of stored value cache 
 
     Typical implementation expectations:
-    >0 == cache of a specific maximum size
-    0 == cache of no size (direct point to point data transfer)
-    <0 == cache of unlimited size
+    >0 == buffer of a specific maximum size
+    0 == buffer of no size (direct point to point data transfer)
+    <0 == buffer of unlimited size
      */
-    virtual int capacity() const = 0;
+    virtual int size() const = 0;
 
     /// current size of the stored value cache
-    virtual int size() const = 0;
+    virtual int used() const = 0;
 
     /// return true if implementation is closed, else false
     virtual bool closed() const = 0;
@@ -73,23 +84,185 @@ struct interface : public printable {
     virtual hce::yield<hce::result> try_recv(T& t) = 0;
 };
 
+template <typename T>
+inline void pointer_send(void* destination, void* source) {
+    typedef unqualified<T> U;
+    HCE_TRACE_FUNCTION_ENTER("hce::detail::channel::pointer_send", source, destination);
+    HCE_TRACE_FUNCTION_BODY("hce::detail::channel::pointer_send", type::name<U>(), " = ", type::name<T>());
+
+    // compiler knows how to select lvalue or rvalue copy since all necessary 
+    // type information is available
+    *((U*)destination) = std::forward<T>(*((U*)(source))); 
+}
+
+template <typename T>
+inline void circular_buffer_send(void* destination, void* source) {
+    typedef unqualified<T> U;
+    typedef hce::circular_buffer<U> BUFFER;
+    HCE_TRACE_FUNCTION_ENTER("hce::detail::channel::circular_buffer_send", destination, source);
+    HCE_TRACE_FUNCTION_BODY("hce::detail::channel::circular_buffer_send", type::name<U>(), " = ", type::name<T>());
+    // compiler knows how to select lvalue or rvalue copy since all necessary 
+    // type information is available
+    ((BUFFER*)destination)->emplace(std::forward<T>(*((U*)(source)))); 
+}
+
+template <typename T>
+inline void circular_buffer_recv(void* destination, void* source) {
+    typedef hce::circular_buffer<T> BUFFER;
+    HCE_TRACE_FUNCTION_ENTER("hce::detail::channel::circular_buffer_recv", destination, source);
+    HCE_TRACE_FUNCTION_BODY("hce::detail::channel::circular_buffer_recv", type::name<T>(), " = ", type::name<T&&>());
+    // is always a move operation
+    *((T*)destination) = std::move(((BUFFER*)source)->front());
+    ((BUFFER*)source)->pop();
+}
+
+template <typename T, typename LIST>
+inline void list_send(void* destination, void* source) {
+    typedef unqualified<T> U;
+    HCE_TRACE_FUNCTION_ENTER("hce::detail::channel::list_send", destination, source);
+    HCE_TRACE_FUNCTION_BODY("hce::detail::channel::list_send", type::name<U>(), " = ", type::name<T>());
+    // compiler knows how to select lvalue or rvalue copy since all necessary 
+    // type information is available
+    ((LIST*)destination)->emplace_back(std::forward<T>(*((U*)(source)))); 
+}
+
+template <typename T, typename LIST>
+inline void list_recv(void* destination, void* source) {
+    HCE_TRACE_FUNCTION_ENTER("hce::detail::channel::list_recv", destination, source);
+    HCE_TRACE_FUNCTION_BODY("hce::detail::channel::list_recv", type::name<T>(), " = ", type::name<T&&>());
+    auto& que = *((LIST*)source);
+    // is always a move operation
+    *((T*)destination) = std::move(que.front());
+    que.pop();
+}
+
+/*
+ The actual copy/move of data T from source to destination is abstracted by this 
+ object because copy/move semantics can be preserved without having to compile 
+ both variants (which is invalid for arbitrary types T).
+
+ Rather than accepting void*, the constructor and `send()` accept any source 
+ or destination pointer type and will cast implicitly for the user.
+ */
+struct transfer {
+    typedef void (*op_f)(void*,void*);
+
+    template <typename T>
+    transfer(op_f op, T* source) : op_(op), source_((void*)source) { }
+
+
+    template <typename T>
+    inline void send(T* destination) {
+        op_((void*)destination, source_);
+    }
+
+private:
+    void (*op_)(void*,void*);
+    void* source_;
+};
+
+template <typename LOCK>
+struct base_send_interface : 
+    public hce::scheduler::reschedule<
+        hce::awaitable::lockable<
+            awt_interface<bool>,
+            LOCK>>
+{
+    base_send_interface(LOCK& lk, detail::channel::transfer t) : 
+        hce::scheduler::reschedule<
+            hce::awaitable::lockable<
+                awt_interface<bool>,
+                LOCK>>(
+                    lk,
+                    hce::awaitable::await::policy::defer,
+                    hce::awaitable::resume::policy::no_lock),
+        tx(t)
+    { }
+
+    inline void on_resume(void* m) {
+        HCE_MIN_METHOD_ENTER("on_resume",m);
+
+        if(m) [[likely]] {
+            // m is destination
+            tx.send(m);
+            success = true;
+        }
+    }
+
+    inline bool get_result() { 
+        HCE_MIN_METHOD_BODY("get_result",success);
+        return success; 
+    }
+
+    bool success = false;
+    detail::channel::transfer tx;
+};
+
+template <typename LOCK>
+struct base_recv_interface : 
+    public hce::scheduler::reschedule<
+        hce::awaitable::lockable<
+            awt_interface<bool>,
+            LOCK>>
+{
+    base_recv_interface(LOCK& lk, void* d) : 
+        hce::scheduler::reschedule<
+            hce::awaitable::lockable<
+                awt_interface<bool>,
+                LOCK>>(
+                    lk,
+                    hce::awaitable::await::policy::defer,
+                    hce::awaitable::resume::policy::no_lock),
+        destination(d)
+    { }
+
+    inline void on_resume(void* m) {
+        HCE_TRACE_METHOD_BODY("on_resume",m);
+
+        if(m) [[likely]] {
+            // m is transfer struct
+            ((transfer*)m)->send(destination);
+            success = true;
+        }
+    }
+
+    inline bool get_result() { 
+        HCE_MIN_METHOD_BODY("get_result",success);
+        return success; 
+    }
+
+    bool success = false;
+    void* destination = nullptr;
+};
+
 /// unbuffered interface implementation
-template <typename T, typename LOCK>
+template <typename T, typename LOCK, typename ALLOCATOR>
 struct unbuffered : public interface<T> {
-    unbuffered() : closed_flag_(false) { HCE_LOW_CONSTRUCTOR(); }
+    typedef T value_type;
+
+    unbuffered() {
+        HCE_LOW_CONSTRUCTOR(); 
+    }
+
+    unbuffered(const ALLOCATOR& allocator) : 
+        parked_send_(allocator),
+        parked_recv_(allocator)
+    { 
+        HCE_LOW_CONSTRUCTOR(); 
+    }
     
     virtual ~unbuffered(){ HCE_LOW_DESTRUCTOR(); }
 
-    inline const char* nspace() const { return "hce::channel"; }
-    inline const char* name() const { return "unbuffered"; }
+    static inline hce::string info_name() { 
+        return type::templatize<T,LOCK,ALLOCATOR>("hce::unbuffered"); 
+    }
+
+    inline hce::string name() const { 
+        return unbuffered<T,LOCK,ALLOCATOR>::info_name(); 
+    }
 
     inline const std::type_info& type_info() const {
         return typeid(unbuffered); 
-    }
-
-    inline int capacity() const { 
-        HCE_MIN_METHOD_ENTER("capacity");
-        return 0; 
     }
 
     inline int size() const { 
@@ -97,10 +270,15 @@ struct unbuffered : public interface<T> {
         return 0; 
     }
 
+    inline int used() const { 
+        HCE_MIN_METHOD_ENTER("used");
+        return 0; 
+    }
+
     inline bool closed() const {
         HCE_MIN_METHOD_ENTER("closed");
 
-        std::unique_lock<LOCK> lk(lk_);
+        std::lock_guard<LOCK> lk(lk_);
         return closed_flag_;
     }
 
@@ -108,259 +286,195 @@ struct unbuffered : public interface<T> {
         HCE_LOW_METHOD_ENTER("close");
 
         std::lock_guard<LOCK> lk(lk_);
-        if(!closed_flag_) {
+        if(!closed_flag_) [[likely]] {
             closed_flag_ = true;
 
-            for(auto& p : parked_send_) { 
-                HCE_TRACE_METHOD_BODY("close","closing parked send:",p);
-                p->resume(nullptr); 
+            while(parked_send_.size()) { 
+                parked_send_.front()->resume(nullptr); 
+                parked_send_.pop();
             }
 
-            for(auto& p : parked_recv_) { 
-                HCE_TRACE_METHOD_BODY("close","closing parked recv:",p);
-                p->resume(nullptr); 
+            while(parked_recv_.size()) { 
+                parked_recv_.front()->resume(nullptr); 
+                parked_recv_.pop();
             }
-
-            parked_send_.clear();
-            parked_recv_.clear();
         }
     }
 
-    inline awt<bool> send(const T& t) {
-        HCE_LOW_METHOD_ENTER("send",(void*)&t);
-        return send_((void*)&t, false);
+    inline awt<bool> send(const T& s) {
+        HCE_LOW_METHOD_ENTER("send",(void*)&s);
+
+        return hce::awt<bool>(new send_interface(
+            *this, transfer(pointer_send<const T&>,&s)));
     }
 
-    inline awt<bool> send(T&& t) {
-        HCE_LOW_METHOD_ENTER("send",(void*)&t);
-        return send_((void*)&t, true);
+    inline awt<bool> send(T&& s) {
+        HCE_LOW_METHOD_ENTER("send",(void*)&s);
+
+        return hce::awt<bool>(new send_interface(
+            *this, transfer(pointer_send<T&&>,&s)));
     }
 
-    inline awt<bool> recv(T& t) {
-        HCE_LOW_METHOD_ENTER("recv",(void*)&t);
-        return recv_((void*)&t);
+    inline awt<bool> recv(T& r) {
+        HCE_LOW_METHOD_ENTER("recv",(void*)&r);
+
+        return hce::awt<bool>(new recv_interface(*this, (void*)&r));
     }
 
-    inline hce::yield<hce::result> try_send(const T& t) {
-        HCE_LOW_METHOD_ENTER("try_send",(void*)&t);
-        return try_send_((void*)&t, false);
+    inline hce::yield<hce::result> try_send(const T& s) {
+        HCE_LOW_METHOD_ENTER("try_send",(void*)&s);
+        return try_send_(s);
     }
 
-    inline hce::yield<hce::result> try_send(T&& t) {
-        HCE_LOW_METHOD_ENTER("try_send",(void*)&t);
-        return try_send_((void*)&t, true);
+    inline hce::yield<hce::result> try_send(T&& s) {
+        HCE_LOW_METHOD_ENTER("try_send",(void*)&s);
+        return try_send_(std::move(s));
     }
 
-    inline hce::yield<hce::result> try_recv(T& t) {
-        HCE_LOW_METHOD_ENTER("try_recv",(void*)&t);
-        return try_recv_((void*)&t);
+    inline hce::yield<hce::result> try_recv(T& r) {
+        HCE_LOW_METHOD_ENTER("try_recv",(void*)&r);
+
+        std::lock_guard<LOCK> lk(lk_);
+
+        if(closed_flag_) [[unlikely]] { 
+            return { hce::result::closed }; 
+        } else if(parked_send_.size()) [[likely]] {
+            parked_send_.front()->resume((void*)&r);
+
+            // return an awaitable which immediately returns true
+            return { hce::result::success }; 
+        } else [[unlikely]] { return { hce::result::failure }; }
     }
 
 private:
-    struct send_pair {
-        send_pair() : source_(nullptr), is_rvalue_(false) { }
+    typedef unbuffered<T,LOCK,ALLOCATOR> PARENT;
 
-        send_pair(void* source, bool is_rvalue) : 
-            source_(source), 
-            is_rvalue_(is_rvalue) 
+    struct send_interface : 
+        public base_send_interface<LOCK> 
+    {
+        send_interface(PARENT& p, transfer tx) :
+            base_send_interface<LOCK>(p.lk_, tx),
+            parent_(p)
         { }
 
-        inline void send(void* destination) {
-            if(is_rvalue_) {
-                *((T*)destination) = std::move(*((T*)(source_))); 
-            } else {
-                *((T*)destination) = *((const T*)(source_)); 
+        static inline hce::string info_name() {
+            return detail::channel::unbuffered<T,LOCK,ALLOCATOR>::info_name() + 
+                   "::send_interface";
+        };
+
+        inline hce::string name() const { return send_interface::info_name(); }
+
+        inline bool on_ready() {
+            if(parent_.closed_flag_) [[unlikely]] {
+                HCE_TRACE_METHOD_BODY("send","closed");
+                return true;
+            } else if(parent_.parked_recv_.size()) [[likely]] {
+                HCE_TRACE_METHOD_BODY("send","done");
+                parent_.parked_recv_.front()->resume((void*)&(this->tx));
+                parent_.parked_recv_.pop();
+                this->success = true;
+                return true;
+            } else [[unlikely]] {
+                HCE_TRACE_METHOD_BODY("send","blocked");
+                parent_.parked_send_.push_back(this);
+                return false;
             }
         }
 
     private:
-        void* source_;
-        bool is_rvalue_;
+        PARENT& parent_;
     };
 
-    inline hce::awt<bool> send_(void* s, bool is_rvalue) {
-        struct send_interface : 
-            public hce::scheduler::reschedule<
-                hce::awaitable::lockable<
-                    hce::awt_interface<bool>,
-                    LOCK>>
-        {
-            send_interface(
-                    std::unique_lock<LOCK>& lk, 
-                    bool ready, 
-                    bool success, 
-                    send_pair sp) :
-                hce::scheduler::reschedule<
-                    hce::awaitable::lockable<
-                        hce::awt_interface<bool>,
-                        LOCK>>(
-                            *(lk.mutex()),
-                            hce::awaitable::await::policy::adopt,
-                            hce::awaitable::resume::policy::no_lock),
-                ready_(ready),
-                success_(success),
-                sp_(sp)
-            { 
-                lk.release();
-            }
+    struct recv_interface : public base_recv_interface<LOCK> {
+        recv_interface(PARENT& p, void* destination) :
+            base_recv_interface<LOCK>(p.lk_, destination),
+            parent_(p)
+        { }
 
-            inline bool on_ready() { return ready_; }
-
-            inline void on_resume(void* m) {
-                if(m) {
-                    sp_.send(m);
-                    success_ = true;
-                }
-                else{ success_ = false; }
-            }
-
-            inline bool get_result() { return success_; }
-
-        private:
-            bool ready_;
-            bool success_;
-            send_pair sp_;
+        static inline hce::string info_name() {
+            return detail::channel::unbuffered<T,LOCK,ALLOCATOR>::info_name() + 
+                   "::recv_interface";
         };
 
-        std::unique_lock<LOCK> lk(lk_);
+        inline hce::string name() const { return recv_interface::info_name(); }
 
-        if(closed_flag_) {
-            HCE_TRACE_METHOD_BODY("send_","closed");
-            return hce::awt<bool>::make(new send_interface(lk, true, false, send_pair()));
-        } else if(parked_recv_.size()) {
-            HCE_TRACE_METHOD_BODY("send_","resume receiver");
-            send_pair sp{s,false};
-            parked_recv_.front()->resume((void*)(&sp));
-            parked_recv_.pop_front();
-
-            // return an awaitable which immediately returns true
-            return hce::awt<bool>::make(new send_interface(lk, true, true, send_pair()));
-        } else {
-            HCE_TRACE_METHOD_BODY("send_","block for receiver");
-            auto ai = new send_interface(lk, false, true, send_pair(s, is_rvalue ));
-            parked_send_.push_back(ai);
-            return hce::awt<bool>::make(ai);
-        }
-    }
-
-    /// stackless `co_await`able recv operation
-    inline hce::awt<bool> recv_(void* r) {
-        struct recv_interface : 
-            public hce::scheduler::reschedule<
-                hce::awaitable::lockable<
-                    hce::awt<bool>::interface,
-                    LOCK>>
-        {
-            recv_interface(std::unique_lock<LOCK>& lk, bool ready, bool success, void* r) :
-                hce::scheduler::reschedule<
-                    hce::awaitable::lockable<
-                        hce::awt<bool>::interface,
-                        LOCK>>(
-                            *(lk.mutex()), 
-                            hce::awaitable::await::policy::adopt,
-                            hce::awaitable::resume::policy::no_lock),
-                ready_(ready),
-                success_(success),
-                r_(r)
-            { 
-                lk.release();
+        inline bool on_ready() {
+            if(parent_.closed_flag_) [[unlikely]] { 
+                HCE_TRACE_METHOD_BODY("recv","closed");
+                return true;
+            } else if(parent_.parked_send_.size()) [[likely]] {
+                HCE_TRACE_METHOD_BODY("recv","resume");
+                parent_.parked_send_.front()->resume(this->destination);
+                parent_.parked_send_.pop();
+                this->success = true;
+                return true;
+            } else [[unlikely]] {
+                HCE_TRACE_METHOD_BODY("recv","block for transfer");
+                parent_.parked_recv_.push_back(this);
+                return false;
             }
-
-            inline bool on_ready() { return ready_; }
-
-            inline void on_resume(void* m) {
-                if(m) {
-                    ((send_pair*)m)->send(r_);
-                    success_ = true;
-                }
-                else { success_ = false; }
-            }
-
-            inline bool get_result() { return success_; }
-
-            bool ready_;
-            bool success_;
-            void* r_; // pointer to receiver memory
-        };
-
-        std::unique_lock<LOCK> lk(lk_);
-
-        if(closed_flag_) { 
-            HCE_TRACE_METHOD_BODY("recv_","closed");
-            return hce::awt<bool>::make(new recv_interface(lk, true, false, nullptr));
-        } else if(parked_send_.size()) {
-            HCE_TRACE_METHOD_BODY("recv_","resume sender");
-            parked_send_.front()->resume(r);
-            parked_send_.pop_front();
-
-            // return an awaitable which immediately returns true
-            return hce::awt<bool>::make(new recv_interface(lk, true, true, nullptr));
-        } else {
-            HCE_TRACE_METHOD_BODY("recv_","block for sender");
-            auto ai = new recv_interface(lk, false, true, r);
-            parked_recv_.push_back(ai);
-            return hce::awt<bool>::make(ai);
         }
-    }
+
+    private:
+        PARENT& parent_;
+    };
     
-    inline hce::yield<hce::result> try_send_(void* s, bool is_rvalue) {
-        std::unique_lock<LOCK> lk(lk_);
+    template <typename U>
+    inline hce::yield<hce::result> try_send_(U&& s) {
+        std::lock_guard<LOCK> lk(lk_);
 
-        if(closed_flag_) { return { hce::result::closed }; }
-        else if(parked_recv_.size()) {
-            send_pair sp{s,is_rvalue};
-            parked_recv_.front()->resume((void*)(&sp));
-            parked_recv_.pop_front();
+        if(closed_flag_) [[unlikely]] { 
+            HCE_TRACE_METHOD_BODY("try_send","closed");
+            return { hce::result::closed }; 
+        } else if(parked_recv_.size()) [[likely]] {
+            HCE_TRACE_METHOD_BODY("try_send","done");
+            transfer tx(pointer_send<U>,&s);
+            parked_recv_.front()->resume((void*)(&tx));
+            parked_recv_.pop();
 
-            // return an awaitable which immediately returns true
             return { hce::result::success }; 
-        }
-        else { return { hce::result::failure }; }
-    }
-    
-    inline hce::yield<hce::result> try_recv_(void* r) {
-        std::unique_lock<LOCK> lk(lk_);
-
-        if(closed_flag_) { return { hce::result::closed }; }
-        else if(parked_send_.size()) {
-            parked_send_.front()->resume(r);
-
-            // return an awaitable which immediately returns true
-            return { hce::result::success }; 
-        }
-        else { return { hce::result::failure }; }
+        } else [[unlikely]] { return { hce::result::failure }; }
     }
 
     mutable LOCK lk_;
-    bool closed_flag_;
-    std::deque<awt<bool>::interface*> parked_send_;
-    std::deque<awt<bool>::interface*> parked_recv_;
+    bool closed_flag_ = false;
+    hce::list<awt<bool>::interface*,ALLOCATOR> parked_send_;
+    hce::list<awt<bool>::interface*,ALLOCATOR> parked_recv_;
 };
 
 /// buffered interface implementation
-template <typename T, typename LOCK>
+template <typename T, typename LOCK, typename ALLOCATOR>
 struct buffered : public interface<T> {
+    typedef T value_type;
+
     buffered(int sz) : 
-        closed_flag_(false),
-        buf_(sz < 0 ? (size_t)1 : (size_t)sz)
+        buf_(sz ? (size_t)sz : (size_t)1),
+        parked_send_(),
+        parked_recv_()
+    { 
+        HCE_LOW_CONSTRUCTOR();
+    }
+
+    buffered(int sz, const ALLOCATOR& allocator) : 
+        buf_(sz ? (size_t)sz : (size_t)1),
+        parked_send_(allocator),
+        parked_recv_(allocator)
     { 
         HCE_LOW_CONSTRUCTOR();
     }
 
     virtual ~buffered(){ HCE_LOW_DESTRUCTOR(); }
 
-    inline const char* nspace() const { return "hce::channel"; }
-    inline const char* name() const { return "buffered"; }
+    static inline hce::string info_name() { 
+        return type::templatize<T,LOCK,ALLOCATOR>("hce::buffered"); 
+    }
+
+    inline hce::string name() const { 
+        return buffered<T,LOCK,ALLOCATOR>::info_name(); 
+    }
 
     inline const std::type_info& type_info() const {
         return typeid(buffered); 
-    }
-
-    inline int capacity() const {
-        HCE_MIN_METHOD_ENTER("capacity");
-
-        std::lock_guard<LOCK> lk(lk_);
-        return (int)buf_.capacity();
     }
 
     inline int size() const {
@@ -370,6 +484,13 @@ struct buffered : public interface<T> {
         return (int)buf_.size();
     }
 
+    inline int used() const {
+        HCE_MIN_METHOD_ENTER("used");
+
+        std::lock_guard<LOCK> lk(lk_);
+        return (int)buf_.used();
+    }
+
     inline bool closed() const {
         HCE_MIN_METHOD_ENTER("closed");
 
@@ -381,296 +502,443 @@ struct buffered : public interface<T> {
         HCE_LOW_METHOD_ENTER("close");
 
         std::lock_guard<LOCK> lk(lk_);
-        if(!closed_flag_) {
+
+        if(!closed_flag_) [[unlikely]] {
             closed_flag_ = true;
 
-            for(auto& p : parked_send_) { 
-                HCE_TRACE_METHOD_BODY("close","closing parked send:",p);
-                p->resume(nullptr); 
+            while(parked_send_.size()) { 
+                parked_send_.front()->resume(nullptr); 
+                parked_send_.pop();
             }
 
-            for(auto& p : parked_recv_) { 
-                HCE_TRACE_METHOD_BODY("close","closing parked recv:",p);
-                p->resume(nullptr); 
+            while(parked_recv_.size()) { 
+                parked_recv_.front()->resume(nullptr); 
+                parked_recv_.pop();
             }
-
-            parked_send_.clear();
-            parked_recv_.clear();
         }
     }
 
-    inline awt<bool> send(const T& t) {
-        HCE_LOW_METHOD_ENTER("send",(void*)&t);
-        return send_((void*)&t, false);
+    inline awt<bool> send(const T& s) {
+        HCE_LOW_METHOD_ENTER("send",(void*)&s);
+
+        return hce::awt<bool>(new send_interface(
+            *this, transfer(circular_buffer_send<const T&>,(void*)&s)));
     }
 
-    inline awt<bool> send(T&& t) {
-        HCE_LOW_METHOD_ENTER("send",(void*)&t);
-        return send_((void*)&t, true);
+    inline awt<bool> send(T&& s) {
+        HCE_LOW_METHOD_ENTER("send",(void*)&s);
+
+        return hce::awt<bool>(new send_interface(
+            *this, transfer(circular_buffer_send<T&&>,(void*)&s)));
     }
 
-    /**
-     Buffered receives will succeed, even if the channel is closed, as long 
-     as values are available for retrieval from the internal buffer.
-     */
-    inline awt<bool> recv(T& t) {
-        HCE_LOW_METHOD_ENTER("recv",(void*)&t);
-        return recv_((void*)&t);
+    inline awt<bool> recv(T& r) {
+        HCE_LOW_METHOD_ENTER("recv",(void*)&r);
+
+        return hce::awt<bool>(new recv_interface(*this, (void*)&r));
     }
 
     inline hce::yield<hce::result> try_send(const T& t) {
         HCE_LOW_METHOD_ENTER("try_send",(void*)&t);
-        return try_send_((void*)&t, false);
+        return try_send_(t);
     }
 
     inline hce::yield<hce::result> try_send(T&& t) {
         HCE_LOW_METHOD_ENTER("try_send",(void*)&t);
-        return try_send_((void*)&t, true);
+        return try_send_(std::move(t));
     }
 
     /**
      Buffered receives will succeed, even if the channel is closed, as long 
      as values are available for retrieval from the internal buffer.
      */
-    inline hce::yield<hce::result> try_recv(T& t) {
-        HCE_LOW_METHOD_ENTER("try_recv",(void*)&t);
-        return try_recv_((void*)&t);
+    inline hce::yield<hce::result> try_recv(T& r) {
+        HCE_LOW_METHOD_ENTER("try_recv",(void*)&r);
+
+        std::lock_guard<LOCK> lk(lk_);
+
+        if(buf_.empty()) [[unlikely]] {
+            if(closed_flag_) [[unlikely]] { 
+                HCE_TRACE_METHOD_BODY("try_recv","closed");
+                return { hce::result::closed }; 
+            } else [[likely]] { 
+                HCE_TRACE_METHOD_BODY("try_recv","failed");
+                return { hce::result::failure }; 
+            }
+        } else [[likely]] {
+            HCE_TRACE_METHOD_BODY("try_recv","done");
+            r = std::move(buf_.front());
+            buf_.pop();
+
+            if(parked_send_.size()) [[unlikely]] {
+                parked_send_.front()->resume((void*)&buf_);
+                parked_send_.pop();
+            }
+
+            // return an awaitable which immediately returns true
+            return { hce::result::success }; 
+        }
     }
 
 private:
-    struct send_pair {
-        inline void send(void* destination) {
-            auto& d = *((circular_buffer<T>*)destination);
+    typedef buffered<T,LOCK,ALLOCATOR> PARENT;
 
-            if(is_rvalue) {
-                d.push(std::move(*((T*)(source)))); 
-            } else {
-                d.push(*((const T*)(source))); 
+    struct send_interface : public base_send_interface<LOCK> {
+        send_interface(PARENT& p, transfer tx) :
+            base_send_interface<LOCK>(p.lk_, tx),
+            parent_(p)
+        { }
+
+        static inline hce::string info_name() {
+            return detail::channel::buffered<T,LOCK,ALLOCATOR>::info_name() + 
+                   "::send_interface";
+        };
+
+        inline hce::string name() const { return send_interface::info_name(); }
+
+        inline bool on_ready() {
+            if(parent_.closed_flag_) [[unlikely]] {
+                HCE_TRACE_METHOD_BODY("send","closed");
+                return false;
+            } else if(parent_.buf_.full()) [[unlikely]] {
+                HCE_TRACE_METHOD_BODY("send","blocked");
+                parent_.parked_send_.push_back(this);
+                return false;
+            } else [[likely]] {
+                HCE_TRACE_METHOD_BODY("send","done");
+                this->tx.send(&(parent_.buf_));
+                this->success = true;
+
+                if(parent_.parked_recv_.size()) [[unlikely]] {
+                    transfer tx(circular_buffer_recv<T>,&(parent_.buf_));
+                    parent_.parked_recv_.front()->resume((void*)&(tx));
+                    parent_.parked_recv_.pop();
+                }
+
+                return true;
             }
         }
 
-        void* source;
-        bool is_rvalue;
+    private:
+        PARENT& parent_;
     };
 
-    inline hce::awt<bool> send_(void* s, bool is_rvalue) {
-        HCE_TRACE_METHOD_ENTER("send_",s,is_rvalue);
+    struct recv_interface : public base_recv_interface<LOCK> {
+        recv_interface(PARENT& p, void* destination) :
+            base_recv_interface<LOCK>(p.lk_, destination),
+            parent_(p)
+        { }
 
-        struct send_interface : 
-            public hce::scheduler::reschedule<
-                hce::awaitable::lockable<
-                    hce::awt<bool>::interface, 
-                    LOCK>>
-        {
-            send_interface(
-                    std::unique_lock<LOCK>& lk, 
-                    bool ready, 
-                    bool success, 
-                    send_pair sp = send_pair()) :
-                hce::scheduler::reschedule<
-                    hce::awaitable::lockable<
-                        hce::awt<bool>::interface, 
-                        LOCK>>(
-                            *(lk.mutex()),
-                            hce::awaitable::await::policy::adopt,
-                            hce::awaitable::resume::policy::no_lock),
-                ready_(ready),
-                success_(success),
-                sp_(sp)
-            { 
-                lk.release();
-            }
-
-            inline bool on_ready() { return ready_; }
-
-            inline void on_resume(void* m) {
-                if(m) {
-                    sp_.send(m);
-                    success_ = true;
-                }
-                else { success_ = false; }
-            }
-
-            inline bool get_result() { return success_; }
-
-            bool ready_;
-            bool success_;
-            send_pair sp_; 
+        static inline hce::string info_name() {
+            return detail::channel::buffered<T,LOCK,ALLOCATOR>::info_name() + 
+                   "::recv_interface";
         };
 
-        std::unique_lock<LOCK> lk(lk_);
+        inline hce::string name() const { return recv_interface::info_name(); }
 
-        if(closed_flag_) {
-            HCE_TRACE_METHOD_BODY("send_","closed");
-            return hce::awt<bool>::make(new send_interface(lk, true, false));
-        } else if(buf_.full()) {
-            HCE_TRACE_METHOD_BODY("send_","blocked");
-            auto ai = new send_interface(lk, false, true, { s, is_rvalue});
-            parked_send_.push_back(ai);
-            return hce::awt<bool>::make(ai);
-        } else {
-            HCE_TRACE_METHOD_BODY("send_","done");
-            send_pair sp{s,is_rvalue};
-            sp.send((void*)&buf_);
-
-            if(parked_recv_.size()) {
-                parked_recv_.front()->resume((void*)&buf_);
-                parked_recv_.pop_front();
-            }
-
-            // return an awaitable which immediately returns true
-            return hce::awt<bool>::make(new send_interface(lk, true, true));
-        }
-    }
-
-    /// stackless `co_await`able recv operation
-    inline hce::awt<bool> recv_(void* r) {
-        HCE_TRACE_METHOD_ENTER("recv_",r);
-
-        struct recv_interface : 
-            public hce::scheduler::reschedule<
-                hce::awaitable::lockable<
-                    hce::awt<bool>::interface,
-                    LOCK>>
-        {
-            recv_interface(
-                    std::unique_lock<LOCK>& lk, 
-                    bool owned,
-                    bool ready, 
-                    bool success, 
-                    void* r) :
-                hce::scheduler::reschedule<
-                    hce::awaitable::lockable<
-                        hce::awt<bool>::interface,
-                        LOCK>>(
-                            *(lk.mutex()),
-                            hce::awaitable::await::policy::adopt,
-                            hce::awaitable::resume::policy::no_lock),
-                ready_(ready),
-                success_(success),
-                r_(r)
-            { 
-                lk.release();
-            }
-
-            inline bool on_ready() { return ready_; }
-
-            inline void on_resume(void* m) {
-                if(m) {
-                    auto b = (circular_buffer<T>*)m;
-                    *((T*)r_) = std::move(b->front());
-                    b->pop();
-                    success_ = true;
+        inline bool on_ready() {
+            if(parent_.buf_.empty()) [[unlikely]] {
+                if(parent_.closed_flag_ ) [[unlikely]] {
+                    HCE_TRACE_METHOD_BODY("recv","closed");
+                    return true;
+                } else [[likely]] {
+                    HCE_TRACE_METHOD_BODY("recv","blocked");
+                    parent_.parked_recv_.push_back(this);
+                    return false;
                 }
-                else { success_ = false; }
+            } else [[likely]] {
+                HCE_TRACE_METHOD_BODY("recv","done");
+                transfer tx(circular_buffer_recv<T>,&(parent_.buf_));
+                tx.send(this->destination);
+                this->success = true;
+
+                if(parent_.parked_send_.size()) [[unlikely]] {
+                    parent_.parked_send_.front()->resume((void*)&(parent_.buf_));
+                    parent_.parked_send_.pop();
+                }
+
+                return true;
             }
-
-            inline bool get_result() { return success_; }
-
-            bool ready_;
-            bool success_;
-            void* r_; // pointer to receiver memory
-        };
-
-        std::unique_lock<LOCK> lk(lk_);
-
-        if(buf_.empty()) {
-            if(closed_flag_ ) {
-                HCE_TRACE_METHOD_BODY("recv_","closed");
-                return hce::awt<bool>::make(new recv_interface(lk, true, true, false, nullptr));
-            } else {
-                HCE_TRACE_METHOD_BODY("recv_","blocked");
-                auto ai = new recv_interface(lk, true, false, true, r);
-                parked_recv_.push_back(ai);
-                return hce::awt<bool>::make(ai);
-            }
-        } else {
-            HCE_TRACE_METHOD_BODY("recv_","done");
-            *((T*)r) = std::move(buf_.front());
-            buf_.pop();
-
-            if(parked_send_.size()) {
-                parked_send_.front()->resume((void*)&buf_);
-                parked_send_.pop_front();
-            }
-
-            // return an awaitable which immediately returns true
-            return hce::awt<bool>::make(new recv_interface(lk, false, true, true, nullptr));
         }
-    }
-    
-    inline hce::yield<hce::result> try_send_(void* s, bool is_rvalue) {
-        HCE_TRACE_METHOD_ENTER("try_send_",s,is_rvalue);
 
-        std::unique_lock<LOCK> lk(lk_);
+    private:
+        PARENT& parent_;
+    };
 
-        if(closed_flag_) { 
-            HCE_TRACE_METHOD_BODY("try_send_","closed");
+    template <typename U>
+    inline hce::yield<hce::result> try_send_(U&& s) {
+        std::lock_guard<LOCK> lk(lk_);
+
+        if(closed_flag_) [[unlikely]] { 
+            HCE_TRACE_METHOD_BODY("try_send","closed");
             return { hce::result::closed }; 
-        } else if(!buf_.full()) {
-            HCE_TRACE_METHOD_BODY("try_send_","done");
-            send_pair sp(s,is_rvalue);
-            sp.send((void*)&buf_);
+        } else if(!buf_.full()) [[likely]] {
+            HCE_TRACE_METHOD_BODY("try_send","done");
+            buf_.push(std::forward<U>(s));
 
-            if(parked_recv_.size()) {
+            if(parked_recv_.size()) [[unlikely]] {
                 parked_recv_.front()->resume((void*)&buf_);
-                parked_recv_.pop_front();
+                parked_recv_.pop();
             }
 
-            // return an awaitable which immediately returns true
             return { hce::result::success }; 
-        }
-        else { 
-            HCE_TRACE_METHOD_BODY("try_send_","failed");
+        } else [[unlikely]] { 
+            HCE_TRACE_METHOD_BODY("try_send","failed");
             return { hce::result::failure }; 
-        }
-    }
-    
-    inline hce::yield<hce::result> try_recv_(void* r) {
-        HCE_TRACE_METHOD_ENTER("try_recv_",r);
-
-        std::unique_lock<LOCK> lk(lk_);
-
-        if(buf_.empty()) {
-            if(closed_flag_) { 
-                HCE_TRACE_METHOD_BODY("try_recv_","closed");
-                return { hce::result::closed }; 
-            } else { 
-                HCE_TRACE_METHOD_BODY("try_recv_","failed");
-                return { hce::result::failure }; 
-            }
-        } else {
-            HCE_TRACE_METHOD_BODY("try_recv_","done");
-            *((T*)r) = std::move(buf_.front());
-            buf_.pop();
-
-            if(parked_send_.size()) {
-                parked_send_.front()->resume((void*)&buf_);
-                parked_send_.pop_front();
-            }
-
-            // return an awaitable which immediately returns true
-            return { hce::result::success }; 
         }
     }
 
     mutable LOCK lk_;
-    bool closed_flag_;
+    bool closed_flag_ = false;
     hce::circular_buffer<T> buf_;
-    std::deque<awt<bool>::interface*> parked_send_;
-    std::deque<awt<bool>::interface*> parked_recv_;
+    hce::list<awt<bool>::interface*,ALLOCATOR> parked_send_;
+    hce::list<awt<bool>::interface*,ALLOCATOR> parked_recv_;
+};
+
+/// unlimited interface implementation
+template <typename T, typename LOCK, typename ALLOCATOR>
+struct unlimited : public interface<T> {
+    typedef T value_type;
+
+    unlimited() { 
+        HCE_LOW_CONSTRUCTOR();
+    }
+
+    unlimited(const ALLOCATOR& allocator) : 
+        queue_(allocator),
+        parked_recv_(allocator)
+    { 
+        HCE_LOW_CONSTRUCTOR();
+    }
+
+    virtual ~unlimited(){ HCE_LOW_DESTRUCTOR(); }
+
+    static inline hce::string info_name() { 
+        return type::templatize<T,LOCK,ALLOCATOR>("hce::unlimited"); 
+    }
+
+    inline hce::string name() const { 
+        return unlimited<T,LOCK,ALLOCATOR>::info_name(); 
+    }
+
+    inline const std::type_info& type_info() const {
+        return typeid(unlimited); 
+    }
+
+    inline int size() const {
+        HCE_MIN_METHOD_ENTER("size");
+        return -1;
+    }
+
+    inline int used() const {
+        HCE_MIN_METHOD_ENTER("used");
+
+        std::lock_guard<LOCK> lk(lk_);
+        return (int)queue_.size();
+    }
+
+    inline bool closed() const {
+        HCE_MIN_METHOD_ENTER("closed");
+
+        std::lock_guard<LOCK> lk(lk_);
+        return closed_flag_;
+    }
+
+    inline void close() {
+        HCE_LOW_METHOD_ENTER("close");
+
+        std::lock_guard<LOCK> lk(lk_);
+
+        if(!closed_flag_) [[unlikely]] {
+            closed_flag_ = true;
+
+            while(parked_recv_.size()) { 
+                HCE_TRACE_METHOD_BODY("close","closing parked recv:",parked_recv_.front());
+                parked_recv_.front()->resume(nullptr); 
+                parked_recv_.pop();
+            }
+        }
+    }
+
+    inline awt<bool> send(const T& s) {
+        HCE_LOW_METHOD_ENTER("send",(void*)&s);
+        return awt<bool>(new send_interface(
+            *this, 
+            transfer(list_send<const T&,hce::list<T,ALLOCATOR>>,&s)));
+    }
+
+    inline awt<bool> send(T&& s) {
+        HCE_LOW_METHOD_ENTER("send",(void*)&s);
+        return awt<bool>(new send_interface(
+            *this, 
+            transfer(list_send<T&&,hce::list<T,ALLOCATOR>>,&s)));
+    }
+
+    /**
+     Buffered receives will succeed, even if the channel is closed, as long 
+     as values are available for retrieval from the internal buffer.
+     */
+    inline awt<bool> recv(T& r) {
+        HCE_LOW_METHOD_ENTER("recv",(void*)&r);
+        return awt<bool>(new recv_interface(*this, (void*)&r));
+    }
+
+    inline hce::yield<hce::result> try_send(const T& t) {
+        HCE_LOW_METHOD_ENTER("try_send",(void*)&t);
+        return try_send_(t);
+    }
+
+    inline hce::yield<hce::result> try_send(T&& t) {
+        HCE_LOW_METHOD_ENTER("try_send",(void*)&t);
+        return try_send_(std::move(t));
+    }
+
+    /**
+     Buffered receives will succeed, even if the channel is closed, as long 
+     as values are available for retrieval from the internal buffer.
+     */
+    inline hce::yield<hce::result> try_recv(T& r) {
+        HCE_LOW_METHOD_ENTER("try_recv",(void*)&r);
+
+        std::lock_guard<LOCK> lk(lk_);
+
+        if(queue_.empty()) [[unlikely]] {
+            if(closed_flag_) [[unlikely]] { 
+                HCE_TRACE_METHOD_BODY("try_recv","closed");
+                return { hce::result::closed }; 
+            } else [[likely]] { 
+                HCE_TRACE_METHOD_BODY("try_recv","failed");
+                return { hce::result::failure }; 
+            }
+        } else [[likely]] {
+            HCE_TRACE_METHOD_BODY("try_recv","done");
+            r = std::move(queue_.front());
+            queue_.pop();
+
+            // return an awaitable which immediately returns true
+            return { hce::result::success }; 
+        }
+    }
+
+private:
+    typedef unlimited<T,LOCK,ALLOCATOR> PARENT;
+
+    struct send_interface : public base_send_interface<LOCK> {
+        send_interface(PARENT& p, transfer tx) :
+            base_send_interface<LOCK>(p.lk_, tx),
+            parent_(p)
+        { }
+
+        static inline hce::string info_name() {
+            return detail::channel::unlimited<T,LOCK,ALLOCATOR>::info_name() + 
+                   "::send_interface";
+        };
+
+        inline hce::string name() const { return send_interface::info_name(); }
+
+        inline bool on_ready() { 
+            if(parent_.closed_flag_) [[unlikely]] {
+                HCE_TRACE_METHOD_BODY("send","closed");
+                return true;
+            } else [[likely]] {
+                HCE_TRACE_METHOD_BODY("send","done");
+                this->tx.send(&(parent_.queue_));
+                this->success = true;
+
+                if(parent_.parked_recv_.size()) [[unlikely]] {
+                    transfer tx(&list_recv<T,hce::list<T,ALLOCATOR>>,&(parent_.queue_));
+                    parent_.parked_recv_.front()->resume((void*)&tx);
+                    parent_.parked_recv_.pop();
+                }
+
+                return true;
+            }
+        }
+
+    private:
+        PARENT& parent_;
+    };
+
+    struct recv_interface : public base_recv_interface<LOCK> {
+        recv_interface(PARENT& p, void* destination) :
+            base_recv_interface<LOCK>(p.lk_, destination),
+            parent_(p)
+        { }
+
+        static inline hce::string info_name() {
+            return detail::channel::unlimited<T,LOCK,ALLOCATOR>::info_name() + 
+                   "::recv_interface";
+        };
+
+        inline hce::string name() const { return recv_interface::info_name(); }
+
+        inline bool on_ready() {
+            if(parent_.queue_.empty()) [[unlikely]] {
+                if(parent_.closed_flag_ ) [[unlikely]] {
+                    HCE_TRACE_METHOD_BODY("recv","closed");
+                    return true;
+                } else [[likely]] {
+                    HCE_TRACE_METHOD_BODY("recv","blocked");
+                    parent_.parked_recv_.push_back(this);
+                    return false;
+                }
+            } else [[likely]] {
+                HCE_TRACE_METHOD_BODY("recv_","done");
+                transfer tx(&list_recv<T,hce::list<T,ALLOCATOR>>,&(parent_.queue_));
+                tx.send(this->destination);
+                this->success = true;
+                return true;
+            }
+        }
+
+    private:
+        PARENT& parent_;
+    };
+    
+    template <typename U>
+    inline hce::yield<hce::result> try_send_(U&& s) {
+        std::lock_guard<LOCK> lk(lk_);
+
+        if(closed_flag_) [[unlikely]] { 
+            HCE_TRACE_METHOD_BODY("try_send","closed");
+            return { hce::result::closed }; 
+        } else [[likely]] {
+            HCE_TRACE_METHOD_BODY("try_send","done");
+            queue_.push_back(std::forward<U>(s));
+
+            if(parked_recv_.size()) [[unlikely]] {
+                transfer tx(&list_recv<T,hce::list<T,ALLOCATOR>>, &queue_);
+                parked_recv_.front()->resume((void*)&tx);
+                parked_recv_.pop();
+            }
+
+            // return an awaitable which immediately returns true
+            return { hce::result::success }; 
+        } 
+    }
+
+    mutable LOCK lk_;
+    bool closed_flag_ = false;
+    hce::list<T,ALLOCATOR> queue_;
+
+    // send() never blocks, so only has parked recv queue
+    hce::list<awt<bool>::interface*,ALLOCATOR> parked_recv_;
 };
 
 }
 }
 
 /// allocatable unbuffered channel interface implementation
-template <typename T, typename LOCK=hce::spinlock>
-using unbuffered = detail::channel::unbuffered<T,LOCK>;
+template <typename T, typename LOCK=hce::spinlock, typename ALLOCATOR=hce::pool_allocator<T>>
+using unbuffered = detail::channel::unbuffered<T,LOCK,ALLOCATOR>;
 
 /// allocatable buffered channel interface implementation
-template <typename T, typename LOCK=hce::spinlock>
-using buffered = detail::channel::buffered<T,LOCK>;
+template <typename T, typename LOCK=hce::spinlock, typename ALLOCATOR=hce::pool_allocator<T>>
+using buffered = detail::channel::buffered<T,LOCK,ALLOCATOR>;
+
+/// allocatable unlimited channel interface implementation
+template <typename T, typename LOCK=hce::spinlock, typename ALLOCATOR=hce::pool_allocator<T>>
+using unlimited = detail::channel::unlimited<T,LOCK,ALLOCATOR>;
 
 /** 
  @brief communication object which can represent any object which implements channel<T>::interface interface.
@@ -692,11 +960,16 @@ struct channel : public printable {
     channel<T>& operator=(const channel<T>& rhs) = default;
     channel<T>& operator=(channel<T>&& rhs) = default;
 
-    inline const char* nspace() const { return "hce"; }
-    inline const char* name() const { return "channel"; }
+    static inline hce::string info_name() { 
+        return type::templatize<T>("hce::channel"); 
+    }
 
-    inline std::string content() const { 
-        return context_ ? *context_ : std::string(); 
+    inline hce::string name() const { return channel<T>::info_name(); }
+
+    inline hce::string content() const { 
+        hce::stringstream ss;
+        ss << context_.get();
+        return ss.str();
     }
 
     /// retrieve a copy of the shared context
@@ -718,11 +991,16 @@ struct channel : public printable {
     }
 
     /**
-     @brief construct a channel with an unbuffered implementation
+     @brief construct a channel with with one of several possible implementations 
+
+     Constructed channel is:
+     - sz == 0: unbuffered implementation
+     - sz < 0: unlimited implementation
+     - otherwise buffered implementation with a buffer of sz 
 
      Specify a LOCK type of `hce::lockfree` to make the implementation lockfree 
      (only safe when all instances of the channel are used from the same system 
-     thread). Lockfree channels are a *very* fast way to communicate between two 
+     thread). LOCKfree channels are a *very* fast way to communicate between two 
      coroutines running on the same scheduler.
 
      Alternatively, specify a LOCK type of `std::mutex` to potentially improve  
@@ -731,26 +1009,30 @@ struct channel : public printable {
 
      When in doubt, use the default `hce::spinlock`, it is quite performant in 
      all but extreme edgecases.
-     */
-    template <typename LOCK=hce::spinlock>
-    inline channel<T>& construct() {
-        HCE_MIN_METHOD_ENTER("construct");
-        context_ = std::shared_ptr<interface>(
-            static_cast<interface*>(
-                new hce::unbuffered<T,LOCK>()));
-        return *this;
-    }
 
-    /**
-     @brief construct a channel with a buffered implementation 
-     @param sz the size of the buffer
+     @param sz the size of implementation buffer 
+     @param as optional arguments for implementation constructor
      */
-    template <typename LOCK=hce::spinlock>
-    inline channel<T>& construct(int sz) {
-        HCE_MIN_METHOD_ENTER("construct",sz);
-        context_ = std::shared_ptr<interface>(
-            static_cast<interface*>(
-                new hce::buffered<T,LOCK>(sz)));
+    template <typename LOCK=hce::spinlock, 
+              typename ALLOCATOR=hce::pool_allocator<T>,
+              typename... As>
+    inline channel<T>& construct(int sz=0, As&&... as) {
+        HCE_MIN_METHOD_ENTER("construct",sz,as...);
+
+        if(sz == 0) {
+            context_ = std::shared_ptr<interface>(
+                static_cast<interface*>(
+                    new hce::unbuffered<T,LOCK,ALLOCATOR>(std::forward<As>(as)...)));
+        } else if(sz < 0) {
+            context_ = std::shared_ptr<interface>(
+                static_cast<interface*>(
+                    new hce::unlimited<T,LOCK,ALLOCATOR>(std::forward<As>(as)...)));
+        } else {
+            context_ = std::shared_ptr<interface>(
+                static_cast<interface*>(
+                    new hce::buffered<T,LOCK,ALLOCATOR>(sz, std::forward<As>(as)...)));
+        }
+
         return *this;
     }
 
@@ -758,11 +1040,15 @@ struct channel : public printable {
      @brief construct a channel inline 
      @return the constructed channel
      */
-    template <typename LOCK=hce::spinlock, typename... As>
+    template <typename LOCK=hce::spinlock, 
+              typename ALLOCATOR=hce::pool_allocator<T>, 
+              typename... As>
     inline static channel<T> make(As&&... as) {
-        HCE_MIN_FUNCTION_ENTER("make", as...);
+        HCE_MIN_FUNCTION_ENTER(
+            channel<T>::info_name() +
+            type::templatize<LOCK,ALLOCATOR>("::make"), as...);
         channel<T> ch;
-        ch.construct<LOCK>(std::forward<As>(as)...);
+        ch.construct<LOCK,ALLOCATOR>(std::forward<As>(as)...);
         return ch;
     }
        
@@ -773,15 +1059,15 @@ struct channel : public printable {
     }
 
     /// return the maximum buffer size
-    inline int capacity() const {
+    inline int size() const {
         HCE_TRACE_METHOD_ENTER("capacity");
-        return context_->capacity(); 
+        return context_->size(); 
     }
 
     /// return the number of values in the buffer
-    inline int size() const {
+    inline int used() const {
         HCE_TRACE_METHOD_ENTER("size");
-        return context_->size(); 
+        return context_->used(); 
     }
 
     /// return if channel is closed

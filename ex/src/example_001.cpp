@@ -11,7 +11,7 @@ hce::co<void> my_coroutine(hce::channel<int> ch) {
 
 int main() {
     auto ch = hce::channel<int>::make();
-    hce::schedule(my_coroutine(ch));
+    auto awt = hce::schedule(my_coroutine(ch));
     ch.send(1);
     ch.send(2);
     ch.send(3);

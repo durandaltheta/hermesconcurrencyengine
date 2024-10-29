@@ -114,10 +114,10 @@ def parse_args():
     parser.add_argument('-nm','--no-memcheck', action='store_true', help='Skip memory validation')
     parser.add_argument('-lmr','--loop-minute-runtime', type=int, default=0, help='A count of minutes to continuously loop execution of each built test. If the value is 30, for example, then each built test executable will be run for 30 minutes continuously before progressing to the next test. Useful for running long tests when attempting to thoroughly validate. If a test errors at any point, looping will cease.')
     parser.add_argument('-ff','--failfast', action='store_true', help='Cause unit testing to exit as soon as an error is detected')
-    parser.add_argument('-jlmts','--jitter-loglimit-start', type=int, default=0, help='Specify the initial jitter test loglimit. IE, if -lmts=2, test loop will start at loglimit==2')
-    parser.add_argument('-jlmtb','--jitter-loglimit-break', type=int, default=10, help='Skip tests past the specified jitter test loglimit. IE, if -lmtb=5, test loop will break when the loglimit reaches a count of 5')
-    parser.add_argument('-jlvls','--jitter-loglevel-start', type=int, default=0, help='Specify the initial jitter test loglimit. IE, if -lvls=2, test loop will start at loglevel==2')
-    parser.add_argument('-jlvlb','--jitter-loglevel-break', type=int, default=10, help='Skip tests past the specified jitter test loglevel. IE, if -lvlb=5, test loop will break when the loglevel reaches a count of 5')
+    parser.add_argument('-jlmts','--jitter-loglimit-start', type=int, default=-1, help='Specify the initial jitter test loglimit. IE, if -lmts=2, test loop will start at loglimit==2')
+    parser.add_argument('-jlmtb','--jitter-loglimit-break', type=int, default=9, help='Skip tests past the specified jitter test loglimit. IE, if -lmtb=5, test loop will break when the loglimit reaches a count of 5')
+    parser.add_argument('-jlvls','--jitter-loglevel-start', type=int, default=-1, help='Specify the initial jitter test loglimit. IE, if -lvls=2, test loop will start at loglevel==2')
+    parser.add_argument('-jlvlb','--jitter-loglevel-break', type=int, default=9, help='Skip tests past the specified jitter test loglevel. IE, if -lvlb=5, test loop will break when the loglevel reaches a count of 5')
     parser.add_argument('-otc','--override-test-command', type=str, default=None, help='If specified, the given system command will be executed to run the compiled unit tests. This can be used to implement running unit tests over a connection (like ssh) on target hardware and returning the result. The path to the compiled unit test will be passed as its only argument. The command is expected to return 0 on success, and non-0 on failure')
     parser.add_argument('-omc','--override-memcheck-command', type=str, default=None, help='If specified, the given system command will be executed to run the compiled unit tests when memory verification (valgrind) is expected.. This can be used to implement running unit tests over a connection (like ssh) on target hardware and returning the result. The path to the compiled unit test will be passed as its only argument. The command is expected to return 0 on success, and non-0 on failure')
     parser.add_argument('-deflg','--default-logfile', type=str, default=None, help='If specified, is the path to where default test output should be written')
@@ -271,12 +271,12 @@ def execute_tests(args):
             loglevel = args.jitter_loglevel_start
             loglimit = args.jitter_loglimit_start
 
-            while loglevel < 10:
+            while loglevel < 9:
                 if args.jitter_loglevel_break == loglevel:
                     log(f'reached loglevel breakpoint{args.jitter_loglevel_break}')
                     break;
                 
-                while loglimit < 10:
+                while loglimit < 9:
                     if args.jitter_loglimit_break == loglimit:
                         log(f'reached loglimit breakpoint{args.jitter_loglimit_break}')
                         break;
