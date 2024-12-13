@@ -5,6 +5,8 @@
 
 #include "loguru.hpp"
 #include "atomic.hpp"
+#include "string.hpp"
+#include "logging.hpp"
 #include "coroutine.hpp"
 #include "scheduler.hpp"
 #include "channel.hpp"
@@ -533,7 +535,7 @@ size_t send_recv_close_T(const size_t count) {
         test(hce::channel<T>::template make<std::mutex>(count));
         test(hce::channel<T>::template make<std::mutex>(-1));
     }
-
+            
     return success_count;
 }
 
@@ -581,6 +583,7 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
             ASSERT_EQ((T)test::init<T>(2), q.pop());
 
             ch.close();
+            thd.join();
         };
 
         for(size_t i=count; i>0; --i) {

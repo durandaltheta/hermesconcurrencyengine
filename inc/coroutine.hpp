@@ -535,16 +535,6 @@ private:
     std::condition_variable_any cv;
 };
 
-inline void coroutine_did_not_co_await(void* awt) {
-    hce::stringstream ss;
-    ss << "hce::coroutine[0x" 
-       << (void*)(hce::coroutine::local().address())
-       << "] did not call co_await on an hce::awaitable[0x"
-       << awt 
-       << "]";
-    HCE_ERROR_LOG("%s",ss.str().c_str());
-}
-
 }
 
 struct yield : public hce::printable {
@@ -554,7 +544,12 @@ struct yield : public hce::printable {
         HCE_LOW_DESTRUCTOR();
 
         if(hce::coroutine::in() && !awaited_){ 
-            detail::coroutine::coroutine_did_not_co_await(this); 
+            hce::stringstream ss;
+            ss << hce::coroutine::local()
+               << "did not call co_await on "
+               << *this;
+            HCE_FATAL_LOG("%s",ss.str().c_str());
+            std::terminate();
         }
     }
 
@@ -625,8 +620,14 @@ struct yield : public detail::yield {
 
     inline operator T() {
         if(coroutine::in()) [[unlikely]] { 
-            detail::coroutine::coroutine_did_not_co_await(this); 
+            hce::stringstream ss;
+            ss << hce::coroutine::local()
+               << "did not call co_await on "
+               << *this;
+            HCE_FATAL_LOG("%s",ss.str().c_str());
+            std::terminate();
         }
+
         return await_resume(); 
     }
 
@@ -733,14 +734,21 @@ struct awaitable : public printable {
             stashed_alloc_size() = alloc_size_;
 
             if(this->handle_) [[unlikely]] {
-                // take care of destroying the handle by assigning it to a 
-                // managing coroutine
+                // place handle in coroutine for printing purposes
                 coroutine co(std::move(this->handle_));
                 hce::stringstream ss;
                 ss << *this
                    << " was not resumed before being destroyed; it held " 
                    << co;
-                HCE_ERROR_METHOD_BODY("~interface",ss.str().c_str());
+                HCE_FATAL_METHOD_BODY("~interface",ss.str().c_str());
+
+                // Can't recover anyway, about to terminate. Leaving the handle 
+                // in this destructor and cleaning up would cause a circular 
+                // destructor call (IE, an object inside the coroutine would 
+                // destruct the coroutine containing it), causing a very 
+                // confusing error.
+                co.release();
+                std::terminate();
             }
         }
 
@@ -843,17 +851,22 @@ struct awaitable : public printable {
             if(this->handle_) [[likely]] { 
                 HCE_TRACE_METHOD_BODY("resume","destination");
                 // unblock the suspended coroutine and push the handle to its 
-                // destination
-                this->destination(this->handle_);
+                // destination. Make sure that handle_ is unset before passing 
+                // to destination. There are certain cases where the the 
+                // coroutine can be rescheduled where this can cause an error 
+                // otherwise in "no-lock" scenarios.
+                auto h = this->handle_;
                 this->handle_ = std::coroutine_handle<>();
+                this->destination(h);
                 if(rp != resume::policy::no_lock) { this->unlock(); }
             } else [[unlikely]] {
                 if(this->tt_) [[unlikely]] { 
                     HCE_TRACE_METHOD_BODY("resume","unblock");
                     // unblock the suspended thread 
-                    if(rp == resume::policy::no_lock) { this->tt_->unblock(); }
-                    else { this->tt_->unblock(*this); }
+                    auto tt = this->tt_;
                     this->tt_ = nullptr;
+                    if(rp == resume::policy::no_lock) { tt->unblock(); }
+                    else { tt->unblock(*this); }
                 } else [[likely]] {
                     HCE_TRACE_METHOD_BODY("resume","not blocked");
                     // this was called before blocking occurred
@@ -1050,7 +1063,12 @@ struct awaitable : public printable {
             if(coroutine::in()) [[unlikely]] { 
                 HCE_ERROR_METHOD_BODY("wait","coroutine");
                 // coroutine failed to `co_await` the awaitable
-                detail::coroutine::coroutine_did_not_co_await(this); 
+                hce::stringstream ss;
+                ss << hce::coroutine::local()
+                   << "did not call co_await on "
+                   << *this;
+                HCE_FATAL_LOG("%s",ss.str().c_str());
+                std::terminate();
             } else if(!await_ready()) [[likely]] { 
                 HCE_TRACE_METHOD_BODY("wait","thread");
                 // if we're here, this awaitable is operating without the 
