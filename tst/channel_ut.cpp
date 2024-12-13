@@ -398,11 +398,13 @@ hce::co<void> co_send_count_and_close_return_void(hce::channel<T> ch, size_t cou
 
 template <typename T>
 size_t send_recv_close_T(const size_t count) {
+    HCE_WARNING_FUNCTION_BODY("send_recv_close_T","test count:",count,", T:",hce::type::name<T>());
     size_t success_count=0;
 
     // thread to thread
     {
         auto test = [&](hce::channel<T> ch) {
+            HCE_WARNING_FUNCTION_BODY("send_recv_close_T::test","thread-to-thread ch:",ch);
             test::queue<T> q;
 
             std::thread thd([](hce::channel<T> ch, test::queue<T>& q){
@@ -534,6 +536,7 @@ size_t send_recv_close_T(const size_t count) {
         test(hce::channel<T>::template make<std::mutex>(-1));
     }
 
+    HCE_WARNING_FUNCTION_BODY("send_recv_close_T","done");
     return success_count;
 }
 
