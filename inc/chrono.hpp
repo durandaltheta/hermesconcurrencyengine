@@ -68,7 +68,7 @@ struct duration :
         HCE_TRACE_CONSTRUCTOR(hce::chrono::detail::to_string(a));
     }
 
-    ~duration() { HCE_TRACE_DESTRUCTOR(); }
+    virtual ~duration() { HCE_TRACE_DESTRUCTOR(); }
 
     static inline hce::string info_name() { return "hce::chrono::duration"; }
     inline hce::string name() const { return duration::info_name(); }
@@ -105,7 +105,7 @@ struct time_point :
         HCE_TRACE_CONSTRUCTOR(hce::chrono::detail::to_string(a));
     }
 
-    ~time_point() { HCE_TRACE_DESTRUCTOR(); }
+    virtual ~time_point() { HCE_TRACE_DESTRUCTOR(); }
 
     static inline hce::string info_name() { return "hce::chrono::time_point"; }
     inline hce::string name() const { return time_point::info_name(); }

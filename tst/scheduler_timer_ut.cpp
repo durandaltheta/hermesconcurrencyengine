@@ -25,9 +25,9 @@ hce::chrono::duration absolute_difference(
 
 template <typename... As>
 hce::co<bool> co_start(
-        test::queue<hce::id>& q,
+        test::queue<hce::sid>& q,
         As&&... as) {
-    hce::id i;
+    hce::sid i;
     auto awt = hce::scheduler::local().start(i,as...);
     q.push(i);
     co_return co_await std::move(awt);
@@ -55,7 +55,7 @@ size_t start_As(As&&... as) {
                 hce::chrono::duration(as...).
                     to_count<hce::chrono::milliseconds>();
         hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + now);
-        hce::id i;
+        hce::sid i;
         EXPECT_TRUE((bool)sch->start(i, as...));
 
         auto done = hce::chrono::now();
@@ -79,7 +79,7 @@ size_t start_As(As&&... as) {
                 hce::chrono::duration(as...).
                     to_count<hce::chrono::milliseconds>();
         hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + now);
-        hce::id i;
+        hce::sid i;
         EXPECT_TRUE((bool)hce::scheduler::global().start(i, as...));
 
         auto done = hce::chrono::now();
@@ -103,7 +103,7 @@ size_t start_As(As&&... as) {
                 hce::chrono::duration(as...).
                     to_count<hce::chrono::milliseconds>();
         hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + now);
-        hce::id i;
+        hce::sid i;
         auto awt = sch->start(i, as...);
 
         // ensure we sleep for the entire normal 
@@ -132,7 +132,7 @@ size_t start_As(As&&... as) {
                 hce::chrono::duration(as...).
                     to_count<hce::chrono::milliseconds>();
         hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + now);
-        hce::id i;
+        hce::sid i;
         auto awt = hce::scheduler::global().start(i, as...);
 
         // ensure we sleep for the entire normal 
@@ -165,7 +165,7 @@ size_t start_As(As&&... as) {
         std::deque<hce::awt<bool>> started_q;
 
         for(size_t c=max_timer_offset; c>0; --c) {
-            hce::id i;
+            hce::sid i;
             started_q.push_back(sch->start(i, hce::chrono::duration(as...) + hce::chrono::milliseconds(c)));
         }
 
@@ -189,7 +189,7 @@ size_t start_As(As&&... as) {
 
     // coroutine timer timeout
     {
-        test::queue<hce::id> q;
+        test::queue<hce::sid> q;
         auto now = hce::chrono::now();
         auto requested_sleep_ticks = 
                 hce::chrono::duration(as...).
@@ -213,7 +213,7 @@ size_t start_As(As&&... as) {
 
     // coroutine timer timeout
     {
-        test::queue<hce::id> q;
+        test::queue<hce::sid> q;
         auto now = hce::chrono::now();
         auto requested_sleep_ticks = 
                 hce::chrono::duration(as...).
@@ -236,7 +236,7 @@ size_t start_As(As&&... as) {
 
     // stacked coroutine timeouts 
     {
-        test::queue<hce::id> q;
+        test::queue<hce::sid> q;
         const size_t max_timer_offset = 50;
         auto now = hce::chrono::now();
         auto requested_sleep_ticks = 
@@ -540,10 +540,12 @@ namespace scheduler {
 
 template <typename... As>
 size_t cancel_As(As&&... as) {
-    HCE_INFO_LOG(
-            "cancel_As:milli timeout:%zu",
-            hce::chrono::duration(as...).
-                to_count<hce::chrono::milliseconds>());
+    hce::stringstream ss;
+    ss << "cancel_As:" 
+       << hce::chrono::duration(as...).to_count<hce::chrono::milliseconds>();
+    hce::string fname = ss.str();
+    //HCE_INFO_LOG(
+    HCE_WARNING_LOG("%s",fname.c_str());
     size_t success_count = 0;
 
     auto lf = hce::scheduler::make();
@@ -551,10 +553,11 @@ size_t cancel_As(As&&... as) {
 
     // thread timer cancel
     {
-        test::queue<hce::id> q;
+        HCE_WARNING_FUNCTION_BODY(fname, "thread timer cancel");
+        test::queue<hce::sid> q;
 
         std::thread sleeping_thd([&]{
-            hce::id i;
+            hce::sid i;
             auto now = hce::chrono::now();
             auto requested_sleep_ticks = 
                     hce::chrono::duration(as...).
@@ -571,19 +574,20 @@ size_t cancel_As(As&&... as) {
             EXPECT_LT(slept_ticks, requested_sleep_ticks); 
         });
 
-        hce::id i = q.pop();
+        hce::sid i = q.pop();
         EXPECT_TRUE(sch->cancel(i));
         sleeping_thd.join();
 
         ++success_count;
     }
 
-    // thread timer cancel
+    // thread global timer cancel
     {
-        test::queue<hce::id> q;
+        HCE_WARNING_FUNCTION_BODY(fname, "thread global timer cancel");
+        test::queue<hce::sid> q;
 
         std::thread sleeping_thd([&]{
-            hce::id i;
+            hce::sid i;
             auto now = hce::chrono::now();
             auto requested_sleep_ticks = 
                     hce::chrono::duration(as...).
@@ -600,7 +604,7 @@ size_t cancel_As(As&&... as) {
             EXPECT_LT(slept_ticks, requested_sleep_ticks); 
         });
 
-        hce::id i = q.pop();
+        hce::sid i = q.pop();
         EXPECT_TRUE(hce::scheduler::global().cancel(i));
         sleeping_thd.join();
 
@@ -609,14 +613,15 @@ size_t cancel_As(As&&... as) {
 
     // coroutine timer cancel
     {
-        test::queue<hce::id> q;
+        HCE_WARNING_FUNCTION_BODY(fname, "coroutine timer cancel");
+        test::queue<hce::sid> q;
         auto now = hce::chrono::now();
         auto requested_sleep_ticks = 
             hce::chrono::duration(as...).
                 to_count<hce::chrono::milliseconds>();
         hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + now);
         auto awt = sch->schedule(co_start(q, as...));
-        hce::id i = q.pop();
+        hce::sid i = q.pop();
         sch->cancel(i);
 
         EXPECT_FALSE((bool)std::move(awt));
@@ -630,16 +635,17 @@ size_t cancel_As(As&&... as) {
         ++success_count;
     }
 
-    // coroutine timer cancel
+    // coroutine global timer cancel
     {
-        test::queue<hce::id> q;
+        HCE_WARNING_FUNCTION_BODY(fname, "coroutine global timer cancel");
+        test::queue<hce::sid> q;
         auto now = hce::chrono::now();
         auto requested_sleep_ticks = 
             hce::chrono::duration(as...).
                 to_count<hce::chrono::milliseconds>();
         hce::chrono::time_point target_timeout(hce::chrono::duration(as...) + now);
         auto awt = hce::schedule(co_start(q, as...));
-        hce::id i = q.pop();
+        hce::sid i = q.pop();
         hce::scheduler::global().cancel(i);
 
         EXPECT_FALSE((bool)std::move(awt));

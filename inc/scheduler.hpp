@@ -92,13 +92,13 @@ tl_this_scheduler_local_queue();
 template <typename T>
 struct joiner : 
     public hce::awaitable::lockable<
-        hce::awt_interface<T>,
-        hce::spinlock>
+        hce::spinlock,
+        hce::awt_interface<T>>
 {
     joiner(hce::co<T>& co) :
         hce::awaitable::lockable<
-            hce::awt_interface<T>,
-            hce::spinlock>(
+            hce::spinlock,
+            hce::awt_interface<T>>(
                 lk_,
                 hce::awaitable::await::policy::defer,
                 hce::awaitable::resume::policy::lock),
@@ -184,13 +184,13 @@ private:
 template <>
 struct joiner<void> : 
     public hce::awaitable::lockable<
-        hce::awt_interface<void>,
-        hce::spinlock>
+        hce::spinlock,
+        hce::awt_interface<void>>
 {
     joiner(hce::co<void>& co) :
         hce::awaitable::lockable<
-            hce::awt_interface<void>,
-            hce::spinlock>(
+            hce::spinlock,
+            hce::awt_interface<void>>(
                 lk_,
                 hce::awaitable::await::policy::defer,
                 hce::awaitable::resume::policy::lock),
@@ -230,14 +230,14 @@ private:
 template <typename T>
 struct sync_partial : 
     public hce::awaitable::lockable<
-        hce::awt_interface<T>,
-        hce::lockfree>
+        hce::lockfree,
+        hce::awt_interface<T>>
 {
     template <typename... As>
     sync_partial(As&&... as) : 
         hce::awaitable::lockable<
-            hce::awt_interface<T>,
-            hce::lockfree>(
+            hce::lockfree,
+            hce::awt_interface<T>>(
                 lf_,
                 hce::awaitable::await::policy::defer,
                 hce::awaitable::resume::policy::lock),
@@ -255,12 +255,14 @@ private:
 
 template <>
 struct sync_partial<void> : public 
-        hce::awaitable::lockable<hce::awt_interface<void>,hce::lockfree>
+        hce::awaitable::lockable<
+            hce::lockfree,
+            hce::awt_interface<void>>
 {
     sync_partial() :
         hce::awaitable::lockable<
-            hce::awt_interface<void>,
-            hce::lockfree>(
+            hce::lockfree,
+            hce::awt_interface<void>>(
                 lf_,
                 hce::awaitable::await::policy::defer,
                 hce::awaitable::resume::policy::lock)
@@ -278,13 +280,13 @@ private:
 template <typename T>
 struct async_partial : 
     public hce::awaitable::lockable<
-        hce::awt_interface<T>,
-        hce::spinlock>
+        hce::spinlock,
+        hce::awt_interface<T>>
 {
     async_partial() : 
         hce::awaitable::lockable<
-            hce::awt_interface<T>,
-            hce::spinlock>(
+            hce::spinlock,
+            hce::awt_interface<T>>(
                 lk_,
                 hce::awaitable::await::policy::defer,
                 hce::awaitable::resume::policy::lock),
@@ -310,13 +312,13 @@ private:
 template <>
 struct async_partial<void> : 
     public hce::awaitable::lockable<
-        hce::awt_interface<void>,
-        hce::spinlock>
+        hce::spinlock,
+        hce::awt_interface<void>>
 {
     async_partial() : 
         hce::awaitable::lockable<
-            hce::awt_interface<void>,
-            hce::spinlock>(
+            hce::spinlock,
+            hce::awt_interface<void>>(
                 lk_,
                 hce::awaitable::await::policy::defer,
                 hce::awaitable::resume::policy::lock),
@@ -408,15 +410,6 @@ struct scheduler : public printable {
         { }
 
         virtual ~reschedule(){}
-        
-        inline void on_suspend() {
-            auto& tl_sch = detail::scheduler::tl_this_scheduler();
-
-            // no that we're suspending we know to try and acquire a destination
-            if(tl_sch) {
-                destination_ = *tl_sch;
-            }
-        }
 
         /// pass a resumed coroutine to its destination
         inline void destination(std::coroutine_handle<> h) {
@@ -427,6 +420,21 @@ struct scheduler : public printable {
             if(d) { 
                 HCE_LOW_METHOD_BODY("destination",*d,h);
                 d->reschedule_(hce::coroutine(std::move(h)));
+            }
+        }
+       
+        /// acquire the destination
+        inline void on_suspend() {
+            auto& tl_sch = detail::scheduler::tl_this_scheduler();
+
+            /* 
+             Now that we're suspending we know to try and acquire a 
+             destination. If we're not in a scheduler then we're going to block 
+             on the thread_local condition variable and destination() won't be 
+             called.
+             */
+            if(tl_sch) {
+                destination_ = *tl_sch;
             }
         }
 
@@ -1059,12 +1067,12 @@ struct scheduler : public printable {
      purposes of lifecycle management; running timers will prevent a scheduler 
      from . If a timer needs to be cancelled early, call `cancel()`.
 
-     @param id a reference to an hce::id which will be set to the launched timer's id
+     @param id a reference to an hce::sid which will be set to the launched timer's id
      @param as the remaining arguments which will be passed to `hce::chrono::duration()`
      @return an awaitable to join with the timer timing out (returning true) or being cancelled (returning false)
      */
     template <typename... As>
-    inline hce::awt<bool> start(hce::id& id, As&&... as) {
+    inline hce::awt<bool> start(hce::sid& id, As&&... as) {
         hce::chrono::time_point timeout =
             hce::chrono::duration(std::forward<As>(as)...) + hce::chrono::now();
         
@@ -1089,7 +1097,7 @@ struct scheduler : public printable {
      @brief determine if a timer with the given id is running
      @return true if the timer is running, else false
      */
-    inline bool running(const hce::id& id) const {
+    inline bool running(const hce::sid& id) const {
         HCE_MED_METHOD_ENTER("running",id);
         bool result = false;
 
@@ -1110,13 +1118,13 @@ struct scheduler : public printable {
     /**
      @brief attempt to cancel a scheduled `hce::scheduler::timer`
 
-     The `hce::id` should be acquired from a call to the 
+     The `hce::sid` should be acquired from a call to the 
      `hce::scheduler::start()` method.
 
-     @param id the hce::id associated with the timer to be cancelled
+     @param id the hce::sid associated with the timer to be cancelled
      @return true if cancelled timer successfully, false if timer already timed out or was never scheduled
      */
-    inline bool cancel(const hce::id& id) {
+    inline bool cancel(const hce::sid& id) {
         HCE_MED_METHOD_ENTER("cancel",id);
         bool result = false;
 
@@ -1154,32 +1162,36 @@ struct scheduler : public printable {
 private:
     // internal timer implementation
     struct timer : public 
-        hce::scheduler::reschedule<
+        scheduler::reschedule<
            hce::awaitable::lockable<
-                hce::awt<bool>::interface,
-                hce::spinlock>>
+                hce::spinlock,
+                hce::awt<bool>::interface>>
     {
         timer(hce::scheduler& parent, const hce::chrono::time_point& tp) : 
-                hce::scheduler::reschedule<
+                scheduler::reschedule<
                     hce::awaitable::lockable<
-                        hce::awt<bool>::interface,
-                        hce::spinlock>>(
+                        hce::spinlock,
+                        hce::awt<bool>::interface>>(
                             slk_,
                             hce::awaitable::await::defer,
                             hce::awaitable::resume::lock),
             tp_(tp),
-            id_(new std::byte),
             ready_(false),
             result_(false),
             parent_(parent)
-        { }
+        { 
+            id_.make();
+            HCE_MED_CONSTRUCTOR(parent, tp);
+        }
 
-        virtual ~timer(){
+        inline virtual ~timer(){
+            HCE_MED_DESTRUCTOR();
+
             if(!ready_) {
-                // need to cancel because the awaitable was not be awaited 
-                // properly...
-                auto parent = parent_.lock();
-                if(parent) { parent->cancel(id()); }
+                hce::stringstream ss;
+                ss << *this << "was not awaited nor resumed";
+                HCE_FATAL_METHOD_BODY("~timer",ss.str());
+                std::terminate();
             }
         }
 
@@ -1212,11 +1224,11 @@ private:
         }
 
         inline const hce::chrono::time_point& timeout() const { return tp_; }
-        inline const hce::id& id() const { return id_; }
+        inline const hce::sid& id() const { return id_; }
 
     private:
         hce::chrono::time_point tp_;
-        hce::id id_;
+        hce::sid id_;
         bool ready_; 
         bool result_;
         hce::spinlock slk_;

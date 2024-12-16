@@ -390,7 +390,7 @@ struct co : public coroutine {
         }
 
         /// the `co_return`ed value of the co<T>
-        std::unique_ptr<T> result; 
+        hce::unique_ptr<T> result; 
     };
 
     typedef std::coroutine_handle<promise_type> handle_type;
@@ -944,7 +944,7 @@ struct awaitable : public printable {
 
      Enables std::unique_lock<Lock>-like semantics.
      */
-    template <typename INTERFACE, typename Lock>
+    template <typename Lock, typename INTERFACE>
     struct lockable : public INTERFACE {
         template <typename... As>
         lockable(Lock& lk, 
@@ -1061,13 +1061,12 @@ struct awaitable : public printable {
         HCE_MIN_METHOD_ENTER("wait");
         if(impl_ && !(impl_->awaited())) [[unlikely]] {
             if(coroutine::in()) [[unlikely]] { 
-                HCE_ERROR_METHOD_BODY("wait","coroutine");
                 // coroutine failed to `co_await` the awaitable
                 hce::stringstream ss;
                 ss << hce::coroutine::local()
                    << "did not call co_await on "
                    << *this;
-                HCE_FATAL_LOG("%s",ss.str().c_str());
+                HCE_FATAL_METHOD_BODY("wait",ss.str());
                 std::terminate();
             } else if(!await_ready()) [[likely]] { 
                 HCE_TRACE_METHOD_BODY("wait","thread");

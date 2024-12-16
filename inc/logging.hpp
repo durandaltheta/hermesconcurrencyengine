@@ -710,8 +710,11 @@ struct printable {
         return ss.str();
     }
 
-    /// string conversion
+    /// hce::string conversion
     virtual inline operator hce::string() const final { return to_string(); }
+
+    /// std::string conversion
+    virtual inline operator std::string() const final { return to_string(); }
 
     /**
      @brief the process wide default_log_level

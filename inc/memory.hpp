@@ -31,15 +31,15 @@ struct info {
     /// return the bucket info for a given index
     virtual bucket& at(size_t idx) = 0;
 
-    /// index function typedef
+    /**
+     An index function is capable of calculating the index of a given bucket 
+     based on an input block size. The returned index can be passed to `at()` to 
+     select the proper bucket that contains *at least* the requested block size.
+     */
     typedef size_t(*index_f)(size_t);
 
     /**
-     Return a function capable of calculating the index of a given bucket based 
-     on an input block size. The returned index can be passed to `at()` to 
-     select the proper bucket.
-
-     @return the a function which can calculate the index
+     @return the index function which can calculate the index based on argument block size
      */
     virtual index_f indexer() = 0;
 };
@@ -54,15 +54,33 @@ extern info& get_info();
 namespace memory {
 
 /*
- An memory allocator which allows for thread_local caches of deallocated values 
- for reuse on subsequent allocate() calls. This allows for limiting lock 
- contention on process-wide `std::malloc()`/`std::free()`.
+ An memory allocation mechanism which allows for thread_local caches of 
+ deallocated values for reuse on subsequent allocate() calls. This allows for 
+ limiting lock contention on process-wide `std::malloc()`/`std::free()`.
 
  This is not an allocator which can be passed to a container, as it manages 
- multiple block sizes instead of a single templated `T`. However, this 
+ multiple block sizes instead of a single templated `T`.
 
  This cache is non-exhaustive, std::malloc()/std::free() will be called as 
  necessary.
+
+ One odd caveat of the cache's design is that any allocation smaller than the 
+ largest bucket is guaranteed to be of a pre-determined "block" size. IE, 
+ it will not necessarily call `std::malloc()` with the exact requested size, 
+ but will call it with a size *at minimum* as big as requested, but may be 
+ larger. 
+
+ This may cause awkward doubly oversized allocations because `std::malloc()` 
+ may do the *exact same thing* internally, potentially returning a much larger 
+ memory block than the user requested. However, the allocations of the cache are 
+ generally small enough any expected double over-sized allocations will still be 
+ a relatively small allocation.
+
+ It is *also* possible that this cache will store semi-randomly size blocks, and 
+ this is not an error. That is, if some memory was `std::malloc()`ed by some 
+ other code, then cached with `cache::deallocate()`, as long as the input size 
+ to `deallocate()` is accurate, then it will store the pointer in a bucket of 
+ with a block size at least as large as the cached pointer.
  */
 struct cache { 
     cache() {
@@ -80,7 +98,7 @@ struct cache {
     /// return the thread_local cache
     static cache& get();
 
-    void* allocate(size_t size) {
+    inline void* allocate(size_t size) {
         size_t idx = index_(size);
 
         if(idx < buckets_.size()) [[likely]] {
@@ -90,11 +108,11 @@ struct cache {
         }
     }
 
-    void* allocate(size_t alignment, size_t size) {
+    inline void* allocate(size_t alignment, size_t size) {
         return allocate(aligned_size_(alignment, size));
     }
 
-    void deallocate(void* ptr, size_t size) {
+    inline void deallocate(void* ptr, size_t size) {
         size_t idx = index_(size);
 
         if(idx < buckets_.size()) [[likely]] {
@@ -104,7 +122,7 @@ struct cache {
         }
     }
 
-    void deallocate(void* ptr, size_t alignment, size_t size) {
+    inline void deallocate(void* ptr, size_t alignment, size_t size) {
         deallocate(ptr, aligned_size_(alignment, size));
     }
 
@@ -119,7 +137,7 @@ private:
         }
 
         // allocate a chunk of memory from the bucket
-        void* allocate() {
+        inline void* allocate() {
             if (free_list.empty()) {
                 return std::malloc(block);
             } else {
@@ -131,10 +149,12 @@ private:
         }
 
         // free a chunk of memory
-        void deallocate(void* ptr) {
+        inline void deallocate(void* ptr) {
             if(free_count >= limit) [[unlikely]] {
+                // free with process-wide mechanism
                 std::free(ptr);
             } else [[likely]] {
+                // cache the pointer for reuse
                 ++free_count;
                 free_list.push_back(ptr);
             }
@@ -143,15 +163,26 @@ private:
         const size_t block;
         const size_t limit;
         size_t free_count = 0; // count of cached elements in the free list
-        std::vector<void*> free_list; // cached, deallocated values
+
+        /*
+         Cached, deallocated values. Vectors are good for this sort of thing 
+         because they only re-allocate their underlying memory block if it's 
+         too small. If a push won't use up all the remaining memory, it won't 
+         allocate. Pops also won't cause re-allocation, because vectors don't 
+         contract (re-allocate smaller) in that way.
+         */
+        std::vector<void*> free_list; 
     };
 
     // bitwise aligned size calculation
-    size_t aligned_size_(size_t alignment, size_t size) {
+    inline size_t aligned_size_(size_t alignment, size_t size) const {
         return (size + alignment - 1) & ~(alignment - 1);
     }
 
-    // bucket index calculation function
+    /*
+     Bucket index calculation function. It accepts a memory block size and 
+     returns the index of the bucket that contains at least that size.
+     */
     hce::config::memory::cache::info::index_f index_;
 
     // the various buckets managing allocations of different sized blocks
@@ -217,16 +248,16 @@ inline void deallocate(void* p, size_t n=1) {
 /**
  @brief std:: compliant allocator that makes use of thread_local caching hce::allocate<T>/hce::deallocate<T> 
 
- Because this object uses a cache, which itself uses `malloc()`/
+ Because this object uses hce::memory::cache, which itself uses `malloc()`/
  `free()`, it is compatible with `std::allocator<T>`.
 
  Design Aims:
- - Provide an allocator as close to std::allocator's design as possible 
- - Utilize thread_local allocation without overriding global new/delete 
+ - written as close to std::allocator's design as possible 
+ - utilize thread_local allocation cache without overriding global new/delete 
  - constant time allocation/deallocation when re-using allocated blocks
  - no exception handling (for speed)
  - usable as an std:: container allocator
- - all memory uses the same underlying allocation/deallocation method
+ - all memory uses the default allocation/deallocation methods when necessary
 
  Design Limitations:
  - no default pre-caching 
@@ -282,8 +313,8 @@ struct allocator {
     /**
      @brief deallocate a block of memory 
 
-     It is an error for the user to pass a pointer to this function that was 
-     not acquired from allocate() by the same allocator
+     The argument `n` must be the same size as passed to `allocate()` (or 
+     `std::malloc()` if allocated directly).
      */
     inline void deallocate(T* t, std::size_t n) {
         hce::deallocate<T>(t,n); 
@@ -297,7 +328,6 @@ struct allocator {
     void destroy(T* p) noexcept {
         p->~U();
     }
-
 
     // comparison operators (required for allocator compatibility)
     bool operator==(const allocator<T>&) const noexcept { return true; }
@@ -314,32 +344,38 @@ namespace memory {
 
 /// std::unique_ptr deleter function template
 template <typename T, size_t sz>
-inline void deleter(T* p) {
-    for(size_t i=0; i<sz; ++i) {
-        (p[i]).~T();
+struct deleter {
+    void operator()(T* p) const {
+        for(size_t i=0; i<sz; ++i) {
+            (p[i]).~T();
+        }
+        
+        hce::deallocate<T>(p,sz);
     }
-    
-    hce::deallocate<T>(p,sz);
-}
+};
 
-template <typename T>
-inline void deleter(T* p);
 
 /// specialization for single element (sz = 1)
 template <typename T>
-inline void deleter(T* p) {
-    p->~T(); // call the destructor for the single element
-    hce::deallocate<T>(p, 1); 
-}
+struct deleter<T,1> {
+    void operator()(T* p) const {
+        p->~T(); // call the destructor for the single element
+        hce::deallocate<T>(p, 1); 
+    }
+};
 
 }
+
+template <typename T>
+using unique_ptr = std::unique_ptr<T,memory::deleter<T,1>>;
 
 /**
  @brief allocate a unique_ptr which deletes using the framework allocation/deleter 
 
- Failing to uses this or to implement the underlying logic means that when the 
- unique_ptr goes out of scope the allocated memory will be directly be passed 
- to `std::free()`, rather than be potentially cached for reuse.
+ Failing to uses this mechanism or to implement the underlying logic means that 
+ when the unique_ptr goes out of scope the allocated memory will be directly be 
+ passed to `std::free()`, rather than be potentially cached for reuse, which is 
+ not an error but may be less efficient.
 
  @param as... T constructor arguments 
  @return an allocated `std::unique_ptr<T>`
@@ -348,7 +384,20 @@ template <typename T, typename... Args>
 auto make_unique(Args&&... args) {
     T* t = hce::allocate<T>(1);
     new(t) T(std::forward<Args>(args)...);
-    return std::unique_ptr<T>(t, &memory::deleter<T>);
+    return hce::unique_ptr<T>(t, memory::deleter<T,1>());
+}
+
+/**
+ @brief allocate a shared_ptr which deletes using the framework allocation/deleter 
+
+ @param as... T constructor arguments 
+ @return an allocated `std::shared_ptr<T>`
+ */
+template <typename T, typename... Args>
+auto make_shared(Args&&... args) {
+    T* t = hce::allocate<T>(1);
+    new(t) T(std::forward<Args>(args)...);
+    return std::shared_ptr<T>(t, memory::deleter<T,1>());
 }
 
 /**
@@ -372,7 +421,7 @@ auto make_unique_callable(Callable&& callable, Args&&... args) {
             return callable(args...);
         });
 
-    return std::unique_ptr<FunctionType>(ft, &memory::deleter<FunctionType>);
+    return hce::unique_ptr<FunctionType>(ft, memory::deleter<FunctionType,1>());
 }
 
 /**
@@ -394,7 +443,7 @@ auto make_unique_thunk(Callable&& callable, Args&&... args) {
             callable(args...);
         });
 
-    return std::unique_ptr<hce::thunk>(th, &memory::deleter<hce::thunk>);
+    return hce::unique_ptr<hce::thunk>(th, memory::deleter<hce::thunk,1>());
 }
 
 }

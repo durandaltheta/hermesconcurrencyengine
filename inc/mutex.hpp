@@ -96,13 +96,13 @@ private:
     struct acquire : 
         public hce::scheduler::reschedule<
             hce::awaitable::lockable<
-                hce::awt<void>::interface,
-                hce::spinlock>>
+                hce::spinlock,
+                hce::awt<void>::interface>>
     {
         acquire(hce::mutex* parent) : 
             hce::awaitable::lockable<
-                hce::awt<void>::interface,
-                hce::spinlock>(
+                hce::spinlock,
+                hce::awt<void>::interface>(
                     parent->slk_,
                     hce::awaitable::await::policy::defer,
                     hce::awaitable::resume::policy::no_lock),

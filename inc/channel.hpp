@@ -165,14 +165,14 @@ template <typename LOCK>
 struct base_send_interface : 
     public hce::scheduler::reschedule<
         hce::awaitable::lockable<
-            awt_interface<bool>,
-            LOCK>>
+            LOCK,
+            awt_interface<bool>>>
 {
     base_send_interface(LOCK& lk, detail::channel::transfer t) : 
         hce::scheduler::reschedule<
             hce::awaitable::lockable<
-                awt_interface<bool>,
-                LOCK>>(
+                LOCK,
+                awt_interface<bool>>>(
                     lk,
                     hce::awaitable::await::policy::defer,
                     hce::awaitable::resume::policy::no_lock),
@@ -202,14 +202,14 @@ template <typename LOCK>
 struct base_recv_interface : 
     public hce::scheduler::reschedule<
         hce::awaitable::lockable<
-            awt_interface<bool>,
-            LOCK>>
+            LOCK,
+            awt_interface<bool>>>
 {
     base_recv_interface(LOCK& lk, void* d) : 
         hce::scheduler::reschedule<
             hce::awaitable::lockable<
-                awt_interface<bool>,
-                LOCK>>(
+                LOCK,
+                awt_interface<bool>>>(
                     lk,
                     hce::awaitable::await::policy::defer,
                     hce::awaitable::resume::policy::no_lock),
@@ -251,7 +251,7 @@ struct unbuffered : public interface<T> {
         HCE_LOW_CONSTRUCTOR(); 
     }
     
-    virtual ~unbuffered(){ HCE_LOW_DESTRUCTOR(); }
+    inline virtual ~unbuffered(){ HCE_LOW_DESTRUCTOR(); }
 
     static inline hce::string info_name() { 
         return type::templatize<T,LOCK,ALLOCATOR>("hce::unbuffered"); 
@@ -463,7 +463,7 @@ struct buffered : public interface<T> {
         HCE_LOW_CONSTRUCTOR();
     }
 
-    virtual ~buffered(){ HCE_LOW_DESTRUCTOR(); }
+    inline virtual ~buffered(){ HCE_LOW_DESTRUCTOR(); }
 
     static inline hce::string info_name() { 
         return type::templatize<T,LOCK,ALLOCATOR>("hce::buffered"); 
@@ -711,7 +711,7 @@ struct unlimited : public interface<T> {
         HCE_LOW_CONSTRUCTOR();
     }
 
-    virtual ~unlimited(){ HCE_LOW_DESTRUCTOR(); }
+    inline virtual ~unlimited(){ HCE_LOW_DESTRUCTOR(); }
 
     static inline hce::string info_name() { 
         return type::templatize<T,LOCK,ALLOCATOR>("hce::unlimited"); 
@@ -955,7 +955,7 @@ struct channel : public printable {
     channel(const channel<T>& rhs) = default;
     channel(channel<T>&& rhs) = default;
 
-    virtual ~channel(){ }
+    inline virtual ~channel(){ }
 
     channel<T>& operator=(const channel<T>& rhs) = default;
     channel<T>& operator=(channel<T>&& rhs) = default;
