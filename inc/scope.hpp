@@ -39,16 +39,16 @@ namespace hce {
 
  No additional coroutines can be `add()`ed after `await()` is called.
  */
-template <typename Lock=hce::spinlock, typename Allocator=hce::pool_allocator<T>>
+template <typename Lock=hce::spinlock, typename Allocator=hce::pool_allocator<size_t>>
 struct scope {
     /**
      @brief construct scope with one or more awaitables add()ed to it 
      @param one or more awaitables 
      */
     template <typename... As>
-    scope(AAs&&... as) :
+    scope(As&&... as) :
         // unlimited channel never blocks on send
-        root_ch_(hce::channel<hce::awaitable::interface*>::make<Lock,Allocator>(-1)),
+        root_ch_(hce::channel<hce::awaitable::interface*>::make<Lock,typename Allocator::rebind<hce::awaitable::interface*>::other>(-1)),
         root_awt_(hce::schedule(root_awaiter_(root_ch_)))
     {
         // add all the constructed awaitables to the scope
@@ -113,10 +113,12 @@ private:
 
     // a root awaiter coroutine which awaits all the launched awaiter coroutines
     static inline hce::co<void> root_awaiter_(
-            hce::channel<hce::awaitable::interface*>> awaiters)
+            hce::channel<hce::awaitable::interface*> awaiters)
     {
-        for(auto interface : awaiters) {
-            co_await hce::awt<void>::make(interface);
+        hce::awaitable::interface* i = nullptr;
+
+        while(co_await awaiters.recv(i)) {
+            co_await hce::awt<void>(i);
         }
 
         co_return;

@@ -51,7 +51,7 @@ This project utilizes the MIT license.
 - `c++20` compiler toolchain (eg, `gcc`, `clang`, etc.) 
 - `cmake`
 
-Because usage of this library depends only on the `c++` language, in theory, it should be usable on different operating systems that support a `c++20` toolchain. Actual testing on the target platform with `script/validate` is recommended to verify behavior in a particular environment.
+Because usage of this library depends only on the `c++` language, in theory, it should be usable on different operating systems that support a `c++20` toolchain. 
 
 ### Build 
 A default build from within this repository can be built with:

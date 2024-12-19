@@ -9,7 +9,8 @@ More thorough validation of the library beyond running the unit tests is to run 
 - `roff` 
 - `tex`
 
-## Build and Run
+## Build and Run 
+NOTE: INCOMPLETE FEATURE
 Execute all tests with `script/validate` from this repository's root directory (example with `gcc`):
 ```
 ./script/validate -cc=/path/to/gcc -cxx=/path/to/g++

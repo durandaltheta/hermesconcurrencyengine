@@ -7,6 +7,8 @@ hce::co<void> my_coroutine(hce::channel<int> ch) {
     while(co_await ch.recv(i)) {
         std::cout << "received: " << i << std::endl;
     }
+
+    co_return;
 }
 
 int main() {
