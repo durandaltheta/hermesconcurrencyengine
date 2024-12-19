@@ -43,11 +43,11 @@ struct condition_variable_any : public printable {
     condition_variable_any& operator=(const condition_variable_any&) = delete;
     condition_variable_any& operator=(condition_variable_any&&) = delete;
 
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<T>("hce::condition_variable_any"); 
     }
 
-    inline hce::string name() const { 
+    inline std::string name() const { 
         return condition_variable_any::info_name(); 
     }
 
@@ -277,11 +277,11 @@ struct condition_variable : public printable {
 
     virtual ~condition_variable(){ }
 
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<T>("hce::condition_variable"); 
     }
 
-    inline hce::string name() const { return condition_variable::info_name(); }
+    inline std::string name() const { return condition_variable::info_name(); }
 
     condition_variable& operator=(const condition_variable&) = delete;
     condition_variable& operator=(condition_variable&&) = delete;

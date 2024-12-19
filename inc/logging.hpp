@@ -18,7 +18,6 @@
 #include "loguru.hpp"
 #include "utility.hpp"
 #include "memory.hpp"
-#include "string.hpp"
 
 /**
  User source code compile time macro determining compiled log code. Keeping this 
@@ -327,7 +326,7 @@ namespace type {
 
 /// return a string representing the cv type qualifier
 template <typename T>
-hce::string cv_name() {
+std::string cv_name() {
     if constexpr (std::is_const_v<T>) {
         if constexpr (std::is_volatile_v<T>) {
             return "const volatile";
@@ -343,7 +342,7 @@ hce::string cv_name() {
 
 /// return a string representing the reference type qualifier
 template <typename T>
-hce::string reference_name() {
+std::string reference_name() {
     if constexpr (std::is_pointer_v<T>) {
         return "*";
     } else if constexpr (std::is_lvalue_reference_v<T>) {
@@ -356,11 +355,11 @@ hce::string reference_name() {
 }
 
 /// acquire the base name of an object without namespace or template text
-inline hce::string basename(hce::string name) {
+inline std::string basename(std::string name) {
     // find the last occurrence of "::"
     size_t pos = name.rfind("::");
 
-    if (pos != hce::string::npos) [[likely]] {
+    if (pos != std::string::npos) [[likely]] {
         // modify n, removing the namespace text 
         name = name.substr(pos + 2);
     } 
@@ -370,8 +369,8 @@ inline hce::string basename(hce::string name) {
     // find the last '>' that comes after the last '<'
     size_t close_pos = name.rfind('>');
 
-    if (open_pos != hce::string::npos && 
-        close_pos != hce::string::npos && 
+    if (open_pos != std::string::npos && 
+        close_pos != std::string::npos && 
         open_pos < close_pos) 
     {
         // remove everything between and including the '<' and '>'
@@ -386,14 +385,14 @@ inline hce::string basename(hce::string name) {
 
  This object can be specialized (specializations of primitives and some standard 
  std:: objects are provided). If a specialization is not provided and a method 
- `static hce::string T::info_name()` is available, then this library will select 
+ `static std::string T::info_name()` is available, then this library will select 
  an `info` template to call that method. Otherwise the compiler's naming 
  conventions (`typeid(T).name()`) will be used as a final fallback. However, 
  compiler naming is not guaranteed to be very readable. 
 
  User code can choose to enhance their logging by either implementing an 
  `hce::type::info<USER_T>` specialization OR providing a static method
- `static hce::string USER_T::info_name()` for the given type `USER_T`.
+ `static std::string USER_T::info_name()` for the given type `USER_T`.
 
  This object and its specializations are intended to be used internally by other 
  mechanisms, namely `hce::type::name<T>()` and `hce::type::templatize<Ts...>()`, 
@@ -406,19 +405,19 @@ inline hce::string basename(hce::string name) {
 template <typename T, typename = void>
 struct info {
     // fallback name string
-    static inline hce::string name(){ return typeid(T).name(); }
+    static inline std::string name(){ return typeid(T).name(); }
 };
 
 /**
- Specialization for types with method `static hce::string info_name()`
+ Specialization for types with method `static std::string info_name()`
 
  The compiler sometimes has a really hard time with partial specializations of 
  template dependent types (IE, hce::co<T>::promise_type). This is an alternative 
  route to allow types to get `hce::type::info` support (and thus printability) 
- by defining `static inline hce::string info_name()`. For example, in
+ by defining `static inline std::string info_name()`. For example, in
  `hce::co<T>::promise_type` the following is defined:
  ```
- static inline hce::string info_name() { 
+ static inline std::string info_name() { 
      return type::name<co<T>>() + "::promise_type"; 
  }
  ```
@@ -428,7 +427,7 @@ struct info {
  */
 template <typename T>
 struct info<T, std::void_t<decltype(T::info_name())>> {
-    static inline hce::string name() { 
+    static inline std::string name() { 
         return T::info_name(); 
     }
 };
@@ -444,8 +443,8 @@ struct info<T, std::void_t<decltype(T::info_name())>> {
  @return a name string
  */
 template <typename T>
-inline hce::string name() { 
-    hce::stringstream ss;
+inline std::string name() { 
+    std::stringstream ss;
     ss << cv_name<T>() << info<unqualified<T>>::name() << reference_name<T>(); 
     return ss.str();
 };
@@ -453,23 +452,23 @@ inline hce::string name() {
 namespace detail {
 
 template <typename T>
-inline void templatize_rest(hce::stringstream& ss) { 
+inline void templatize_rest(std::stringstream& ss) { 
     ss << "," << name<T>();
 }
 
 template <typename T, typename T2, typename... Ts>
-inline void templatize_rest(hce::stringstream& ss) {
+inline void templatize_rest(std::stringstream& ss) {
     ss << "," << name<T>();
     templatize_rest<T2,Ts...>(ss);
 }
 
 template <typename T>
-inline void templatize(hce::stringstream& ss) { 
+inline void templatize(std::stringstream& ss) { 
     ss << name<T>() << ">";
 }
 
 template <typename T, typename T2, typename... Ts>
-inline void templatize(hce::stringstream& ss) {
+inline void templatize(std::stringstream& ss) {
     ss << name<T>();
 
     // get the names of any further types in the template list
@@ -486,12 +485,12 @@ inline void templatize(hce::stringstream& ss) {
 
  The final string returned by `templatize` will use the real type names instead 
  of `Ts...` or any other template typename. For example, the resulting string 
- when calling `hce::type::name<my_type<int,hce::string>>()` will be 
- "my_type<int,hce::string>".
+ when calling `hce::type::name<my_type<int,std::string>>()` will be 
+ "my_type<int,std::string>".
  */
 template <typename T, typename... Ts>
-inline hce::string templatize(const hce::string& s) {
-    hce::stringstream ss;
+inline std::string templatize(const std::string& s) {
+    std::stringstream ss;
 
     // get the template base name
     ss << s << "<";
@@ -505,161 +504,161 @@ inline hce::string templatize(const hce::string& s) {
 
 template <>
 struct info<void> {
-    static inline hce::string name(){ return "void"; }
+    static inline std::string name(){ return "void"; }
 };
 
 // int 
 
 template <>
 struct info<int,void> {
-    static inline hce::string name(){ return "int"; }
+    static inline std::string name(){ return "int"; }
 };
 
 template <>
 struct info<unsigned int,void> {
-    static inline hce::string name(){ return "unsigned int"; }
+    static inline std::string name(){ return "unsigned int"; }
 };
 
 template <>
 struct info<short int,void> {
-    static inline hce::string name(){ return "short int"; }
+    static inline std::string name(){ return "short int"; }
 };
 
 template <>
 struct info<unsigned short int,void> {
-    static inline hce::string name(){ return "unsigned short int"; }
+    static inline std::string name(){ return "unsigned short int"; }
 };
 
 template <>
 struct info<long int,void> {
-    static inline hce::string name(){ return "long int"; }
+    static inline std::string name(){ return "long int"; }
 };
 
 template <>
 struct info<unsigned long int,void> {
-    static inline hce::string name(){ return "unsigned long int"; }
+    static inline std::string name(){ return "unsigned long int"; }
 };
 
 template <>
 struct info<long long int,void> {
-    static inline hce::string name(){ return "long long int"; }
+    static inline std::string name(){ return "long long int"; }
 };
 
 template <>
 struct info<unsigned long long int,void> {
-    static inline hce::string name(){ return "unsigned long long int"; }
+    static inline std::string name(){ return "unsigned long long int"; }
 };
 
 // bool
 
 template <>
 struct info<bool,void> {
-    static inline hce::string name(){ return "bool"; }
+    static inline std::string name(){ return "bool"; }
 };
 
 // float 
 
 template <>
 struct info<float,void> {
-    static inline hce::string name(){ return "float"; }
+    static inline std::string name(){ return "float"; }
 };
 
 // double 
 
 template <>
 struct info<double,void> {
-    static inline hce::string name(){ return "double"; }
+    static inline std::string name(){ return "double"; }
 };
 
 template <>
 struct info<long double,void> {
-    static inline hce::string name(){ return "long double"; }
+    static inline std::string name(){ return "long double"; }
 };
 
 // char 
 
 template <>
 struct info<char,void> {
-    static inline hce::string name(){ return "char"; }
+    static inline std::string name(){ return "char"; }
 };
 
 template <>
 struct info<signed char,void> {
-    static inline hce::string name(){ return "signed char"; }
+    static inline std::string name(){ return "signed char"; }
 };
 
 template <>
 struct info<unsigned char,void> {
-    static inline hce::string name(){ return "unsigned char"; }
+    static inline std::string name(){ return "unsigned char"; }
 };
 
 template <>
 struct info<wchar_t,void> {
-    static inline hce::string name(){ return "wchar_t"; }
+    static inline std::string name(){ return "wchar_t"; }
 };
 
 template <>
 struct info<char16_t,void> {
-    static inline hce::string name(){ return "char16_t"; }
+    static inline std::string name(){ return "char16_t"; }
 };
 
 template <>
 struct info<char32_t,void> {
-    static inline hce::string name(){ return "char32_t"; }
+    static inline std::string name(){ return "char32_t"; }
 };
 
 // additional info name specializations
 
 template <>
 struct info<std::byte,void> {
-    static inline hce::string name(){ return "std::byte"; }
+    static inline std::string name(){ return "std::byte"; }
 };
 
 template <>
-struct info<hce::string,void> {
-    static inline hce::string name(){ return "hce::string"; }
+struct info<std::string,void> {
+    static inline std::string name(){ return "std::string"; }
 };
 
 template <>
 struct info<std::any,void> {
-    static inline hce::string name(){ return "std::any"; }
+    static inline std::string name(){ return "std::any"; }
 };
 
 template <>
 struct info<std::mutex,void> {
-    static inline hce::string name(){ return "std::mutex"; }
+    static inline std::string name(){ return "std::mutex"; }
 };
 
 template <>
 struct info<std::condition_variable,void> {
-    static inline hce::string name(){ return "std::condition_variable"; }
+    static inline std::string name(){ return "std::condition_variable"; }
 };
 
 template <typename T>
 struct info<std::coroutine_handle<T>,void> {
-    static inline hce::string name(){ 
+    static inline std::string name(){ 
         return templatize<T>("std::coroutine_handle"); 
     }
 };
 
 template <>
 struct info<std::condition_variable_any,void> {
-    static inline hce::string name(){ return "std::condition_variable_any"; }
+    static inline std::string name(){ return "std::condition_variable_any"; }
 };
 
 template <typename T>
 struct info<std::unique_ptr<T>,void> {
-    static inline hce::string name(){ return templatize<T>("std::unique_ptr"); }
+    static inline std::string name(){ return templatize<T>("std::unique_ptr"); }
 };
 
 template <typename T>
 struct info<std::shared_ptr<T>,void> {
-    static inline hce::string name(){ return templatize<T>("std::shared_ptr"); }
+    static inline std::string name(){ return templatize<T>("std::shared_ptr"); }
 };
 
 template <typename T>
 struct info<std::weak_ptr<T>,void> {
-    static inline hce::string name(){ return templatize<T>("std::weak_ptr"); }
+    static inline std::string name(){ return templatize<T>("std::weak_ptr"); }
 };
 
 }
@@ -668,7 +667,7 @@ struct info<std::weak_ptr<T>,void> {
  @brief interface for allowing an object instance to be printable
 
  Objects which implement printable can passed to streams (IE, 
- `hce::stringstream`, `std::cout`) and also converted to `hce::string` 
+ `std::stringstream`, `std::cout`) and also converted to `std::string` 
  representation.
 
  This object's namespace also contains a variety of static loglevel 
@@ -681,7 +680,7 @@ struct printable {
 
      @return the object name 
      */
-    virtual hce::string name() const = 0;
+    virtual std::string name() const = 0;
 
     /**
      @brief string with optional content of this object 
@@ -690,17 +689,17 @@ struct printable {
      internal elements of a given object, such as allocated pointers, or other 
      printable objects it contains.
      */
-    virtual hce::string content() const { return {}; }
+    virtual std::string content() const { return {}; }
 
     /// string conversion
-    inline hce::string to_string() const { 
-        hce::stringstream ss;
+    inline std::string to_string() const { 
+        std::stringstream ss;
 
         // assemble the namespaced name and memory address of the object
         ss << this->name() << "@" << (void*)this;
 
         // check for object content
-        hce::string c = this->content();
+        std::string c = this->content();
 
         if(!(c.empty())) { 
             // put content in brackets to print like a container
@@ -709,9 +708,6 @@ struct printable {
 
         return ss.str();
     }
-
-    /// hce::string conversion
-    virtual inline operator hce::string() const final { return to_string(); }
 
     /// std::string conversion
     virtual inline operator std::string() const final { return to_string(); }
@@ -747,11 +743,11 @@ struct printable {
     template <typename... As>
     inline void log_constructor__(int verbosity, const char* file, int line, As&&... as) const {
         if(verbosity <= printable::thread_log_level()) {
-            hce::stringstream ss;
+            std::stringstream ss;
             printable::ingest_args_(ss, std::forward<As>(as)...);
-            hce::string self(*this);
-            hce::string ingested(ss.str());
-            hce::string name_str(type::basename(this->name()));
+            std::string self(*this);
+            std::string ingested(ss.str());
+            std::string name_str(type::basename(this->name()));
 
             loguru::log(verbosity, 
                         file, 
@@ -765,8 +761,8 @@ struct printable {
 
     inline void log_destructor__(int verbosity, const char* file, int line) const {
         if(verbosity <= printable::thread_log_level()) {
-            hce::string self(*this);
-            hce::string name_str(type::basename(this->name()));
+            std::string self(*this);
+            std::string name_str(type::basename(this->name()));
 
             loguru::log(verbosity, 
                         file, 
@@ -778,12 +774,12 @@ struct printable {
     }
 
     template <typename... As>
-    inline void log_method_enter__(int verbosity, const char* file, int line, hce::string method_name, As&&... as) const {
+    inline void log_method_enter__(int verbosity, const char* file, int line, std::string method_name, As&&... as) const {
         if(verbosity <= printable::thread_log_level()) {
-            hce::stringstream ss;
+            std::stringstream ss;
             printable::ingest_args_(ss, std::forward<As>(as)...);
-            hce::string self(*this);
-            hce::string ingested(ss.str());
+            std::string self(*this);
+            std::string ingested(ss.str());
 
             loguru::log(verbosity, 
                         file, 
@@ -796,12 +792,12 @@ struct printable {
     }
 
     template <typename... As>
-    inline void log_method_body__(int verbosity, const char* file, int line, hce::string method_name, As&&... as) const {
+    inline void log_method_body__(int verbosity, const char* file, int line, std::string method_name, As&&... as) const {
         if(verbosity <= printable::thread_log_level()) {
-            hce::stringstream ss;
+            std::stringstream ss;
             printable::ingest_(ss, std::forward<As>(as)...);
-            hce::string self(*this);
-            hce::string ingested(ss.str());
+            std::string self(*this);
+            std::string ingested(ss.str());
 
             loguru::log(verbosity, 
                         file, 
@@ -814,11 +810,11 @@ struct printable {
     }
 
     template <typename... As>
-    static inline void log_function_enter__(int verbosity, const char* file, int line, hce::string method_name, As&&... as) {
+    static inline void log_function_enter__(int verbosity, const char* file, int line, std::string method_name, As&&... as) {
         if(verbosity <= printable::thread_log_level()) {
-            hce::stringstream ss;
+            std::stringstream ss;
             printable::ingest_args_(ss, std::forward<As>(as)...);
-            hce::string ingested(ss.str());
+            std::string ingested(ss.str());
 
             loguru::log(verbosity, 
                         file, 
@@ -830,11 +826,11 @@ struct printable {
     }
 
     template <typename... As>
-    static inline void log_function_body__(int verbosity, const char* file, int line, hce::string method_name, As&&... as) {
+    static inline void log_function_body__(int verbosity, const char* file, int line, std::string method_name, As&&... as) {
         if(verbosity <= printable::thread_log_level()) {
-            hce::stringstream ss;
+            std::stringstream ss;
             printable::ingest_(ss, std::forward<As>(as)...);
-            hce::string ingested(ss.str());
+            std::string ingested(ss.str());
 
             loguru::log(verbosity, 
                         file, 
@@ -851,45 +847,45 @@ private:
 
     // ingest a single item
     template <typename A>
-    static inline void ingest_item_(hce::stringstream& ss, A&& a) {
+    static inline void ingest_item_(std::stringstream& ss, A&& a) {
         ss << std::forward<A>(a);
     }
 
-    static inline void ingest_rest_of_args_(hce::stringstream& ss) { }
+    static inline void ingest_rest_of_args_(std::stringstream& ss) { }
 
     // in argument lists, begin inserting "," between arguments
     template <typename A, typename... As>
-    static inline void ingest_rest_of_args_(hce::stringstream& ss, A&& a, As&&... as) {
+    static inline void ingest_rest_of_args_(std::stringstream& ss, A&& a, As&&... as) {
         ss << ", "; 
         ingest_item_(ss,std::forward<A>(a));
         ingest_rest_of_args_(ss, std::forward<As>(as)...);
     }
    
     // final ingest
-    static inline void ingest_args_(hce::stringstream& ss) { }
+    static inline void ingest_args_(std::stringstream& ss) { }
 
     // for ingesting a list of function or method arguments
     template <typename A, typename... As>
-    static inline void ingest_args_(hce::stringstream& ss, A&& a, As&&... as) {
+    static inline void ingest_args_(std::stringstream& ss, A&& a, As&&... as) {
         ingest_item_(ss,std::forward<A>(a));
         ingest_rest_of_args_(ss, std::forward<As>(as)...);
     }
     
     // final ingest
-    static inline void ingest_(hce::stringstream& ss) { }
+    static inline void ingest_(std::stringstream& ss) { }
 
     // for ingesting arbitrary data into a logline
     template <typename A, typename... As>
-    static inline void ingest_(hce::stringstream& ss, A&& a, As&&... as) {
+    static inline void ingest_(std::stringstream& ss, A&& a, As&&... as) {
         ingest_item_(ss,std::forward<A>(a));
         ingest_(ss, std::forward<As>(as)...);
     }
 };
 
-/// convenience Callable->hce::string conversion
+/// convenience Callable->std::string conversion
 template <typename Callable>
-inline hce::string callable_to_string(Callable& f) {
-    hce::stringstream ss;
+inline std::string callable_to_string(Callable& f) {
+    std::stringstream ss;
     ss << "callable@" << (void*)&f;
     return ss.str();
 }

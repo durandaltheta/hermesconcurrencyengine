@@ -96,7 +96,6 @@ set(HCE_HEADER_FILES
     ${LOGURU_DIR}/loguru.hpp
     ${HCE_INCLUDE_DIR}/utility.hpp
     ${HCE_INCLUDE_DIR}/memory.hpp
-    ${HCE_INCLUDE_DIR}/string.hpp
     ${HCE_INCLUDE_DIR}/logging.hpp
     ${HCE_INCLUDE_DIR}/atomic.hpp
     ${HCE_INCLUDE_DIR}/id.hpp

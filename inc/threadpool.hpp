@@ -39,9 +39,9 @@ namespace hce {
  threads beyond the first will be launched.
  */
 struct threadpool : public printable {
-    static inline hce::string info_name() { return "hce::threadpool"; }
-    inline hce::string name() const { return threadpool::info_name(); }
-    hce::string content() const;
+    static inline std::string info_name() { return "hce::threadpool"; }
+    inline std::string name() const { return threadpool::info_name(); }
+    std::string content() const;
 
     /**
      There is only ever one threadpool in existence.

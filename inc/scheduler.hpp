@@ -33,8 +33,8 @@ struct scheduler;
 
 struct scheduler_halted_exception : public std::exception {
     scheduler_halted_exception(scheduler* sch, const char* op) : 
-        estr([&]() -> hce::string {
-            hce::stringstream ss;
+        estr([&]() -> std::string {
+            std::stringstream ss;
             ss << "op failed:" << op << ", scheduler is halted:" << sch;
             return ss.str();
         }())
@@ -43,13 +43,13 @@ struct scheduler_halted_exception : public std::exception {
     inline const char* what() const noexcept { return estr.c_str(); }
 
 private:
-    const hce::string estr;
+    const std::string estr;
 };
 
 struct awaitable_destroyed_without_joining_result : public std::exception {
     awaitable_destroyed_without_joining_result(void* c, void* j) :
-        estr([&]() -> hce::string {
-            hce::stringstream ss;
+        estr([&]() -> std::string {
+            std::stringstream ss;
             ss << "std::coroutine_handle<>@" 
                << (void*)c
                << " was destroyed before it was completed, so " 
@@ -62,7 +62,7 @@ struct awaitable_destroyed_without_joining_result : public std::exception {
     inline const char* what() const noexcept { return estr.c_str(); }
 
 private:
-    const hce::string estr;
+    const std::string estr;
 };
 
 namespace config {
@@ -114,11 +114,11 @@ struct joiner :
 
     virtual ~joiner(){}
 
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<T>("hce::detail::scheduler::joiner"); 
     }
 
-    inline hce::string name() const { return joiner<T>::info_name(); }
+    inline std::string name() const { return joiner<T>::info_name(); }
     inline void* address() { return address_; }
     inline bool on_ready() { return ready_; }
 
@@ -204,11 +204,11 @@ struct joiner<void> :
 
     virtual ~joiner(){}
     
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<void>("hce::detail::scheduler::joiner"); 
     }
 
-    inline hce::string name() const { return joiner<void>::info_name(); }
+    inline std::string name() const { return joiner<void>::info_name(); }
     inline void* address() { return address_; }
     inline bool on_ready() { return ready_; }
     inline void on_resume(void* m) { ready_ = true; }
@@ -372,8 +372,8 @@ struct scheduler : public printable {
 
     struct scheduler_cannot_run_in_a_coroutine_exception : public std::exception {
         scheduler_cannot_run_in_a_coroutine_exception() : 
-            estr([]() -> hce::string {
-                hce::stringstream ss;
+            estr([]() -> std::string {
+                std::stringstream ss;
                 ss << coroutine::local()
                    << " attempted to run an hce::scheduler";
                 return ss.str();
@@ -383,7 +383,7 @@ struct scheduler : public printable {
         inline const char* what() const noexcept { return estr.c_str(); }
 
     private:
-        const hce::string estr;
+        const std::string estr;
     };
 
     /**
@@ -483,14 +483,14 @@ struct scheduler : public printable {
 
         virtual ~joiner() { HCE_MIN_DESTRUCTOR(); }
 
-        static inline hce::string info_name() { 
+        static inline std::string info_name() { 
             return type::templatize<T>("hce::scheduler::joiner"); 
         }
 
-        inline hce::string name() const { return joiner<T>::info_name(); }
+        inline std::string name() const { return joiner<T>::info_name(); }
 
-        inline hce::string content() {
-            hce::stringstream ss;
+        inline std::string content() {
+            std::stringstream ss;
             ss << std::coroutine_handle<>::from_address(this->address());
             return ss.str();
         }
@@ -508,11 +508,11 @@ struct scheduler : public printable {
                 HCE_HIGH_DESTRUCTOR(); 
             }
 
-            static inline hce::string info_name() { 
+            static inline std::string info_name() { 
                 return "hce::scheduler::lifecycle::manager"; 
             }
 
-            inline hce::string name() const { return manager::info_name(); }
+            inline std::string name() const { return manager::info_name(); }
 
             /** 
              @brief access the process wide manager object
@@ -520,8 +520,8 @@ struct scheduler : public printable {
              */
             static manager& instance();
 
-            inline hce::string content() const { 
-                hce::stringstream ss;
+            inline std::string content() const { 
+                std::stringstream ss;
                 auto it = lifecycle_pointers_.begin();
                 auto end = lifecycle_pointers_.end();
 
@@ -598,14 +598,14 @@ struct scheduler : public printable {
             thd_.join(); // join the scheduler's thread
         }
 
-        static inline hce::string info_name() { 
+        static inline std::string info_name() { 
             return "hce::scheduler::lifecycle"; 
         }
 
-        inline hce::string name() const { return lifecycle::info_name(); }
+        inline std::string name() const { return lifecycle::info_name(); }
 
-        inline hce::string content() const {
-            hce::stringstream ss;
+        inline std::string content() const {
+            std::stringstream ss;
             ss << sch_.get() << ", std::thread::id@" << thd_.get_id();
             return ss.str();
         }
@@ -728,8 +728,8 @@ struct scheduler : public printable {
         HCE_HIGH_DESTRUCTOR();
     }
 
-    static inline hce::string info_name() { return "hce::scheduler"; }
-    inline hce::string name() const { return scheduler::info_name(); }
+    static inline std::string info_name() { return "hce::scheduler"; }
+    inline std::string name() const { return scheduler::info_name(); }
 
     /**
      @brief allocate, construct and run a scheduler on a new system thread
@@ -1161,11 +1161,11 @@ private:
             // returns true if called on a thread owned by a worker object, else false
             static bool tl_is_block() { return tl_is_worker(); }
 
-            static inline hce::string info_name() { 
+            static inline std::string info_name() { 
                 return "hce::scheduler::blocking::worker"; 
             }
 
-            inline hce::string name() const { return worker::info_name(); }
+            inline std::string name() const { return worker::info_name(); }
 
             inline void schedule(std::unique_ptr<hce::thunk> operation) { 
                 operations_.push_back(std::move(operation));
@@ -1217,11 +1217,11 @@ private:
 
             virtual ~sync() { }
             
-            static inline hce::string info_name() { 
+            static inline std::string info_name() { 
                 return type::templatize<T>("hce::detail::scheduler::sync"); 
             }
 
-            inline hce::string name() const { return sync<T>::info_name(); }
+            inline std::string name() const { return sync<T>::info_name(); }
         };
 
         // awaitable implementation for returning an asynchronously available 
@@ -1245,11 +1245,11 @@ private:
                 }
             }
             
-            static inline hce::string info_name() { 
+            static inline std::string info_name() { 
                 return type::templatize<T>("hce::detail::scheduler::async"); 
             }
 
-            inline hce::string name() const { return async<T>::info_name(); }
+            inline std::string name() const { return async<T>::info_name(); }
 
             // return the contractor's worker
             inline blocking::worker& worker() { return *wkr_; }
@@ -1288,21 +1288,21 @@ private:
             HCE_MED_DESTRUCTOR();
 
             if(!ready_) {
-                hce::stringstream ss;
+                std::stringstream ss;
                 ss << *this << "was not awaited nor resumed";
                 HCE_FATAL_METHOD_BODY("~timer",ss.str());
                 std::terminate();
             }
         }
 
-        static inline hce::string info_name() { 
+        static inline std::string info_name() { 
             return "hce::scheduler::timer"; 
         }
 
-        inline hce::string name() const { return timer::info_name(); }
+        inline std::string name() const { return timer::info_name(); }
 
-        inline hce::string content() const { 
-            hce::stringstream ss;
+        inline std::string content() const { 
+            std::stringstream ss;
             ss << id_ << ", " << tp_;
             return ss.str(); 
         }

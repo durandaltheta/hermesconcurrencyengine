@@ -359,6 +359,7 @@ namespace test {
 namespace scheduler {
 
 hce::co<void> cache_info_check_co(hce::config::memory::cache::info::thread::type t) {
+    HCE_INFO_FUNCTION_ENTER("cache_info_check_co", t);
     auto& info = hce::config::memory::cache::info::get();
     auto type = hce::config::memory::cache::info::thread::get_type();
 
@@ -398,8 +399,6 @@ hce::co<void> cache_allocate_deallocate_co() {
         const size_t cur_bucket_block_size = 1 << i;
         const size_t prev_bucket_block_size = i ? 1 << (i-1) : 0;
             
-        HCE_WARNING_FUNCTION_BODY("test::scheduler::cache_allocate_deallocate","cur_bucket_block_size:",cur_bucket_block_size);
-       
         // ensure we select the right bucket for each bucket size
         EXPECT_EQ(i, cache.index(cur_bucket_block_size));
 

@@ -63,8 +63,8 @@ struct scope {
         // root_awt_ will block the current thread and wait() if await() not called
     }
 
-    static inline hce::string info_name() { return "hce::scope"; }
-    inline hce::string name() const { return scope::info_name(); }
+    static inline std::string info_name() { return "hce::scope"; }
+    inline std::string name() const { return scope::info_name(); }
 
     /**
      @brief add one or more awaitables to the scope 

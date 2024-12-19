@@ -82,14 +82,14 @@ struct list : public printable {
         } 
     }
 
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<T>("hce::list"); 
     }
 
-    inline hce::string name() const { return list<T>::info_name(); }
+    inline std::string name() const { return list<T>::info_name(); }
 
-    inline hce::string content() const {
-        hce::stringstream ss;
+    inline std::string content() const {
+        std::stringstream ss;
         ss << "size:" << size_ << ", " << allocator_;
         return ss.str();
     }
@@ -251,11 +251,11 @@ private:
         template <typename... As>
         node(As&&... as) : value(std::forward<As>(as)...), next(nullptr) { }
 
-        static inline hce::string info_name() { 
+        static inline std::string info_name() { 
             return hce::list<T>::info_name() + "::node"; 
         }
 
-        inline hce::string name() const { return node::info_name(); }
+        inline std::string name() const { return node::info_name(); }
 
         T value;
         node* next;

@@ -17,8 +17,8 @@ namespace detail {
  duration to stream implementation is needed;
  */
 template <typename Rep, typename Period>
-inline hce::string to_string(const std::chrono::duration<Rep, Period>& d) {
-    hce::stringstream ss;
+inline std::string to_string(const std::chrono::duration<Rep, Period>& d) {
+    std::stringstream ss;
     ss << d.count() << " ";
 
     if (std::ratio_equal<Period, std::nano>::value) {
@@ -41,7 +41,7 @@ inline hce::string to_string(const std::chrono::duration<Rep, Period>& d) {
 }
 
 template <typename Rep, typename Period>
-inline hce::string to_string(const std::chrono::time_point<Rep, Period>& t) {
+inline std::string to_string(const std::chrono::time_point<Rep, Period>& t) {
     return to_string(t.time_since_epoch());
 }
 
@@ -70,9 +70,9 @@ struct duration :
 
     virtual ~duration() { HCE_TRACE_DESTRUCTOR(); }
 
-    static inline hce::string info_name() { return "hce::chrono::duration"; }
-    inline hce::string name() const { return duration::info_name(); }
-    inline hce::string content() const { return hce::chrono::detail::to_string(*this); }
+    static inline std::string info_name() { return "hce::chrono::duration"; }
+    inline std::string name() const { return duration::info_name(); }
+    inline std::string content() const { return hce::chrono::detail::to_string(*this); }
 
     /**
      @brief convert to a duration to the approximate count of a specified DURATION unit type
@@ -107,9 +107,9 @@ struct time_point :
 
     virtual ~time_point() { HCE_TRACE_DESTRUCTOR(); }
 
-    static inline hce::string info_name() { return "hce::chrono::time_point"; }
-    inline hce::string name() const { return time_point::info_name(); }
-    inline hce::string content() const { return hce::chrono::detail::to_string(*this); }
+    static inline std::string info_name() { return "hce::chrono::time_point"; }
+    inline std::string name() const { return time_point::info_name(); }
+    inline std::string content() const { return hce::chrono::detail::to_string(*this); }
 
     /// trivial conversion to a duration
     inline operator duration() { return time_since_epoch(); }

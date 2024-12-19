@@ -22,8 +22,8 @@ struct spinlock : public printable {
 
     ~spinlock() { HCE_MIN_DESTRUCTOR(); }
 
-    static inline hce::string info_name() { return "hce::spinlock"; }
-    inline hce::string name() const { return spinlock::info_name(); }
+    static inline std::string info_name() { return "hce::spinlock"; }
+    inline std::string name() const { return spinlock::info_name(); }
 
     inline void lock() {
         HCE_MIN_METHOD_ENTER("lock");
@@ -54,8 +54,8 @@ struct lockfree : public printable {
     lockfree() { HCE_MIN_CONSTRUCTOR(); }
     ~lockfree() { HCE_MIN_DESTRUCTOR(); }
 
-    static inline hce::string info_name() { return "hce::lockfree"; }
-    inline hce::string name() const { return lockfree::info_name(); }
+    static inline std::string info_name() { return "hce::lockfree"; }
+    inline std::string name() const { return lockfree::info_name(); }
 
     inline void lock() { HCE_MIN_METHOD_ENTER("lock"); }
 

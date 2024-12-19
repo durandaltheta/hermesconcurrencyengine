@@ -41,11 +41,11 @@ struct synchronized_queue : public printable {
     synchronized_queue(const synchronized_queue<T>&) = delete;
     synchronized_queue(synchronized_queue<T>&&) = delete;
 
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<T>("hce::synchronized_queue"); 
     }
 
-    inline hce::string name() const { 
+    inline std::string name() const { 
         return synchronized_queue<T>::info_name(); 
     }
 

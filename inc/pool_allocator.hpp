@@ -102,7 +102,7 @@ struct pool_allocator : public printable {
     pool_allocator(const pool_allocator<T>& rhs) :
         block_limit_(rhs.block_limit_)
     { 
-        HCE_MIN_CONSTRUCTOR(hce::string("const ") + rhs.to_string() + "&");
+        HCE_MIN_CONSTRUCTOR(std::string("const ") + rhs.to_string() + "&");
     }
 
     /**
@@ -114,7 +114,7 @@ struct pool_allocator : public printable {
     template <typename U, typename = std::enable_if_t<!std::is_same_v<T, U>>>
     pool_allocator(const pool_allocator<U>& rhs) : block_limit_(rhs.limit()) {
         // Copy the block limit during rebind
-        HCE_MIN_CONSTRUCTOR(hce::string("const ") + rhs.to_string() + "&");
+        HCE_MIN_CONSTRUCTOR(std::string("const ") + rhs.to_string() + "&");
     }
 
     pool_allocator(pool_allocator<T>&& rhs) : block_limit_(0) {
@@ -133,14 +133,14 @@ struct pool_allocator : public printable {
         }
     }
 
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<T>("hce::pool_allocator"); 
     }
 
-    inline hce::string name() const { return pool_allocator<T>::info_name(); }
+    inline std::string name() const { return pool_allocator<T>::info_name(); }
 
     pool_allocator<T>& operator=(const pool_allocator<T>& rhs) {
-        HCE_MIN_METHOD_ENTER("operator=", hce::string("const ") + rhs.to_string() + "&");
+        HCE_MIN_METHOD_ENTER("operator=", std::string("const ") + rhs.to_string() + "&");
         block_limit_ = rhs.block_limit_;
         return *this;
     }

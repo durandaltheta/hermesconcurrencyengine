@@ -4,8 +4,8 @@
 
 #include "threadpool.hpp"
 
-hce::string hce::threadpool::content() const { 
-    hce::stringstream ss;
+std::string hce::threadpool::content() const { 
+    std::stringstream ss;
     auto it = schedulers_.cbegin();
     auto end = schedulers_.cend();
 

@@ -20,8 +20,8 @@ namespace hce {
  memory is usable as a container key.
  */
 struct id : public printable {
-    inline hce::string content() const {
-        hce::stringstream ss;
+    inline std::string content() const {
+        std::stringstream ss;
         ss << "get():" << get();
         return ss.str();
     }
@@ -84,8 +84,8 @@ struct uid : public id {
     uid& operator=(const uid&) = delete;
     uid& operator=(uid&&) = default;
 
-    static inline hce::string info_name() { return "hce::uid"; }
-    inline hce::string name() const { return uid::info_name(); }
+    static inline std::string info_name() { return "hce::uid"; }
+    inline std::string name() const { return uid::info_name(); }
 
     inline void make() {
         HCE_TRACE_METHOD_ENTER("make");
@@ -118,8 +118,8 @@ struct sid : public id {
     sid& operator=(const sid&) = default;
     sid& operator=(sid&&) = default;
 
-    static inline hce::string info_name() { return "hce::sid"; }
-    inline hce::string name() const { return sid::info_name(); }
+    static inline std::string info_name() { return "hce::sid"; }
+    inline std::string name() const { return sid::info_name(); }
 
     inline void make() {
         HCE_TRACE_METHOD_ENTER("make");

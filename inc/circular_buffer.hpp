@@ -91,14 +91,14 @@ struct circular_buffer : public printable {
         return *this;
     }
 
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<T>("hce::circular_buffer"); 
     }
 
-    inline hce::string name() const { return circular_buffer<T>::info_name(); }
+    inline std::string name() const { return circular_buffer<T>::info_name(); }
 
-    inline hce::string content() const {
-        hce::stringstream ss;
+    inline std::string content() const {
+        std::stringstream ss;
         ss << "size: " << size_ << ", used: " << used_;
         return ss.str();
     }

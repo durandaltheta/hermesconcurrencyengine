@@ -26,8 +26,8 @@ namespace hce {
 struct mutex : public printable {
     struct already_unlocked_exception : public std::exception {
         already_unlocked_exception(mutex* m) :
-            estr([&]() -> hce::string {
-                hce::stringstream ss;
+            estr([&]() -> std::string {
+                std::stringstream ss;
                 ss << "cannot unlock already unlocked"
                    << m->to_string()
                    << "]";
@@ -41,7 +41,7 @@ struct mutex : public printable {
         }
 
     private:
-        const hce::string estr;
+        const std::string estr;
     };
 
     mutex(){ HCE_MIN_CONSTRUCTOR(); }
@@ -50,8 +50,8 @@ struct mutex : public printable {
 
     virtual ~mutex(){ HCE_MIN_DESTRUCTOR(); }
 
-    static inline hce::string info_name() { return "hce::mutex"; }
-    inline hce::string name() const { return mutex::info_name(); }
+    static inline std::string info_name() { return "hce::mutex"; }
+    inline std::string name() const { return mutex::info_name(); }
     
     mutex& operator=(const mutex&) = delete;
     mutex& operator=(mutex&&) = delete;
@@ -179,11 +179,11 @@ struct unique_lock : public printable {
         if(acquired_) { unlock(); } 
     }
 
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<Lock>("hce::mutex"); 
     }
 
-    inline hce::string name() const { return unique_lock<Lock>::info_name(); }
+    inline std::string name() const { return unique_lock<Lock>::info_name(); }
 
     unique_lock<Lock>& operator=(const unique_lock<Lock>& rhs) = delete;
 
@@ -219,8 +219,8 @@ struct unique_lock : public printable {
     }
 
     /// return our stringified mutex address
-    inline hce::string content() const { 
-        return hce::string("lock@") + 
+    inline std::string content() const { 
+        return std::string("lock@") + 
                std::to_string((void*)lk_) +
                ", acquired:" +
                std::to_string(acquired_);

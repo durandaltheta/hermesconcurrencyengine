@@ -253,11 +253,11 @@ struct unbuffered : public interface<T> {
     
     inline virtual ~unbuffered(){ HCE_LOW_DESTRUCTOR(); }
 
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<T,LOCK,ALLOCATOR>("hce::unbuffered"); 
     }
 
-    inline hce::string name() const { 
+    inline std::string name() const { 
         return unbuffered<T,LOCK,ALLOCATOR>::info_name(); 
     }
 
@@ -357,12 +357,12 @@ private:
             parent_(p)
         { }
 
-        static inline hce::string info_name() {
+        static inline std::string info_name() {
             return detail::channel::unbuffered<T,LOCK,ALLOCATOR>::info_name() + 
                    "::send_interface";
         };
 
-        inline hce::string name() const { return send_interface::info_name(); }
+        inline std::string name() const { return send_interface::info_name(); }
 
         inline bool on_ready() {
             if(parent_.closed_flag_) [[unlikely]] {
@@ -391,12 +391,12 @@ private:
             parent_(p)
         { }
 
-        static inline hce::string info_name() {
+        static inline std::string info_name() {
             return detail::channel::unbuffered<T,LOCK,ALLOCATOR>::info_name() + 
                    "::recv_interface";
         };
 
-        inline hce::string name() const { return recv_interface::info_name(); }
+        inline std::string name() const { return recv_interface::info_name(); }
 
         inline bool on_ready() {
             if(parent_.closed_flag_) [[unlikely]] { 
@@ -465,11 +465,11 @@ struct buffered : public interface<T> {
 
     inline virtual ~buffered(){ HCE_LOW_DESTRUCTOR(); }
 
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<T,LOCK,ALLOCATOR>("hce::buffered"); 
     }
 
-    inline hce::string name() const { 
+    inline std::string name() const { 
         return buffered<T,LOCK,ALLOCATOR>::info_name(); 
     }
 
@@ -589,12 +589,12 @@ private:
             parent_(p)
         { }
 
-        static inline hce::string info_name() {
+        static inline std::string info_name() {
             return detail::channel::buffered<T,LOCK,ALLOCATOR>::info_name() + 
                    "::send_interface";
         };
 
-        inline hce::string name() const { return send_interface::info_name(); }
+        inline std::string name() const { return send_interface::info_name(); }
 
         inline bool on_ready() {
             if(parent_.closed_flag_) [[unlikely]] {
@@ -629,12 +629,12 @@ private:
             parent_(p)
         { }
 
-        static inline hce::string info_name() {
+        static inline std::string info_name() {
             return detail::channel::buffered<T,LOCK,ALLOCATOR>::info_name() + 
                    "::recv_interface";
         };
 
-        inline hce::string name() const { return recv_interface::info_name(); }
+        inline std::string name() const { return recv_interface::info_name(); }
 
         inline bool on_ready() {
             if(parent_.buf_.empty()) [[unlikely]] {
@@ -713,11 +713,11 @@ struct unlimited : public interface<T> {
 
     inline virtual ~unlimited(){ HCE_LOW_DESTRUCTOR(); }
 
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<T,LOCK,ALLOCATOR>("hce::unlimited"); 
     }
 
-    inline hce::string name() const { 
+    inline std::string name() const { 
         return unlimited<T,LOCK,ALLOCATOR>::info_name(); 
     }
 
@@ -829,12 +829,12 @@ private:
             parent_(p)
         { }
 
-        static inline hce::string info_name() {
+        static inline std::string info_name() {
             return detail::channel::unlimited<T,LOCK,ALLOCATOR>::info_name() + 
                    "::send_interface";
         };
 
-        inline hce::string name() const { return send_interface::info_name(); }
+        inline std::string name() const { return send_interface::info_name(); }
 
         inline bool on_ready() { 
             if(parent_.closed_flag_) [[unlikely]] {
@@ -865,12 +865,12 @@ private:
             parent_(p)
         { }
 
-        static inline hce::string info_name() {
+        static inline std::string info_name() {
             return detail::channel::unlimited<T,LOCK,ALLOCATOR>::info_name() + 
                    "::recv_interface";
         };
 
-        inline hce::string name() const { return recv_interface::info_name(); }
+        inline std::string name() const { return recv_interface::info_name(); }
 
         inline bool on_ready() {
             if(parent_.queue_.empty()) [[unlikely]] {
@@ -960,14 +960,14 @@ struct channel : public printable {
     channel<T>& operator=(const channel<T>& rhs) = default;
     channel<T>& operator=(channel<T>&& rhs) = default;
 
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<T>("hce::channel"); 
     }
 
-    inline hce::string name() const { return channel<T>::info_name(); }
+    inline std::string name() const { return channel<T>::info_name(); }
 
-    inline hce::string content() const { 
-        hce::stringstream ss;
+    inline std::string content() const { 
+        std::stringstream ss;
         ss << context_.get();
         return ss.str();
     }

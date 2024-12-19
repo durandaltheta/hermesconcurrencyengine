@@ -4,7 +4,6 @@
 #define __HERMES_COROUTINE_ENGINE__
 
 #include "utility.hpp"
-#include "string.hpp"
 #include "logging.hpp"
 #include "memory.hpp"
 #include "atomic.hpp"

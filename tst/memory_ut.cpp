@@ -62,8 +62,6 @@ TEST(memory, system_cache_allocate_deallocate) {
         const size_t cur_bucket_block_size = 1 << i;
         const size_t prev_bucket_block_size = i ? 1 << (i-1) : 0;
             
-        HCE_WARNING_FUNCTION_BODY("system_cache_allocate_deallocate","cur_bucket_block_size:",cur_bucket_block_size);
-       
         // ensure we select the right bucket for each bucket size
         EXPECT_EQ(i, cache.index(cur_bucket_block_size));
 

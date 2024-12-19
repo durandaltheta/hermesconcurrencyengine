@@ -267,16 +267,16 @@ struct coroutine : public printable {
         reset(); 
     }
 
-    static inline hce::string info_name() { return "hce::coroutine"; }
-    inline hce::string name() const { return coroutine::info_name(); }
+    static inline std::string info_name() { return "hce::coroutine"; }
+    inline std::string name() const { return coroutine::info_name(); }
 
     /// return our stringified coroutine handle's address
-    inline hce::string content() const { 
+    inline std::string content() const { 
         if(handle_) {
-            hce::stringstream ss;
+            std::stringstream ss;
             ss << handle_;
             return ss.str();
-        } else { return hce::string(); }
+        } else { return std::string(); }
     }
 
     /// return true if the handle is valid, else false
@@ -405,11 +405,11 @@ struct co : public coroutine {
         promise_type() { }
         virtual ~promise_type() { cleanup(); }
 
-        static inline hce::string info_name() { 
+        static inline std::string info_name() { 
             return hce::co<T>::info_name() + "::promise_type";
         }
 
-        virtual inline hce::string name() const { 
+        virtual inline std::string name() const { 
             return hce::co<T>::promise_type::info_name(); 
         }
 
@@ -439,11 +439,11 @@ struct co : public coroutine {
     inline co<T>& operator=(const co<T>&) = delete;
     inline co<T>& operator=(co<T>&& rhs) = default;
 
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<T>("hce::co");
     }
 
-    inline hce::string name() const { return co<T>::info_name(); }
+    inline std::string name() const { return co<T>::info_name(); }
 
     // construct the coroutine from a type erased handle
     co(std::coroutine_handle<> h) : coroutine(std::move(h)) { }
@@ -468,11 +468,11 @@ struct co<void> : public coroutine {
         promise_type() { }
         virtual ~promise_type() { cleanup(); }
 
-        static inline hce::string info_name() { 
+        static inline std::string info_name() { 
             return co<void>::info_name() + "::promise_type";
         }
 
-        virtual inline hce::string name() const { 
+        virtual inline std::string name() const { 
             return co<void>::promise_type::info_name(); 
         }
 
@@ -490,9 +490,9 @@ struct co<void> : public coroutine {
     inline co<void>& operator=(const co<void>&) = delete;
     inline co<void>& operator=(co<void>&& rhs) = default;
 
-    static inline hce::string info_name() { return "hce::co<void>"; }
+    static inline std::string info_name() { return "hce::co<void>"; }
 
-    inline hce::string name() const { 
+    inline std::string name() const { 
         return co<void>::info_name();
     }
 
@@ -523,11 +523,11 @@ namespace coroutine {
 
 /// thread_local block/unblock functionality
 struct this_thread : public printable {
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return "hce::detail::coroutine::this_thread"; 
     }
 
-    inline hce::string name() const { return this_thread::info_name(); }
+    inline std::string name() const { return this_thread::info_name(); }
 
     // get the this_thread object associated with the calling thread
     static this_thread* get();
@@ -579,7 +579,7 @@ struct yield : public hce::printable {
         HCE_LOW_DESTRUCTOR();
 
         if(hce::coroutine::in() && !awaited_){ 
-            hce::stringstream ss;
+            std::stringstream ss;
             ss << hce::coroutine::local()
                << "did not call co_await on "
                << *this;
@@ -588,11 +588,11 @@ struct yield : public hce::printable {
         }
     }
 
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return "hce::detail::coroutine::yield"; 
     }
 
-    inline hce::string name() const { return yield::info_name(); }
+    inline std::string name() const { return yield::info_name(); }
 
     inline bool await_ready() {
         HCE_LOW_METHOD_ENTER("await_ready");
@@ -642,11 +642,11 @@ struct yield : public detail::yield {
     template <typename... As>
     yield(As&&... as) : t(std::forward<As>(as)...) { }
 
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<T>("hce::yield"); 
     }
 
-    inline hce::string name() const { return yield<T>::info_name(); }
+    inline std::string name() const { return yield<T>::info_name(); }
 
     inline T await_resume() { 
         HCE_LOW_METHOD_ENTER("await_resume");
@@ -655,7 +655,7 @@ struct yield : public detail::yield {
 
     inline operator T() {
         if(coroutine::in()) [[unlikely]] { 
-            hce::stringstream ss;
+            std::stringstream ss;
             ss << hce::coroutine::local()
                << "did not call co_await on "
                << *this;
@@ -682,11 +682,11 @@ template <>
 struct yield<void> : public detail::yield {
     typedef void value_type;
 
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<void>("hce::yield"); 
     }
 
-    inline hce::string name() const { return yield<void>::info_name(); }
+    inline std::string name() const { return yield<void>::info_name(); }
     inline void await_resume() { HCE_LOW_METHOD_ENTER("await_resume"); }
 };
 
@@ -771,7 +771,7 @@ struct awaitable : public printable {
             if(this->handle_) [[unlikely]] {
                 // place handle in coroutine for printing purposes
                 coroutine co(std::move(this->handle_));
-                hce::stringstream ss;
+                std::stringstream ss;
                 ss << *this
                    << " was not resumed before being destroyed; it held " 
                    << co;
@@ -805,11 +805,11 @@ struct awaitable : public printable {
         interface& operator=(const interface& rhs) = delete;
         interface& operator=(interface&& rhs) = delete;
 
-        static inline hce::string info_name() { 
+        static inline std::string info_name() { 
             return "hce::awaitable::interface"; 
         }
 
-        inline hce::string name() const { return interface::info_name(); }
+        inline std::string name() const { return interface::info_name(); }
 
         static size_t& stashed_alloc_size();
 
@@ -1037,11 +1037,11 @@ struct awaitable : public printable {
     inline awaitable& operator=(const awaitable&) = delete;
     inline awaitable& operator=(awaitable&& rhs) = default;
     
-    static inline hce::string info_name() { return "hce::awaitable"; }
-    inline hce::string name() const { return awaitable::info_name(); }
+    static inline std::string info_name() { return "hce::awaitable"; }
+    inline std::string name() const { return awaitable::info_name(); }
 
-    inline hce::string content() const {
-        return impl_ ? impl_->to_string() : hce::string();
+    inline std::string content() const {
+        return impl_ ? impl_->to_string() : std::string();
     }
 
     /**
@@ -1097,7 +1097,7 @@ struct awaitable : public printable {
         if(impl_ && !(impl_->awaited())) [[unlikely]] {
             if(coroutine::in()) [[unlikely]] { 
                 // coroutine failed to `co_await` the awaitable
-                hce::stringstream ss;
+                std::stringstream ss;
                 ss << hce::coroutine::local()
                    << "did not call co_await on "
                    << *this;
@@ -1174,11 +1174,11 @@ struct awt : public awaitable {
             HCE_LOW_DESTRUCTOR();
         }
 
-        static inline hce::string info_name() { 
+        static inline std::string info_name() { 
             return hce::awt<T>::info_name() + "::interface"; 
         }
 
-        inline hce::string name() const { return interface::info_name(); }
+        inline std::string name() const { return interface::info_name(); }
 
         ///return the final result of the `awaitable<T>`
         virtual T get_result() = 0;
@@ -1197,11 +1197,11 @@ struct awt : public awaitable {
     inline awt& operator=(const awt<T>& rhs) = delete;
     inline awt& operator=(awt<T>&& rhs) = default;
 
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<T>("hce::awt"); 
     }
 
-    inline hce::string name() const { return awt<T>::info_name(); }
+    inline std::string name() const { return awt<T>::info_name(); }
 
     /// construct an awt<T> from an interface implementation
     template <typename IMPLEMENTATION, typename... As>
@@ -1222,7 +1222,7 @@ struct awt : public awaitable {
      Inline conversion for use in standard threads where `co_await` isn't called.
      */
     inline operator T() {
-        HCE_MIN_METHOD_ENTER(hce::string("operator ") + type::name<T>());
+        HCE_MIN_METHOD_ENTER(std::string("operator ") + type::name<T>());
         this->wait(); 
         return await_resume();
     }
@@ -1256,11 +1256,11 @@ struct awt<void> : public awaitable {
             HCE_LOW_DESTRUCTOR();
         }
 
-        static inline hce::string info_name() { 
+        static inline std::string info_name() { 
             return hce::awt<void>::info_name() + "::interface"; 
         }
 
-        inline hce::string name() const { return interface::info_name(); }
+        inline std::string name() const { return interface::info_name(); }
     };
 
     awt(){}
@@ -1277,11 +1277,11 @@ struct awt<void> : public awaitable {
     inline awt<void>& operator=(const awt<void>& rhs) = delete;
     inline awt<void>& operator=(awt<void>&& rhs) = default;
     
-    static inline hce::string info_name() { 
+    static inline std::string info_name() { 
         return type::templatize<void>("hce::awt"); 
     }
 
-    inline hce::string name() const { return awt<void>::info_name(); }
+    inline std::string name() const { return awt<void>::info_name(); }
 
     /// construct an awt<T> from an interface implementation
     template <typename IMPLEMENTATION, typename... As>
