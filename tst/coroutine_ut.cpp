@@ -156,13 +156,13 @@ TEST(coroutine, co_await_void) {
     {
         struct ai : 
             public hce::awaitable::lockable<
-                hce::awt<void>::interface,
-                hce::spinlock>
+                hce::spinlock,
+                hce::awt<void>::interface>
         {
             ai(std::coroutine_handle<>* hdl, bool* ready) : 
                 hce::awaitable::lockable<
-                    hce::awt<void>::interface,
-                    hce::spinlock>(
+                    hce::spinlock,
+                    hce::awt<void>::interface>(
                         lk_,
                         hce::awaitable::await::policy::defer,
                         hce::awaitable::resume::policy::lock),
@@ -172,7 +172,7 @@ TEST(coroutine, co_await_void) {
 
             static inline hce::co<void>op1(std::vector<ai*> as) {
                 for(auto& a : as) {
-                    hce::awt<void> awt = hce::awt<void>::make(a);
+                    hce::awt<void> awt = hce::awt<void>(a);
                     EXPECT_TRUE(awt.valid());
                     co_await std::move(awt);
                 }
@@ -192,6 +192,8 @@ TEST(coroutine, co_await_void) {
             inline void destination(std::coroutine_handle<> hdl) { 
                 *hdl_ = hdl; 
             }
+
+            inline void on_suspend() { }
 
         private:
             hce::spinlock lk_;
@@ -242,13 +244,13 @@ TEST(coroutine, co_await_int) {
     {
         struct ai : 
             public hce::awaitable::lockable<
-                hce::awt<int>::interface,
-                hce::spinlock>
+                hce::spinlock,
+                hce::awt<int>::interface>
         {
             ai(std::coroutine_handle<>* hdl, bool* ready, int i) : 
                 hce::awaitable::lockable<
-                    hce::awt<int>::interface,
-                    hce::spinlock>(
+                    hce::spinlock,
+                    hce::awt<int>::interface>(
                         lk_,
                         hce::awaitable::await::policy::defer,
                         hce::awaitable::resume::policy::lock),
@@ -260,7 +262,7 @@ TEST(coroutine, co_await_int) {
             static inline hce::co<void>op1(std::vector<ai*> as) {
                 int i=0;
                 for(auto& a : as) {
-                    hce::awt<int> awt = hce::awt<int>::make(a);
+                    hce::awt<int> awt = hce::awt<int>(a);
                     EXPECT_TRUE(awt.valid());
                     int result_i = co_await std::move(awt);
                     EXPECT_EQ(i, result_i);
@@ -283,6 +285,8 @@ TEST(coroutine, co_await_int) {
             inline void destination(std::coroutine_handle<> hdl) { 
                 *hdl_ = hdl; 
             }
+
+            inline void on_suspend() { }
 
         private:
             hce::spinlock lk_;
@@ -335,13 +339,13 @@ TEST(coroutine, co_await_string) {
     {
         struct ai : 
             public hce::awaitable::lockable<
-                hce::awt<std::string>::interface,
-                hce::spinlock>
+                hce::spinlock,
+                hce::awt<std::string>::interface>
         {
             ai(std::coroutine_handle<>* hdl, bool* ready, int i) : 
                 hce::awaitable::lockable<
-                    hce::awt<std::string>::interface,
-                    hce::spinlock>(
+                    hce::spinlock,
+                    hce::awt<std::string>::interface>(
                         lk_,
                         hce::awaitable::await::policy::defer,
                         hce::awaitable::resume::policy::lock),
@@ -353,7 +357,7 @@ TEST(coroutine, co_await_string) {
             static inline hce::co<void>op1(std::vector<ai*> as) {
                 int i=0;
                 for(auto& a : as) {
-                    hce::awt<std::string> awt = hce::awt<std::string>::make(a);
+                    hce::awt<std::string> awt = hce::awt<std::string>(a);
                     EXPECT_TRUE(awt.valid());
                     std::string result_i = co_await std::move(awt);
                     EXPECT_EQ(std::to_string(i), result_i);
@@ -376,6 +380,8 @@ TEST(coroutine, co_await_string) {
             inline void destination(std::coroutine_handle<> hdl) { 
                 *hdl_ = hdl; 
             }
+
+            inline void on_suspend() { }
 
         private:
             hce::spinlock lk_;

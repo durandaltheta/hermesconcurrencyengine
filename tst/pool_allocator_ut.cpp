@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: Apache-2.0
 //Author: Blayne Dennis 
 #include <string>
-#include <forward_list>
+#include <list>
 
 #include "pool_allocator.hpp"
 
@@ -28,70 +28,56 @@ void introspect_pool_T() {
     // caching in pool works
     for(size_t i=0; i<100; ++i) {
         hce::pool_allocator<T> pa(i);
-        std::forward_list<T*> ptrs;
+        std::list<T*> ptrs;
 
-        EXPECT_EQ(0, pa.size());
-        EXPECT_EQ(0, pa.used());
+        EXPECT_EQ(0, pa.available());
 
         for(size_t u=0; u<i; ++u) {
             T* t = pa.allocate(1);
             ptrs.push_front(t);
-            EXPECT_EQ(0, pa.size());
         }
 
-        EXPECT_EQ(0, pa.size());
-        EXPECT_EQ(0, pa.used());
+        EXPECT_EQ(0, pa.available());
 
         for(size_t u=0; u<i; ++u) {
             pa.deallocate(ptrs.front(), 1);
             ptrs.pop_front();
 
             // deallocated value is actually pushed onto the cache
-            EXPECT_EQ(u+1, pa.used());
-
-            // pool size grows
-            EXPECT_LE(pa.used(), pa.size());
+            EXPECT_EQ(u+1, pa.available());
         }
 
-        EXPECT_EQ(i, pa.size());
-        EXPECT_EQ(i, pa.used());
+        EXPECT_EQ(i, pa.available());
 
         for(size_t u=0; u<i; ++u) {
             T* t = pa.allocate(1);
             ptrs.push_front(t);
-            EXPECT_EQ(i, pa.size());
         }
 
-        EXPECT_EQ(i, pa.size());
-        EXPECT_EQ(0, pa.used());
+        EXPECT_EQ(0, pa.available());
 
         for(size_t u=0; u<i; ++u) {
             pa.deallocate(ptrs.front(), 1);
             ptrs.pop_front();
 
             // deallocated value is actually pushed onto the cache again
-            EXPECT_EQ(u+1, pa.used());
-
-            // pool size doesn't change 
-            EXPECT_LE(i, pa.size());
+            EXPECT_EQ(u+1, pa.available());
         }
 
-        EXPECT_EQ(i, pa.size());
-        EXPECT_EQ(i, pa.used());
+        EXPECT_EQ(i, pa.available());
     }
 
     // ensure arrays don't cache
     {
         size_t i=100;
         hce::pool_allocator<T> pa(i);
-        std::forward_list<T*> ptrs;
+        std::list<T*> ptrs;
 
         for(size_t u=0; u<i; ++u) {
             T* t = pa.allocate(2);
             ptrs.push_front(t);
 
-            EXPECT_EQ(0, pa.used());
-            EXPECT_EQ(0, pa.size());
+            EXPECT_EQ(0, pa.available());
         }
 
         for(size_t u=0; u<i; ++u) {
@@ -99,47 +85,20 @@ void introspect_pool_T() {
             ptrs.pop_front();
 
             // pool size doesn't grow
-            EXPECT_EQ(0, pa.used());
-            EXPECT_EQ(0, pa.size());
+            EXPECT_EQ(0, pa.available());
         }
     }
    
     // pool growth is predictable
     for(size_t i=0; i<100; ++i) {
         hce::pool_allocator<T> pa(i);
-        std::forward_list<T*> ptrs;
+        std::list<T*> ptrs;
 
-        EXPECT_EQ(0, pa.size());
-
-        for(size_t u=0; u<i; ++u) {
-            T* t = pa.allocate(1);
-            ptrs.push_front(t);
-            EXPECT_GE(pa.size(), pa.used());
-        }
-
-        // pool growth is hard limited
-        EXPECT_EQ(0, pa.size());
-
-        for(size_t u=0; u<i; ++u) {
-            pa.deallocate(ptrs.front(), 1);
-            ptrs.pop_front();
-
-            // deallocated value is actually pushed onto the cache
-            EXPECT_EQ(u+1, pa.used());
-
-            // pool size grows
-            EXPECT_LE(pa.used(), pa.size());
-        }
-
-        EXPECT_EQ(i, pa.size());
-
-        // allocate and deallocate twice as many as the cache can hold
+        // Allocate and deallocate twice as many as the cache can hold. First
+        // allocate a pool's worth of pointers.
         for(size_t u=0; u < i*2; ++u) {
             T* t = pa.allocate(1);
             ptrs.push_front(t);
-
-            // pool size maintains
-            EXPECT_LE(i, pa.size());
         }
 
         // deallocate half
@@ -148,10 +107,7 @@ void introspect_pool_T() {
             ptrs.pop_front();
 
             // deallocated value is actually pushed onto the cache
-            EXPECT_EQ(u+1, pa.used());
-
-            // pool size maintains
-            EXPECT_LE(i, pa.size());
+            EXPECT_EQ(u+1, pa.available());
         }
 
         for(size_t u=0; u<i; ++u) {
@@ -159,10 +115,20 @@ void introspect_pool_T() {
             ptrs.pop_front();
 
             // additional deallocations are not pushed on the cache
-            EXPECT_EQ(i, pa.used());
+            EXPECT_EQ(i, pa.available());
+        }
 
-            // pool size maintains
-            EXPECT_LE(i, pa.size());
+        for(size_t u=0; u<i; ++u) {
+            T* t = pa.allocate(1);
+            ptrs.push_front(t);
+        }
+
+        // ensure pool can be emptied
+        EXPECT_EQ(0, pa.available());
+
+        while(ptrs.size()) {
+            pa.deallocate(ptrs.front(), 1);
+            ptrs.pop_front();
         }
     }
 }

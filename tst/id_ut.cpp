@@ -27,7 +27,6 @@ TEST(id, uid) {
 
     uid2 = std::move(uid);
 
-    ASSERT_NE(nullptr, uid.get());
     ASSERT_EQ(nullptr, uid.get());
     ASSERT_NE(nullptr, uid2.get());
     ASSERT_FALSE(uid);

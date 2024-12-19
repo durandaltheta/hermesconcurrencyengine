@@ -10,23 +10,23 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -O3 -Wall")
 add_subdirectory(googletest)
 
 add_executable(hce_ut 
-    #test_helpers.hpp
-    #atomic_ut.cpp 
-    #memory_ut.cpp
-    #circular_buffer_ut.cpp
-    #pool_allocator_ut.cpp 
-    #list_ut.cpp 
-    #synchronized_list_ut.cpp 
-    #id_ut.cpp
-    #chrono_ut.cpp
-    #coroutine_ut.cpp
-    #scheduler_schedule_ut.cpp
-    #scheduler_timer_ut.cpp
+    test_helpers.hpp
+    atomic_ut.cpp 
+    memory_ut.cpp
+    circular_buffer_ut.cpp
+    pool_allocator_ut.cpp 
+    list_ut.cpp 
+    synchronized_list_ut.cpp 
+    id_ut.cpp
+    chrono_ut.cpp
+    coroutine_ut.cpp
+    scheduler_schedule_ut.cpp
+    scheduler_timer_ut.cpp
     scheduler_block_ut.cpp
     #scope_ut.cpp
-    #channel_ut.cpp 
-    #threadpool_ut.cpp
-    #comparison_ut.cpp
+    channel_ut.cpp 
+    threadpool_ut.cpp
+    comparison_ut.cpp
     main.cpp
 )
 

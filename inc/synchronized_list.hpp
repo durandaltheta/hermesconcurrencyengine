@@ -7,6 +7,7 @@
 #include <condition_variable>
 
 #include "logging.hpp"
+#include "atomic.hpp"
 #include "list.hpp"
 
 namespace hce {
@@ -21,36 +22,36 @@ namespace hce {
  not coroutine safe and is intended for comunication between system threads.
  */
 template <typename T, typename Allocator = hce::pool_allocator<T>>
-struct synchronized_queue : public printable {
+struct synchronized_list : public printable {
     using value_type = T;
 
-    synchronized_queue() : 
+    synchronized_list() : 
         closed_(false), 
         waiting_(false)
     { 
         HCE_MIN_CONSTRUCTOR(); 
     }
 
-    synchronized_queue(const Allocator& allocator) : 
+    synchronized_list(const Allocator& allocator) : 
         closed_(false), 
         waiting_(false),
         list_(allocator) { 
         HCE_MIN_CONSTRUCTOR(allocator); 
     }
     
-    synchronized_queue(const synchronized_queue<T>&) = delete;
-    synchronized_queue(synchronized_queue<T>&&) = delete;
+    synchronized_list(const synchronized_list<T>&) = delete;
+    synchronized_list(synchronized_list<T>&&) = delete;
 
     static inline std::string info_name() { 
-        return type::templatize<T>("hce::synchronized_queue"); 
+        return type::templatize<T>("hce::synchronized_list"); 
     }
 
     inline std::string name() const { 
-        return synchronized_queue<T>::info_name(); 
+        return synchronized_list<T>::info_name(); 
     }
 
-    inline synchronized_queue<T>& operator=(const synchronized_queue<T>&) = delete;
-    inline synchronized_queue<T>& operator=(synchronized_queue<T>&&) = delete;
+    inline synchronized_list<T>& operator=(const synchronized_list<T>&) = delete;
+    inline synchronized_list<T>& operator=(synchronized_list<T>&&) = delete;
 
     /**
      @return the current length of the queue
@@ -113,7 +114,7 @@ struct synchronized_queue : public printable {
         {
             std::lock_guard<hce::spinlock> lk(lk_);
 
-            // will immediately fail if synchronized_queue is closed
+            // will immediately fail if synchronized_list is closed
             if(closed_) [[unlikely]] {
                 return false;
             } else [[likely]] {
@@ -142,7 +143,7 @@ struct synchronized_queue : public printable {
         {
             std::lock_guard<hce::spinlock> lk(lk_);
 
-            // will immediately fail if synchronized_queue is closed
+            // will immediately fail if synchronized_list is closed
             if(closed_) [[unlikely]] {
                 return false;
             } else [[likely]] {
@@ -157,24 +158,52 @@ struct synchronized_queue : public printable {
     }
 
     /** 
-     @brief push a value onto the back of the queue
+     @brief lvalue push a value onto the back of the queue
 
      This operation never blocks.
 
      @param t a value
      @return false if the queue is closed, else true 
      */
-    inline bool push_back(T&& t) { return emplace_back(std::forward<T>(t)); }
+    inline bool push_back(const T& t) { 
+        return emplace_back(t); 
+    }
+    
+    /** 
+     @brief rvalue push a value onto the back of the queue
+
+     This operation never blocks.
+
+     @param t a value
+     @return false if the queue is closed, else true 
+     */
+    inline bool push_back(T&& t) { 
+        return emplace_back(std::move(t)); 
+    }
 
     /** 
-     @brief push a value onto the front of the queue
+     @brief lvalue push a value onto the front of the queue
 
      This operation never blocks.
 
      @param t a value
      @return false if the queue is closed, else true 
      */
-    inline bool push_front(T&& t) { return emplace_front(std::forward<T>(t)); }
+    inline bool push_front(const T& t) { 
+        return emplace_front(t); 
+    }
+
+    /** 
+     @brief rvalue push a value onto the front of the queue
+
+     This operation never blocks.
+
+     @param t a value
+     @return false if the queue is closed, else true 
+     */
+    inline bool push_front(T&& t) { 
+        return emplace_front(std::move(t)); 
+    }
 
     /**
      @brief retrieve and pop a value off the front queue 
@@ -206,8 +235,7 @@ struct synchronized_queue : public printable {
     }
 
 private:
-
-    hce::spinlock lk_;
+    mutable hce::spinlock lk_;
     bool closed_;
     bool waiting_;
     std::condition_variable_any cv_;

@@ -1173,7 +1173,7 @@ private:
 
             // worker thread scheduler run function
             static inline void run_(
-                    synchronized_queue<std::unique_ptr<hce::thunk>>* operations) 
+                    synchronized_list<std::unique_ptr<hce::thunk>>* operations) 
             {
                 std::unique_ptr<hce::thunk> operation;
 
@@ -1192,7 +1192,7 @@ private:
             // However, it's fine that the object itself use the 
             // `pool_allocator` as its allocator, because list node memory will 
             // be reused inside the object to matter which thread.
-            synchronized_queue<std::unique_ptr<hce::thunk>> operations_;
+            synchronized_list<std::unique_ptr<hce::thunk>> operations_;
 
             // operating system thread
             std::thread thd_;

@@ -59,7 +59,7 @@ extern size_t default_block_limit();
  for reuse before the allocator is forced to free memory when deallocate() is 
  called.
 
- The internal pool starts at a size() of 0 and grows powers of 2 until a 
+ The internal pool starts at a size of 0 and grows powers of 2 until a 
  maximum of block_limit is reached.
 
  This object does *NOT* pool allocations/deallocations of arrays of T. These 
@@ -200,11 +200,8 @@ struct pool_allocator : public printable {
     /// return the pool size limit
     inline size_t limit() const { return block_limit_; }
 
-    /// return the pool's used() count
-    inline size_t used() const { return block_limit_ - pool_.size(); }
-
-    /// return the pool's remaining() count
-    inline size_t remaining() const { return pool_.size(); }
+    /// return the pool's available() count
+    inline size_t available() const { return pool_.size(); }
 
     /// return true if the pool is empty, else false
     inline bool empty() const { return pool_.empty(); }

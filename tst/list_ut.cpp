@@ -84,7 +84,7 @@ void lvalue_push_back_front_pop_T() {
 }
 
 template <typename T>
-void move_queue_T() {
+void move_list_T() {
     // constructor
     {
         hce::list<T> q;
@@ -153,7 +153,7 @@ void move_queue_T() {
 }
 
 template <typename T>
-void copy_queue_T() {
+void copy_list_T() {
     // constructor
     {
         hce::list<T> q;
@@ -248,7 +248,7 @@ void copy_queue_T() {
 }
 
 template <typename T>
-void concatenate_queue_T() {
+void concatenate_list_T() {
     {
         hce::list<T> q;
         hce::list<T> q2;
@@ -409,34 +409,34 @@ TEST(queue, lvalue_push_back_front_pop) {
 }
 
 TEST(queue, move_queue) {
-    test::move_queue_T<int>();
-    test::move_queue_T<unsigned int>();
-    test::move_queue_T<size_t>();
-    test::move_queue_T<float>();
-    test::move_queue_T<double>();
-    test::move_queue_T<char>();
-    test::move_queue_T<std::string>();
-    test::move_queue_T<test::CustomObject>();
+    test::move_list_T<int>();
+    test::move_list_T<unsigned int>();
+    test::move_list_T<size_t>();
+    test::move_list_T<float>();
+    test::move_list_T<double>();
+    test::move_list_T<char>();
+    test::move_list_T<std::string>();
+    test::move_list_T<test::CustomObject>();
 }
 
 TEST(queue, copy_queue) {
-    test::copy_queue_T<int>();
-    test::copy_queue_T<unsigned int>();
-    test::copy_queue_T<size_t>();
-    test::copy_queue_T<float>();
-    test::copy_queue_T<double>();
-    test::copy_queue_T<char>();
-    test::copy_queue_T<std::string>();
-    test::copy_queue_T<test::CustomObject>();
+    test::copy_list_T<int>();
+    test::copy_list_T<unsigned int>();
+    test::copy_list_T<size_t>();
+    test::copy_list_T<float>();
+    test::copy_list_T<double>();
+    test::copy_list_T<char>();
+    test::copy_list_T<std::string>();
+    test::copy_list_T<test::CustomObject>();
 }
 
 TEST(queue, concatenate_queue) {
-    test::concatenate_queue_T<int>();
-    test::concatenate_queue_T<unsigned int>();
-    test::concatenate_queue_T<size_t>();
-    test::concatenate_queue_T<float>();
-    test::concatenate_queue_T<double>();
-    test::concatenate_queue_T<char>();
-    test::concatenate_queue_T<std::string>();
-    test::concatenate_queue_T<test::CustomObject>();
+    test::concatenate_list_T<int>();
+    test::concatenate_list_T<unsigned int>();
+    test::concatenate_list_T<size_t>();
+    test::concatenate_list_T<float>();
+    test::concatenate_list_T<double>();
+    test::concatenate_list_T<char>();
+    test::concatenate_list_T<std::string>();
+    test::concatenate_list_T<test::CustomObject>();
 }
