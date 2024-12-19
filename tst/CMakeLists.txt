@@ -25,7 +25,7 @@ add_executable(hce_ut
     #scheduler_block_ut.cpp
     #scope_ut.cpp
     #channel_ut.cpp 
-    #threadpool_ut.cpp
+    threadpool_ut.cpp
     comparison_ut.cpp
     main_ut.cpp
 )

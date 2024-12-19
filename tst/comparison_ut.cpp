@@ -65,7 +65,7 @@ void concurrent_simple_communication_op(
                 hce::channel<int> ch0, ch1;
                 ch0.construct<LOCK>(0);
                 ch1.construct<LOCK>(0);
-                awts.push_back(hce::threadpool::schedule(ops::t0(ch0,ch1,recv_total)));
+                awts.push_back(hce::threadpool::schedule(ops::com0(ch0,ch1,recv_total)));
             }
 
             while(awts.size()) {
@@ -74,11 +74,11 @@ void concurrent_simple_communication_op(
             }
         }
 
-        static inline hce::co<void> t0(
+        static inline hce::co<void> com0(
                 hce::channel<int> ch0,
                 hce::channel<int> ch1,
                 std::uint64_t recv_total) {
-            auto awt = hce::schedule(ops::t1(ch0,ch1,recv_total));
+            auto awt = hce::schedule(ops::com1(ch0,ch1,recv_total));
             int message;
 
             for(size_t recv=0; recv<recv_total; ++recv) {
@@ -89,7 +89,7 @@ void concurrent_simple_communication_op(
             co_await std::move(awt);
         }
 
-        static inline hce::co<void> t1(
+        static inline hce::co<void> com1(
                 hce::channel<int> ch0,
                 hce::channel<int> ch1,
                 std::uint64_t recv_total) {
