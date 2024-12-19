@@ -150,7 +150,7 @@ private:
      handler is triggered just before the promise_type is destroyed and passes 
      around the necessary data to the awaitable (joiner<T>) and resumes it.
      */
-    static inline void cleanup(hce::co_promise_type<T>::data& data) { 
+    static inline void cleanup(hce::coroutine::promise_type::cleanup_data& data) { 
         auto fname = "joiner<T>::cleanup";
         HCE_TRACE_FUNCTION_ENTER(fname, data.install, data.promise);
         // acquire a reference to the joiner<T>
@@ -214,7 +214,7 @@ struct joiner<void> :
     inline void on_resume(void* m) { ready_ = true; }
 
 private:
-    static inline void cleanup(hce::co_promise_type<void>::data& data) { 
+    static inline void cleanup(hce::coroutine::promise_type::cleanup_data& data) { 
         HCE_TRACE_FUNCTION_ENTER("joiner<void>::cleanup()", data.install, data.promise);
         static_cast<hce::detail::scheduler::joiner<void>*>(data.install)->resume(nullptr);
     }
@@ -644,12 +644,18 @@ struct scheduler : public printable {
         lifecycle& operator=(lifecycle&&) = delete;
         lifecycle& operator=(const lifecycle&) = delete;
 
-        lifecycle(std::shared_ptr<hce::scheduler> sch) :
+        lifecycle(std::shared_ptr<hce::scheduler> sch, bool is_global) :
             sch_(std::move(sch)),
-            thd_([&]{ sch_->run(); }) // launch the scheduler's thread
+            thd_(is_global 
+                 ? &global_thread_function
+                 : &scheduler_thread_function,
+                 sch_.get())
         {
             HCE_HIGH_CONSTRUCTOR();
         }
+
+        static void global_thread_function(hce::scheduler*);
+        static void scheduler_thread_function(hce::scheduler*);
 
         std::shared_ptr<hce::scheduler> sch_;
         std::thread thd_;
@@ -745,18 +751,7 @@ struct scheduler : public printable {
      */
     static inline std::unique_ptr<lifecycle> make(
             std::unique_ptr<config> c = {}) {
-        HCE_HIGH_FUNCTION_ENTER("hce::scheduler::make",c.get());
-
-        // make the first shared pointer
-        std::shared_ptr<scheduler> s(new scheduler);
-
-        // finish initialization and configure the scheduler's runtime behavior
-        s->configure_(s, std::move(c));
-
-        // allocate and return the lifecycle pointer 
-        lifecycle* lp = hce::allocate<lifecycle>(1);
-        new(lp) lifecycle(std::move(s));
-        return std::unique_ptr<lifecycle>(lp);
+        return make_(std::move(c),false);
     }
 
     /**
@@ -851,12 +846,13 @@ struct scheduler : public printable {
     /**
      @brief access a heuristic for the scheduler's active workload 
 
-     This value only accounts for actively scheduled coroutines (timers are not 
-     considered).
+     This value only accounts for actively scheduled coroutines executing or 
+     waiting to execute. Timers, block() worker threads, and blocked (awaiting) 
+     coroutines are not considered.
 
      @return the count of coroutines executing and waiting to execute
      */
-    inline size_t workload() const {
+    inline size_t scheduled_count() const {
         size_t c;
 
         {
@@ -865,23 +861,6 @@ struct scheduler : public printable {
         }
         
         HCE_TRACE_METHOD_BODY("workload",c);
-        return c;
-    }
-
-    /**
-     Each started timer (including `sleep()` timers) contribute to this count.
-
-     @return the count of all incomplete timers on this scheduler 
-     */
-    inline size_t timers() const {
-        size_t c;
-
-        {
-            std::lock_guard<spinlock> lk(lk_);
-            c = timers_.size();
-        }
-        
-        HCE_MIN_METHOD_BODY("operations",c);
         return c;
     }
 
@@ -900,6 +879,23 @@ struct scheduler : public printable {
 
         HCE_MIN_METHOD_BODY("block_worker_count",c);
         return c; 
+    }
+
+    /**
+     Each started timer (including `sleep()` timers) contribute to this count.
+
+     @return the count of all incomplete timers on this scheduler 
+     */
+    inline size_t timer_count() const {
+        size_t c;
+
+        {
+            std::lock_guard<spinlock> lk(lk_);
+            c = timers_.size();
+        }
+        
+        HCE_MIN_METHOD_BODY("operations",c);
+        return c;
     }
 
     /**
@@ -966,22 +962,21 @@ struct scheduler : public printable {
      A Callable is any function, Functor, lambda or std::function. Simply, it is 
      anything that is invokable with the parenthesis `()` operator.
 
-     `block()`'s potential failure behavior is identical to `schedule()`. 
-     `block()` calls act as a scheduled operation and therefore block 
-     `lifecycle` object's destructor from  a `scheduler` until they return.
-
-     This mechanism allows execution of arbitrary code on a dedicated thread, 
-     and to `co_await` the result of the `block()` (or if not called from a 
-     coroutine, just assign the awaitable to a variable of the resulting type). 
+     This allows for executing arbitrary blocking code (which would be unsafe to 
+     do in a coroutine!) via a mechanism which *is* safely callable from within
+     a coroutine. A coroutine can `co_await` the result of the `block()` (or if 
+     not called from a coroutine, just assign the awaitable to a variable of the 
+     resulting type). 
 
      In a coroutine (with the high level `hce::block()` call):
      ```
-     T result = co_await hce::block(my_function_returning_T);
+     T result = co_await hce::block(my_function_returning_T, arg1, arg2);
      ```
 
-     This allows for executing arbitrary blocking code (which would be unsafe to 
-     do in a coroutine!) via a mechanism which *is* safely callable from within
-     a coroutine.
+     If the caller of `block()` immediately awaits the result then the given 
+     Callable can access values owned by the coroutine's body (or 
+     values on a thread's stack if called outside of a coroutine) by reference, 
+     because the caller of `block()` will be blocked while awaiting.
 
      The user Callable will execute on a dedicated thread, and won't have direct 
      access to the caller's local scheduler or coroutine. IE, 
@@ -992,17 +987,6 @@ struct scheduler : public printable {
      If the caller is already executing in a thread managed by another call to 
      `block()`, or if called outside of an `hce` coroutine, the Callable will be 
      executed immediately on the *current* thread.
-
-     The given Callable can access values owned by the coroutine's body (or 
-     values on a thread's stack if called outside of a coroutine) by reference, 
-     because the caller of `call()` will be blocked while awaiting the `block()`
-     call.
-
-     WARNING: It is highly recommended to immediately `co_await` the awaitable 
-     returned by `block()`. IE, if the executing Callable accesses the stack of 
-     the caller in an unsynchronized way, and the caller of `block()` is a 
-     coroutine, then the caller should `co_await` the returned awaitable before 
-     reading or writing values. 
 
      @param cb a function, Functor, lambda or std::function
      @param as arguments to cb
@@ -1133,9 +1117,9 @@ struct scheduler : public printable {
             auto it = timers_.begin();
             auto end = timers_.end();
 
-            while(it!=end) {
+            while(it != end) [[likely]] {
                 // search through the timers for a matching id
-                if((*it)->id() == id) {
+                if((*it)->id() == id) [[unlikely]] {
                     std::unique_ptr<timer> found; 
                     result = true;
                     found.reset(*it);
@@ -1160,6 +1144,122 @@ struct scheduler : public printable {
     }
  
 private:
+    // namespaced objects for handling blocking calls
+    struct blocking : public printable {
+        // block workers receive operations over a queue and execute them
+        struct worker : public printable {
+            worker() : thd_(worker::run_, &operations_) { 
+                HCE_MED_CONSTRUCTOR();
+            }
+
+            ~worker() { 
+                HCE_MED_DESTRUCTOR(); 
+                operations_.close();
+                thd_.join();
+            }
+
+            // returns true if called on a thread owned by a worker object, else false
+            static bool tl_is_block() { return tl_is_worker(); }
+
+            static inline hce::string info_name() { 
+                return "hce::scheduler::blocking::worker"; 
+            }
+
+            inline hce::string name() const { return worker::info_name(); }
+
+            inline void schedule(std::unique_ptr<hce::thunk> operation) { 
+                operations_.push_back(std::move(operation));
+            }
+
+        private:
+            static bool& tl_is_worker();
+
+            // worker thread scheduler run function
+            static inline void run_(
+                    synchronized_queue<std::unique_ptr<hce::thunk>>* operations) 
+            {
+                std::unique_ptr<hce::thunk> operation;
+
+                worker::tl_is_worker() = true;
+
+                while(operations->pop(operation)) [[likely]] {
+                    // execute operations sequentially until recv() returns false
+                    (*operation)();
+                }
+            }
+
+            // Blocking operation queue. No reason to use thread_local cache
+            // for hce::thunk, because it would be essentially doing a one-way 
+            // memory steal from the scheduler thread to the block thread.
+            //
+            // However, it's fine that the object itself use the 
+            // `pool_allocator` as its allocator, because list node memory will 
+            // be reused inside the object to matter which thread.
+            synchronized_queue<std::unique_ptr<hce::thunk>> operations_;
+
+            // operating system thread
+            std::thread thd_;
+        };
+
+        // awaitable implementation for returning an immediately available 
+        // block() value
+        template <typename T>
+        struct sync : public 
+                hce::scheduler::reschedule<
+                    hce::detail::scheduler::sync_partial<T>>
+        {
+            template <typename... As>
+            sync(As&&... as) : 
+                hce::scheduler::reschedule<
+                    hce::detail::scheduler::sync_partial<T>>(
+                        std::forward<As>(as)...)
+            { }
+
+            virtual ~sync() { }
+            
+            static inline hce::string info_name() { 
+                return type::templatize<T>("hce::detail::scheduler::sync"); 
+            }
+
+            inline hce::string name() const { return sync<T>::info_name(); }
+        };
+
+        // awaitable implementation for returning an asynchronously available 
+        // block() value
+        template <typename T>
+        struct async : 
+            public scheduler::reschedule<detail::scheduler::async_partial<T>>
+        {
+            async(scheduler& parent) : 
+                scheduler::reschedule<detail::scheduler::async_partial<T>>(),
+                // on construction get a worker
+                wkr_(parent.checkout_block_worker_()),
+                parent_(parent)
+            { }
+
+            virtual ~async() {
+                // return the worker to its scheduler
+                if(wkr_) [[likely]] { 
+                    // after this returns, parent_ becomes potentially dangling
+                    parent_.checkin_block_worker_(std::move(wkr_)); 
+                }
+            }
+            
+            static inline hce::string info_name() { 
+                return type::templatize<T>("hce::detail::scheduler::async"); 
+            }
+
+            inline hce::string name() const { return async<T>::info_name(); }
+
+            // return the contractor's worker
+            inline blocking::worker& worker() { return *wkr_; }
+
+        private:
+            hce::unique_ptr<blocking::worker> wkr_;
+            scheduler& parent_;
+        };
+    };
+
     // internal timer implementation
     struct timer : public 
         scheduler::reschedule<
@@ -1235,116 +1335,6 @@ private:
         std::weak_ptr<scheduler> parent_;
     };
 
-    // namespaced objects for handling blocking calls
-    struct blocking : public printable {
-        // block workers receive operations over a queue and execute them
-        struct worker : public printable {
-            worker() : thd_(worker::run_, &operations_) { 
-                HCE_MED_CONSTRUCTOR();
-            }
-
-            ~worker() { 
-                HCE_MED_DESTRUCTOR(); 
-                operations_.close();
-                thd_.join();
-            }
-
-            // returns true if called on a thread owned by a worker object, else false
-            static bool tl_is_block() { return tl_is_worker(); }
-
-            static inline hce::string info_name() { 
-                return "hce::scheduler::blocking::worker"; 
-            }
-
-            inline hce::string name() const { return worker::info_name(); }
-
-            inline void schedule(std::unique_ptr<hce::thunk> operation) { 
-                operations_.push_back(std::move(operation));
-            }
-
-        private:
-            static bool& tl_is_worker();
-
-            // worker thread scheduler run function
-            static inline void run_(
-                    synchronized_queue<std::unique_ptr<hce::thunk>>* operations) 
-            {
-                std::unique_ptr<hce::thunk> operation;
-
-                worker::tl_is_worker() = true;
-
-                while(operations->pop(operation)) [[likely]] {
-                    // execute operations sequentially until recv() returns false
-                    (*operation)();
-                }
-            }
-
-            // blocking operation queue
-            synchronized_queue<std::unique_ptr<hce::thunk>> operations_;
-
-            // operating system thread
-            std::thread thd_;
-        };
-
-        // awaitable implementation for returning an immediately available 
-        // block() value
-        template <typename T>
-        struct sync : public 
-                hce::scheduler::reschedule<
-                    hce::detail::scheduler::sync_partial<T>>
-        {
-            template <typename... As>
-            sync(As&&... as) : 
-                hce::scheduler::reschedule<
-                    hce::detail::scheduler::sync_partial<T>>(
-                        std::forward<As>(as)...)
-            { }
-
-            virtual ~sync() { }
-            
-            static inline hce::string info_name() { 
-                return type::templatize<T>("hce::detail::scheduler::sync"); 
-            }
-
-            inline hce::string name() const { return sync<T>::info_name(); }
-        };
-
-        // awaitable implementation for returning an asynchronously available 
-        // block() value
-        template <typename T>
-        struct async : 
-            public scheduler::reschedule<detail::scheduler::async_partial<T>>
-        {
-            async(scheduler& parent) : 
-                scheduler::reschedule<detail::scheduler::async_partial<T>>(),
-                // on construction get a worker
-                wkr_(parent.checkout_block_worker_()),
-                parent_(parent)
-            { }
-
-            virtual ~async() {
-                // return the worker to its scheduler
-                if(wkr_) [[likely]] { 
-                    // after this returns, parent_ becomes potentially dangling
-                    parent_.checkin_block_worker_(std::move(wkr_)); 
-                }
-            }
-            
-            static inline hce::string info_name() { 
-                return type::templatize<T>("hce::detail::scheduler::async"); 
-            }
-
-            inline hce::string name() const { return async<T>::info_name(); }
-
-            // return the contractor's worker
-            inline blocking::worker& worker() { return *wkr_; }
-
-        private:
-            std::unique_ptr<blocking::worker> wkr_;
-            scheduler& parent_;
-        };
-    };
-
     scheduler() : 
         state_(executing), 
         log_level_(-1),
@@ -1353,6 +1343,28 @@ private:
     { 
         HCE_HIGH_CONSTRUCTOR();
         reset_flags_(); // initialize flags
+    }
+
+    static inline std::unique_ptr<lifecycle> make_(
+            std::unique_ptr<config> c, 
+            bool is_global) 
+    {
+        // ensure our config is allocated and assigned
+        if(!c) { c = config::make(); }
+
+        HCE_HIGH_FUNCTION_ENTER("hce::scheduler::make",c.get());
+
+        // make the first shared pointer
+        std::shared_ptr<scheduler> s(new scheduler);
+
+        // finish initialization and configure the scheduler's runtime behavior
+        s->configure_(s, std::move(c));
+
+        // allocate and return the lifecycle pointer 
+        lifecycle* lp = hce::allocate<lifecycle>(1);
+
+        new(lp) lifecycle(std::move(s), is_global);
+        return std::unique_ptr<lifecycle>(lp);
     }
 
     // initialize the lifecycle manager
@@ -1422,16 +1434,13 @@ private:
         // set the weak_ptr
         self_wptr_ = self;
 
-        // ensure our config is allocated and assigned
-        if(!cfg) { cfg = config::make(); }
-
         log_level_ = cfg->log_level;
         coroutine_resource_limit_ = cfg->coroutine_resource_limit;
         coroutine_queue_.reset(new hce::list<std::coroutine_handle<>>(
             hce::pool_allocator<std::coroutine_handle<>>(
                 coroutine_resource_limit_)));
         block_worker_pool_.reset(
-            new hce::circular_buffer<std::unique_ptr<blocking::worker>>(
+            new hce::circular_buffer<hce::unique_ptr<blocking::worker>>(
                 cfg->block_worker_resource_limit));
     }
 
@@ -1774,9 +1783,9 @@ private:
     }
 
     // retrieve a worker thread to execute blocking operations on
-    inline std::unique_ptr<blocking::worker> checkout_block_worker_() {
+    inline hce::unique_ptr<blocking::worker> checkout_block_worker_() {
         HCE_TRACE_METHOD_ENTER("checkout_block_worker_");
-        std::unique_ptr<blocking::worker> w;
+        hce::unique_ptr<blocking::worker> w;
 
         std::unique_lock<spinlock> lk(lk_);
         ++block_worker_active_count_; // update checked out thread count
@@ -1785,8 +1794,10 @@ private:
         if(block_worker_pool_->empty()) {
             lk.unlock();
 
-            // as a fallback generate a new worker thread
-            w = std::unique_ptr<blocking::worker>(new blocking::worker);
+            // as a fallback generate a new worker thread 
+            blocking::worker* wp = hce::allocate<blocking::worker>(1);
+            new(wp) blocking::worker();
+            w.reset(wp);
         } else {
             // get the first available worker
             w = std::move(block_worker_pool_->front());
@@ -1798,7 +1809,7 @@ private:
     }
 
     // return a worker when blocking operation is completed
-    inline void checkin_block_worker_(std::unique_ptr<blocking::worker> w) {
+    inline void checkin_block_worker_(hce::unique_ptr<blocking::worker> w) {
         HCE_TRACE_METHOD_ENTER("checkin_block_worker_");
 
         std::lock_guard<spinlock> lk(lk_);
@@ -1884,32 +1895,6 @@ private:
     // the current lifecycle state of the scheduler
     state state_; 
 
-    // Queue holding scheduled coroutine handles. Simpler to just use underlying 
-    // std::coroutine_handle than to utilize conversions between 
-    // hce::coroutine and hce::co<T>. This object is a unique_ptr because it is 
-    // routinely swapped between this object and the stack memory of the caller 
-    // of scheduler::run().
-    std::unique_ptr<hce::list<std::coroutine_handle<>>> 
-    coroutine_queue_;
-                  
-    // the count of actively executing coroutines on this scheduler 
-    size_t batch_size_; 
-   
-    // condition data for when scheduler::resume() is called
-    bool waiting_for_resume_;
-    std::condition_variable_any resume_cv_;
-
-    // condition data for operation count changes
-    bool waiting_for_operations_; 
-    std::condition_variable_any operations_cv_;
-
-    // List holding scheduled timers. This will be regularly re-sorted from 
-    // soonest to latest timeout. Timer pointer's memory is managed by an 
-    // awaitable object, and should not be deleted by the scheduler directly.
-    //
-    // Timers will be arbitrarily erased from anywhere in the list.
-    std::list<timer*> timers_;
-
     // scheduler log level
     int log_level_;
 
@@ -1925,13 +1910,55 @@ private:
 
     // count of threads executing blocking operations
     size_t block_worker_active_count_; 
+                  
+    // the count of actively executing coroutines in this scheduler's run()
+    size_t batch_size_; 
+
+    // flag for when scheduler::resume() is called
+    bool waiting_for_resume_;
+    
+    // flag for when scheduled operation state changes
+    bool waiting_for_operations_; 
+  
+    // condition for when scheduler::resume() is called
+    std::condition_variable_any resume_cv_;
+
+    // condition for when scheduled operation state changes
+    std::condition_variable_any operations_cv_;
+
+    // Queue holding scheduled coroutine handles. Simpler to just use underlying 
+    // std::coroutine_handle than to utilize conversions between 
+    // hce::coroutine and hce::co<T>. This object is a unique_ptr because it is 
+    // routinely swapped between this object and the stack memory of the caller 
+    // of scheduler::run().
+    //
+    // thread_local memory caching isn't used for allocating the queue itself,
+    // there's no reason to pull memory from the cache for something that is 
+    // generally allocated for an entire process' lifecycle.
+    std::unique_ptr<hce::list<std::coroutine_handle<>>> coroutine_queue_;
 
     // Queue of reusable block workers threads. When a blocking operation 
     // finishes, the worker thread that executed the operation will be placed in 
     // this queue if there is room. This queue will grow no larger than the 
-    // config::block_worker_resource_limit. 
-    std::unique_ptr<hce::circular_buffer<std::unique_ptr<blocking::worker>>>
+    // config::block_worker_resource_limit.  
+    //
+    // thread_local memory caching isn't used for this, there's no reason to 
+    // pull memory from the cache for something that is generally allocated for 
+    // an entire process' lifecycle. 
+    std::unique_ptr<hce::circular_buffer<hce::unique_ptr<blocking::worker>>>
     block_worker_pool_;
+
+    // List holding scheduled timers. This will be regularly re-sorted from 
+    // soonest to latest timeout. Timer pointer's allocated memory is managed by 
+    // an awaitable object, and should not be deleted by the scheduler directly.
+    // Instead, when timers are resumed, they can simply be erased from this 
+    // list without deallocating.
+    //
+    // Timers will be arbitrarily resorted and/or erased from anywhere in the 
+    // list. It is for this reason that `std::list` is used instead of 
+    // `hce::list`, so that iterators, erasure and `sort()`ing capabilities 
+    // don't need to be implemented and maintained.
+    std::list<timer*,hce::allocator<timer*>> timers_;
 };
 
 namespace config {

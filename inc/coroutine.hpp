@@ -53,15 +53,15 @@ struct coroutine : public printable {
      */
     struct promise_type : public printable {
         /// This object contains the necessary values for the cleanup handler 
-        struct data {
-            void* install; /// data pointer provided to install()
-            void* promise; /// data pointer to the promise_type instance
+        struct cleanup_data {
+            void* install; /// arg pointer provided to install()
+            void* promise; /// pointer to the descendent promise_type instance
         };
 
-        promise_type() : 
-            alloc_size_(stashed_alloc_size()),
-            cleanup_operation_(nullptr) 
-        { }
+        /// a function pointer to a cleanup operation
+        using cleanup_operation = void (*)(cleanup_data&);
+
+        promise_type() : alloc_size_(stashed_alloc_size()) { }
 
         virtual ~promise_type(){
             stashed_alloc_size() = alloc_size_;
@@ -75,6 +75,8 @@ struct coroutine : public printable {
 
         /**
          @brief implement custom new to make use of thread local allocation caching
+
+         Uses the allocation stash set in the constructor.
 
          WARNING: Because of how `new` allocation sizes are temporarily stashed 
          it is an ERROR to call new on any inheritor of `promise_type` within 
@@ -150,6 +152,11 @@ struct coroutine : public printable {
             return hce::memory::allocate(n);
         }
 
+        /**
+         @brief implement custom delete to make use of thread local allocation caching 
+
+         Uses the allocation stash set in the destructor.
+         */
         inline void operator delete(void* ptr) noexcept {
             hce::memory::deallocate(ptr, stashed_alloc_size());
         }
@@ -164,7 +171,7 @@ struct coroutine : public printable {
         inline std::suspend_always final_suspend() noexcept { return {}; }
         inline void unhandled_exception() { eptr = std::current_exception(); }
 
-        /// thread_local stash of alloc_size in new 
+        /// thread_local stash of allocated size
         static size_t& stashed_alloc_size();
 
         /// exception pointer to the most recently raised exception
@@ -172,40 +179,63 @@ struct coroutine : public printable {
 
         /**
          @brief install a cleanup operation 
-         @param cleanup_op a cleanup operation function pointer 
-         @param arg some arbitrary data
+
+         Cleanup handlers are installed as a list. Installed handlers are 
+         executed FILO (first in, last out).
+
+         @param co a cleanup operation function pointer 
+         @param arg some arbitrary data to be passed to `co` in the `cleanup_data` struct
          */
-        inline void install(void (*cleanup_op)(data&), void* arg) {
-            HCE_LOW_METHOD_ENTER("install", reinterpret_cast<void*>(cleanup_op), arg);
-            cleanup_operation_ = cleanup_op;
-            install_arg_ = arg;
+        inline void install(cleanup_operation co, void* arg) {
+            HCE_LOW_METHOD_ENTER("install", reinterpret_cast<void*>(co), arg);
+
+            node* next = hce::allocate<node>(1);
+            new(next) node(cleanup_list_, co, arg);
+            cleanup_list_ = next;
         }
 
         /**
-         @brief execute the installed callback operation 
+         @brief execute any installed callback operations
 
-         This should be called by the hce::co<T>::promise_type destructor.
-
-         @param arg some arbitrary data
+         This should be called by the hce::co<T>::promise_type destructor. It 
+         cannot be called by the underlying `hce::coroutine::promise_type` 
+         destructor because cleanup handlers may need to access members of the 
+         descendent type.
          */
         inline void cleanup() {
-            HCE_LOW_METHOD_ENTER("cleanup");
             // trigger the callback if it is set, then unset it
-            if(cleanup_operation_) [[likely]] {
-                HCE_LOW_METHOD_BODY("cleanup", reinterpret_cast<void*>(cleanup_operation_), install_arg_, (void*)this);
-                data d{install_arg_, this};
-                cleanup_operation_(d); 
-                cleanup_operation_ = nullptr;
+            if(cleanup_list_) [[likely]] {
+                HCE_LOW_METHOD_BODY("cleanup", "calling operations");
+
+                do {
+                    HCE_MIN_METHOD_BODY(
+                        "cleanup", 
+                        reinterpret_cast<void*>(cleanup_list_->co), 
+                        cleanup_list_->install, 
+                        (void*)this);
+
+                    cleanup_data d{cleanup_list_->install, this};
+                    cleanup_list_->co(d);
+                    node* old = cleanup_list_;
+                    cleanup_list_ = cleanup_list_->next;
+                    hce::deallocate<node>(old,1);
+                } while(cleanup_list_);
             } else {
                 HCE_LOW_METHOD_BODY("cleanup", "no cleanup operation");
             }
         }
 
     private:
+        /// object for creating a singly linked list of cleanup handlers
+        struct node {
+            node* next; /// the next node in the cleanup handler list
+            cleanup_operation co; /// the cleanup operation provided to install()
+            void* install; /// data pointer provied to install()
+        };
+
         /// written on object construction just after `new` from stashed_alloc_size()
         const std::size_t alloc_size_;
-        void (*cleanup_operation_)(data&); // callback operation 
-        void* install_arg_; // this value is only set on install()
+        node* cleanup_list_ = nullptr; // list of cleanup handlers
     };
 
     coroutine() { }
@@ -389,7 +419,12 @@ struct co : public coroutine {
             result = hce::make_unique<T>(std::forward<TSHADOW>(t));
         }
 
-        /// the `co_return`ed value of the co<T>
+        /**
+         @brief the `co_return`ed value of the co<T>
+
+         Is an `hce::unique_ptr` because it deallocates using reusable 
+         `hce::memory::cache` mechanism.
+         */
         hce::unique_ptr<T> result; 
     };
 

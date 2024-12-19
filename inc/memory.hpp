@@ -20,13 +20,28 @@ namespace cache {
  This interface is used by the cache to initialize.
  */
 struct info {
+    /// runtime calling thread information
+    struct thread {
+        enum type {
+            system, //< a regular system thread
+            scheduler, //< a thread designated for an hce::scheduler
+            global //< the thread designated for the global hce::scheduler
+        };
+
+        /// get the calling thread's type
+        static type& get_type();
+    };
+
     struct bucket {
         const size_t block; //< bucket element block size
         const size_t limit; //< maximum element count for the bucket
     };
 
+    /// get the info implementation
+    static info& get();
+
     /// return the count of buckets
-    virtual size_t count() = 0;
+    virtual size_t count() const = 0;
 
     /// return the bucket info for a given index
     virtual bucket& at(size_t idx) = 0;
@@ -36,16 +51,13 @@ struct info {
      based on an input block size. The returned index can be passed to `at()` to 
      select the proper bucket that contains *at least* the requested block size.
      */
-    typedef size_t(*index_f)(size_t);
+    typedef size_t(*index_function)(size_t);
 
     /**
      @return the index function which can calculate the index based on argument block size
      */
-    virtual index_f indexer() = 0;
+    virtual index_function indexer() = 0;
 };
-
-/// get the info implementation
-extern info& get_info();
 
 }
 }
@@ -54,12 +66,13 @@ extern info& get_info();
 namespace memory {
 
 /*
- An memory allocation mechanism which allows for thread_local caches of 
+ A memory allocation mechanism which allows for thread_local caches of 
  deallocated values for reuse on subsequent allocate() calls. This allows for 
  limiting lock contention on process-wide `std::malloc()`/`std::free()`.
 
  This is not an allocator which can be passed to a container, as it manages 
- multiple block sizes instead of a single templated `T`.
+ multiple block sizes instead of a single templated `T`. It is instead a 
+ mechanism for other allocation mechanisms to build on top of.
 
  This cache is non-exhaustive, std::malloc()/std::free() will be called as 
  necessary.
@@ -71,24 +84,37 @@ namespace memory {
  larger. 
 
  This may cause awkward doubly oversized allocations because `std::malloc()` 
- may do the *exact same thing* internally, potentially returning a much larger 
+ may do the *exact* same thing internally, potentially returning a much larger 
  memory block than the user requested. However, the allocations of the cache are 
- generally small enough any expected double over-sized allocations will still be 
- a relatively small allocation.
+ generally small enough any over-sized allocations will still be a relatively 
+ small allocation.
 
  It is *also* possible that this cache will store semi-randomly size blocks, and 
- this is not an error. That is, if some memory was `std::malloc()`ed by some 
- other code, then cached with `cache::deallocate()`, as long as the input size 
- to `deallocate()` is accurate, then it will store the pointer in a bucket of 
- with a block size at least as large as the cached pointer.
+ this is not an error. That is, if some memory was `std::malloc()`ed manually by 
+ some other code, then cached with `cache::deallocate()`, as long as the input 
+ size to `deallocate()` is accurate, then it will store the pointer in a bucket 
+ of with a block size at least as large as the cached pointer.
  */
 struct cache { 
+    struct bad_empty_alloc : public std::exception {
+        inline const char* what() const noexcept { 
+            return "hce::memory::cache: cannot allocate block size of 0"; 
+        }
+    };
+
     cache() {
-        auto& info = config::memory::cache::get_info();
+        // acquire the config::memory::cache::info implementation
+        auto& info = config::memory::cache::info::get();
+
+        // acquire the index() function
         index_ = info.indexer();
 
+        // allocate enough memory for all buckets at once
+        buckets_.reserve(info.count());
+
+        // setup the cache buckets based on the configuration
         for(size_t i=0; i<info.count(); ++i) {
-            auto& b = info.at(i);
+            config::memory::cache::info::bucket& b = info.at(i);
             buckets_.push_back(bucket(b.block, b.limit));
         }
     }
@@ -99,11 +125,13 @@ struct cache {
     static cache& get();
 
     inline void* allocate(size_t size) {
+        if(!size) [[unlikely]] { throw bad_empty_alloc(); }
+
         size_t idx = index_(size);
 
         if(idx < buckets_.size()) [[likely]] {
             return buckets_[idx].allocate();
-        } else {
+        } else [[unlikely]] {
             return std::malloc(size);
         }
     }
@@ -117,13 +145,60 @@ struct cache {
 
         if(idx < buckets_.size()) [[likely]] {
             buckets_[idx].deallocate(ptr);
-        } else {
+        } else [[unlikely]] {
             std::free(ptr);
         }
     }
 
     inline void deallocate(void* ptr, size_t alignment, size_t size) {
         deallocate(ptr, aligned_size_(alignment, size));
+    }
+
+    // return the bucket count
+    inline size_t count() const {
+        return buckets_.size();
+    }
+
+    // return the bucket index for a given allocation size
+    inline size_t index(size_t size) const {
+        return index_(size);
+    }
+
+    // return the bucket index for a given aligned allocation size
+    inline size_t index(size_t alignment, size_t size) const {
+        return index(aligned_size_(alignment, size));
+    }
+
+    // return the count of available cached allocations for a given size
+    inline size_t available(size_t size) const {
+        size_t idx = index_(size);
+
+        if(idx < buckets_.size()) [[likely]] {
+            return buckets_[idx].free_count;
+        } else [[unlikely]] {
+            return 0;
+        }
+    }
+    
+    // return the count of available cached allocations for a given aligned size
+    inline size_t available(size_t alignment, size_t size) const {
+        return available(aligned_size_(alignment, size));
+    }
+
+    // return the max count of available cached allocations for a given size
+    inline size_t limit(size_t size) const {
+        size_t idx = index_(size);
+
+        if(idx < buckets_.size()) [[likely]] {
+            return buckets_[idx].limit;
+        } else [[unlikely]] {
+            return 0;
+        }
+    }
+    
+    // return the max count of available cached allocations for a given aligned size
+    inline size_t limit(size_t alignment, size_t size) const {
+        return limit(aligned_size_(alignment, size));
     }
 
 private:
@@ -182,10 +257,14 @@ private:
     /*
      Bucket index calculation function. It accepts a memory block size and 
      returns the index of the bucket that contains at least that size.
-     */
-    hce::config::memory::cache::info::index_f index_;
 
-    // the various buckets managing allocations of different sized blocks
+     If this returns an index greater than available in the bucket vector, 
+     that means the requested block size is larger than available in the cache 
+     and must be directly `std::malloc()`ed/`std::free()`ed.
+     */
+    hce::config::memory::cache::info::index_function index_;
+
+    // the various buckets managing allocations of different block sizes
     std::vector<bucket> buckets_;
 };
 
@@ -248,8 +327,8 @@ inline void deallocate(void* p, size_t n=1) {
 /**
  @brief std:: compliant allocator that makes use of thread_local caching hce::allocate<T>/hce::deallocate<T> 
 
- Because this object uses hce::memory::cache, which itself uses `malloc()`/
- `free()`, it is compatible with `std::allocator<T>`.
+ Because this object exclusively uses hce::memory::cache, which itself uses 
+ `std::malloc()`/`std::free()`, it is compatible with `std::allocator<T>`.
 
  Design Aims:
  - written as close to std::allocator's design as possible 
@@ -261,8 +340,8 @@ inline void deallocate(void* p, size_t n=1) {
 
  Design Limitations:
  - no default pre-caching 
- - relies on predefined block cache size limits within hce::allocate()/
- hce::deallocate() mechanisms (no resizing or non-bucket size optimizations)
+ - relies on predefined block cache size limits within hce::allocate<T>()/
+ hce::deallocate<T>() mechanisms (no resizing or non-bucket size optimizations)
  - underlying mechanism's caches can only grow, never shrink
  */
 template <typename T>
@@ -346,7 +425,7 @@ namespace memory {
 template <typename T, size_t sz>
 struct deleter {
     void operator()(T* p) const {
-        for(size_t i=0; i<sz; ++i) {
+        for(size_t i=0; i<sz; ++i) [[likely]] {
             (p[i]).~T();
         }
         
@@ -366,11 +445,12 @@ struct deleter<T,1> {
 
 }
 
+/// unique_ptr type enforcing cache deallocation
 template <typename T>
 using unique_ptr = std::unique_ptr<T,memory::deleter<T,1>>;
 
 /**
- @brief allocate a unique_ptr which deletes using the framework allocation/deleter 
+ @brief allocate an hce::unique_ptr<T> which deletes using the framework deleter 
 
  Failing to uses this mechanism or to implement the underlying logic means that 
  when the unique_ptr goes out of scope the allocated memory will be directly be 
@@ -384,11 +464,11 @@ template <typename T, typename... Args>
 auto make_unique(Args&&... args) {
     T* t = hce::allocate<T>(1);
     new(t) T(std::forward<Args>(args)...);
-    return hce::unique_ptr<T>(t, memory::deleter<T,1>());
+    return hce::unique_ptr<T>(t);
 }
 
 /**
- @brief allocate a shared_ptr which deletes using the framework allocation/deleter 
+ @brief allocate a shared_ptr which deletes using the framework deleter
 
  @param as... T constructor arguments 
  @return an allocated `std::shared_ptr<T>`
@@ -397,17 +477,18 @@ template <typename T, typename... Args>
 auto make_shared(Args&&... args) {
     T* t = hce::allocate<T>(1);
     new(t) T(std::forward<Args>(args)...);
-    return std::shared_ptr<T>(t, memory::deleter<T,1>());
+    return std::shared_ptr<T>(t,memory::deleter<T,1>());
 }
 
 /**
- @brief allocate and construct an std::function<R()> from a callable and optional arguments 
+ @brief allocate and construct a hce::unique_ptr of std::function<R()> from a callable and optional arguments 
 
- The constructed std::function will return the result of the argument callable.
+ The constructed std::function will return the result of the argument callable 
+ with the provided arguments.
 
  @param callable a Callable
  @param args... any arguments to be bound to callable 
- @return an allocated std::unique_ptr containing the hce::thunk
+ @return an allocated unique_ptr to the std::function<R()>
  */
 template <typename Callable, typename... Args>
 auto make_unique_callable(Callable&& callable, Args&&... args) {
@@ -421,17 +502,18 @@ auto make_unique_callable(Callable&& callable, Args&&... args) {
             return callable(args...);
         });
 
-    return hce::unique_ptr<FunctionType>(ft, memory::deleter<FunctionType,1>());
+    return hce::unique_ptr<FunctionType>(ft);
 }
 
 /**
  @brief allocate and construct a thunk from a callable and optional arguments 
 
- An hce::thunk is a Callable which accepts no arguments and returns void.
+ An hce::thunk is a Callable which accepts no arguments and returns void. The 
+ constructed will execute the callable with the provided arguments.
 
  @param callable a Callable
  @param args... any arguments to be bound to callable 
- @return an allocated std::unique_ptr containing the hce::thunk
+ @return an allocated hce_unique_ptr to the hce::thunk
  */
 template <typename Callable, typename... Args>
 auto make_unique_thunk(Callable&& callable, Args&&... args) {
@@ -443,7 +525,7 @@ auto make_unique_thunk(Callable&& callable, Args&&... args) {
             callable(args...);
         });
 
-    return hce::unique_ptr<hce::thunk>(th, memory::deleter<hce::thunk,1>());
+    return hce::unique_ptr<hce::thunk>(th);
 }
 
 }

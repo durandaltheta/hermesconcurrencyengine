@@ -27,18 +27,17 @@ namespace hce {
  - constant time iteration
  - constant time append
  - constant time whole-list concatenation 
- - consumption iteration (front() + pop()) is very efficient
- - iterator support
  - push on head or tail (LIFO or FIFO)
  - size/length tracking
- - potential allocation reuse
+ - defaults to pool_allocator<T> for efficient memory reuse
  - lazy allocated value construction
 
  Design Limitations:
  - can only iterate from front to back (singly linked)
  - can only read and pop from head (singly linked)
- - iterator iteration is *very, very slighly* slower in order to support erasure
- - no support for arbitrary insertion 
+ - no iterator support
+ - no support for arbitrary insertion or erasure
+ - no support for sorting capabilities
 
  This is preferred by this project over `std::deque<T>` because it doesn't have 
  fast concatenation which directly impacts the processing loop of 
@@ -52,77 +51,6 @@ namespace hce {
 template <typename T, typename Allocator = hce::pool_allocator<T>>
 struct list : public printable {
     using value_type = T;
-
-    struct iterator : public std::forward_iterator_tag, public printable {
-        typedef T value_type; //< iterator templated value type
-
-        iterator() : prev_(nullptr), node_(nullptr) { } 
-        iterator(const iterator& rhs) : prev_(rhs.prev_), node_(rhs.node_) { } 
-
-        static inline hce::string info_name() { 
-            return hce::list<T>::info_name() + "::iterator"; 
-        }
-
-        inline hce::string name() const { return iterator::info_name(); }
-
-        inline hce::string content() const {
-            hce::stringstream ss;
-            ss << "prev:" << (void*)prev_ << ", node:" << (void*)node_;
-            return ss.str();
-        }
-
-        /// lvalue iterator assignment
-        inline const iterator& operator=(const iterator& rhs) const {
-            prev_ = rhs.prev_;
-            node_ = rhs.node_;
-            return *this;
-        }
-
-        /// lvalue iterator comparison
-        inline bool operator==(const iterator& rhs) const {
-            return node_ == rhs.node_;
-        }
-
-        /// rvalue iterator comparison
-        inline bool operator==(iterator&& rhs) const { return *this == rhs; }
-
-        /// lvalue iterator not comparison
-        inline bool operator!=(const iterator& rhs) const { return !(*this == rhs); }
-
-        /// rvalue iterator not comparison
-        inline bool operator!=(iterator&& rhs) const { return *this != rhs; }
-
-        /// retrieve reference to cached value T
-        inline T& operator*() const { return node_->value; }
-
-        /// retrieve pointer to cached value T
-        inline T* operator->() const { return &(node_->value); }
-
-        /// retrieve data from the channel iterator
-        inline const iterator& operator++() const {
-            prev_ = node_;
-            node_ = node_->next;
-            return *this;
-        }
-
-        /// retrieve data from the channel iterator
-        inline const iterator operator++(int) const {
-            prev_ = node_;
-            node_ = node_->next;
-            return *this;
-        }
-
-    private:
-        iterator(typename hce::list<T>::node* p,
-                 typename hce::list<T>::node* n) : 
-            prev_(p),
-            node_(n) 
-        { }
-
-        typename hce::list<T>::node* prev_;
-        typename hce::list<T>::node* node_;
-    };
-
 
     list() { HCE_MIN_CONSTRUCTOR(); }
 
@@ -288,73 +216,6 @@ struct list : public printable {
         old->~node();
         allocator_.deallocate(old, 1);
         --size_;
-    }
-
-    /**
-     @return an iterator to the head of the list
-     */
-    inline iterator begin() const { return { nullptr, head_ }; }
-
-    /**
-     @return an iterator past the end the list
-     */
-    inline iterator end() const { return { tail_, nullptr }; }
-    
-    /**
-     @brief iterate the list front to back and find the first `t == element`
-
-     The returned iterator will == end() if no matching t was found. 
-
-     @param t a comparison value
-     @return the iterator pointing to the found element, if any 
-     */
-    inline iterator find(const T& t) {
-        HCE_MIN_METHOD_ENTER("find");
-        auto prev = nullptr;
-        auto cur = head_;
-
-        while(cur && cur->value != t) {
-            prev = cur;
-            cur = cur->next;
-        }
-
-        return { prev, cur };
-    }
-
-    /**
-     @brief erase the element pointed to by it
-     @param it the iterator to element to erase 
-     */
-    inline void erase(iterator it) {
-        HCE_MIN_METHOD_ENTER("erase", it);
-        it.prev_->next = it.node_->next;
-        it.node_->~node();
-        allocator_.deallocate(it.node_, 1); 
-    }
-
-    /**
-     @brief insert an element after the element pointed to by it
-     @param it the iterator to element to insert after
-     @param as constructor arguments for type T that will be inserted
-     */
-    template <typename... As>
-    inline void insert(iterator it, As&&... as) {
-        HCE_MIN_METHOD_ENTER("insert", it);
-
-        node* next = allocator_.allocate(1);
-
-        // placement new construction
-        new(next) node(std::forward<As>(as)...);
-
-        if(size_) [[likely]] {
-            next->next = it.node_->next;
-            it.node_->next = next;
-        } else [[unlikely]] {
-            head_ = next;
-            tail_ = next;
-        } 
-            
-        ++size_;
     }
 
     /**

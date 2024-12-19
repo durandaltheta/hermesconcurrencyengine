@@ -12,7 +12,7 @@ add_subdirectory(googletest)
 add_executable(hce_ut 
     #test_helpers.hpp
     #atomic_ut.cpp 
-    #memory_ut.cpp
+    memory_ut.cpp
     #circular_buffer_ut.cpp
     #pool_allocator_ut.cpp 
     #list_ut.cpp 
@@ -21,14 +21,15 @@ add_executable(hce_ut
     #chrono_ut.cpp
     #coroutine_ut.cpp
     scheduler_schedule_ut.cpp
-    scheduler_timer_ut.cpp
+    #scheduler_timer_ut.cpp
     #scheduler_block_ut.cpp
     #scope_ut.cpp
     #channel_ut.cpp 
     #threadpool_ut.cpp
     #comparison_ut.cpp
+    main_ut.cpp
 )
 
 target_include_directories(hce_ut PUBLIC ${HCE_INCLUDE_DIR} PRIVATE ${LOG_SOURCE_DIR})
-target_link_libraries(hce_ut PRIVATE gtest gtest_main hce)
-target_compile_definitions(hce_ut PRIVATE -DHCELOGLIMIT=${HCELOGLIMIT})
+target_link_libraries(hce_ut PRIVATE gtest hce)
+target_compile_definitions(hce_ut PRIVATE -DHCELOGLIMIT=${HCELOGLIMIT} -DHCETHREADLOCALMEMORYBUCKETCOUNT=${HCETHREADLOCALMEMORYBUCKETCOUNT} -DHCETHREADLOCALMEMORYBUCKETBYTELIMIT=${HCETHREADLOCALMEMORYBUCKETBYTELIMIT})

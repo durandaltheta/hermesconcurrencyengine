@@ -1,5 +1,5 @@
 # Synopsis 
-This framework makes extensive use of allocated memory, in such a way that the allocation itself is potentially a bottleneck. This is because `coroutine`s, and their single-use `awaitable` communication primitives, are allocated implementations. Furthermore, objects which implement communication mechanisms are often utilizing containers which frequently allocate and deallocate.
+This framework makes extensive use of allocated memory, in such a way that allocation itself is potentially a bottleneck. This is because `coroutine`s, and their single-use `awaitable` communication primitives, are allocated implementations. Furthermore, objects which implement communication mechanisms are often utilizing containers which frequently allocate and deallocate.
 
 Allocation and deallocation, while very fast, may utilize process-wide atomic locking, which adds a small cost when every allocation has to acquire the lock, and a larger cost whenever multiple threads of execution need to allocate. Because coroutine communication (and thus context switching) is a primary point of improvement over traditional inter-thread mechanisms, it is important to address the problem of allocation, especially as inter-thread communication increases in user code.
 
@@ -21,7 +21,7 @@ void hce::memory::deallocate(void* p, size_t size);
 ```
 
 ## Thread Local Caching
-The first, and most general, allocation caching mechanism is each thread has a `thread_local` `hce::memory::cache`. `cache`s cache a variety of relatively small allocation tiers for reuse. `hce::memory::allocate()`/`hce::memory::deallocate()` functions are abstractions to calling the `thread_local` `cache`.
+The first, and most general, allocation caching mechanism is each thread has a `thread_local` `hce::memory::cache`. `cache`s cache a variety of relatively small allocation tiers for reuse. `hce::memory::allocate()`/`hce::memory::deallocate()` functions are abstractions to calling the `thread_local` `cache`'s methods, which are lockless.
 
 The `cache` is configured at framework build time with the following `cmake` defined values:
 - `HCETHREADLOCALMEMORYBUCKETCOUNT`: the count of buckets which cache memory chunks in powers of 2, ie: bucket[0] holds allocations of 1 byte, bucket[1] holds allocations of 2 bytes, bucket[2] holds allocations of 4 bytes, etc.
@@ -29,12 +29,12 @@ The `cache` is configured at framework build time with the following `cmake` def
 
 The default `hce::config` function which is used to initialize the `cache` is this function:
 ```
-extern hce::config::memory::cache::info& hce::config::memory::cache::get_info();
+extern hce::config::memory::cache::info& hce::config::memory::cache::info::get();
 ```
 
-The user can either modify the `cmake` defines or implement a custom `get_info()`. 
+The user can either modify the `cmake` defines or implement a custom `get()`. The default implementation provides different caching configurations based on the type of thread that needs the cache. For example, the thread running the `hce::scheduler` returned by `hce::scheduler::global()` is expected to have the highest memory reuse burden of any system thread, and is given due consideration.
 
-Custom implementations of `get_info()` provide the opportunity for fine-grained control of the cache. For example, if the user determines that a few buckets needs a much higher (or lower) byte limit, they can implement the *exact* bucket limits and block size values in their implementation.
+Custom implementations of `info()` provide the opportunity for fine-grained control of the cache. For example, if the user determines that a few buckets needs a much higher (or lower) byte limit, they can implement the *exact* bucket limits and block size values in their implementation.
 
 ## Default Allocator 
 The `hce::allocator<T>` is a replacement for `std::allocator<T>` which uses `hce::allocate<T>()`/`hce::deallocate<T>()` instead of directly calling `malloc()`/`free()`. This allows the user to easily make use of the framework's allocation caching in their `std::` compliant containers.
@@ -43,3 +43,15 @@ The `hce::allocator<T>` is a replacement for `std::allocator<T>` which uses `hce
 A second tier of allocation caching is implemented by the `hce::pool_allocator<T>`. Like `hce::allocator<T>`, `pool_allocator`s can be used as the allocator in `std::` containers. However, their purpose is to implement allocation caching for a *particular* use case, allowing code which utilizes it to set the size of the cache and to guarantee that allocated values in the `pool_allocator` are private, and therefore reusable allocated memory is guaranteed to be available if they have been previously cached.
 
 This mechanism is especially useful for container and communication mechanisms which need to repeatedly allocate values of a pre-known size. By separately caching allocations for reuse in the pool, the code can more precisely limit the calls to `malloc()`/`free()` based on superior knowledge of a given usecase.
+
+## Scheduler Coroutine Resource Limits
+A third example of memory allocation optimization comes in the form of `hce::scheduler` coroutine resource limits.
+
+List of memory related resource limits:
+- `HCESCHEDULERDEFAULTCOROUTINERESOURCELIMIT`: A fallback resource limit
+- `HCEGLOBALSCHEDULERCOROUTINERESOURCELIMIT`: The global `hce::scheduler` resource limit
+- `HCETHREADPOOLCOROUTINERESOURCELIMIT`: `hce::threadpool` `hce::scheduler` resource limit
+
+Resource limits are more of a heuristic than the previously described strategies. Specifically, they are tied to the specific size limits of `hce::pool_allocator<T>`s used internally by `hce::scheduler` objects, related to things like coroutine queue memory caching. Sane limits allow for more efficient coroutine processing in the median case, because less time is spent by the `hce::scheduler` allocating resources which are constantly being reused. 
+
+These values have *no* effect on the actual code running *inside* the coroutines running on a given `hce::scheduler`. They are instead about smoothing the algorithmic processing of scheduling itself.

@@ -99,7 +99,7 @@ hce::scheduler& hce::threadpool::lightest() {
 
     // get initial scheduler information
     hce::scheduler* lightest_scheduler = schedulers[index].get();
-    size_t lightest_workload = lightest_scheduler->workload();
+    size_t lightest_workload = lightest_scheduler->scheduled_count();
 
     // return immediately if no workload or if only 1 worker
     if(lightest_workload && worker_count > 1) [[likely]] {
@@ -108,7 +108,7 @@ hce::scheduler& hce::threadpool::lightest() {
             // Iterate index to the end of the workers
             for(; index < limit; ++index) [[likely]] {
                 hce::scheduler* current_scheduler = schedulers[index].get();
-                size_t current_workload = current_scheduler->workload();
+                size_t current_workload = current_scheduler->scheduled_count();
 
                 if(current_workload) [[likely]] {
                     if(current_workload < lightest_workload) {
