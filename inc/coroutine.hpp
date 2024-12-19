@@ -892,8 +892,8 @@ struct awaitable : public printable {
                 // otherwise in "no-lock" scenarios.
                 auto h = this->handle_;
                 this->handle_ = std::coroutine_handle<>();
-                this->destination(h);
                 if(rp != resume::policy::no_lock) { this->unlock(); }
+                this->destination(h);
             } else [[unlikely]] {
                 if(this->tt_) [[unlikely]] { 
                     HCE_TRACE_METHOD_BODY("resume","unblock");
@@ -936,6 +936,8 @@ struct awaitable : public printable {
          This is called during resume() with the suspended coroutine handle, and
          is responsible for scheduling the handle for execution. IE, the handle 
          is ready to have its `resume()` method called.
+
+         The lock is unlocked during this call.
          */
         virtual void destination(std::coroutine_handle<>) = 0;
 
