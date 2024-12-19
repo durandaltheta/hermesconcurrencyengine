@@ -318,7 +318,7 @@ size_t block_T() {
         auto lf = hce::scheduler::make();
         std::shared_ptr<hce::scheduler> sch = lf->scheduler();
 
-        EXPECT_EQ(0, sch->block_worker_pool_limit());
+        EXPECT_EQ(0, sch->block_worker_resource_limit());
 
         auto schedule_blocking_co = [&](T t) {
             HCE_INFO_FUNCTION_ENTER("schedule_blocking_co");
@@ -576,42 +576,42 @@ hce::co<T> co_block_for_queue_simple_T(test::queue<T>& q) {
 }
 
 template <typename T>
-size_t block_worker_pool_limit_T(const size_t pool_limit) {
+size_t block_worker_resource_limit_T(const size_t resource_limit) {
     size_t success_count = 0;
 
-    for(size_t reuse_cnt=0; reuse_cnt<pool_limit; ++reuse_cnt) {
-        std::vector<test::queue<T>> q(pool_limit);
+    for(size_t reuse_cnt=0; reuse_cnt<resource_limit; ++reuse_cnt) {
+        std::vector<test::queue<T>> q(resource_limit);
         auto cfg = hce::scheduler::config::make();
-        cfg->block_worker_pool_limit = reuse_cnt;
+        cfg->block_worker_resource_limit = reuse_cnt;
         auto lf = hce::scheduler::make(std::move(cfg));
         std::shared_ptr<hce::scheduler> sch = lf->scheduler();
 
         std::deque<hce::awt<T>> awts;
 
         try {
-            EXPECT_EQ(reuse_cnt, sch->block_worker_pool_limit());
+            EXPECT_EQ(reuse_cnt, sch->block_worker_resource_limit());
             EXPECT_EQ(0, sch->block_worker_count());
 
-            for(size_t i=0; i<pool_limit; ++i) {
+            for(size_t i=0; i<resource_limit; ++i) {
                 awts.push_back(sch->schedule(
                     test::scheduler::co_block_for_queue_simple_T(q[i])));
             }
 
             std::this_thread::sleep_for(std::chrono::milliseconds(40));
 
-            EXPECT_EQ(reuse_cnt, sch->block_worker_pool_limit());
-            EXPECT_EQ(pool_limit, sch->block_worker_count());
+            EXPECT_EQ(reuse_cnt, sch->block_worker_resource_limit());
+            EXPECT_EQ(resource_limit, sch->block_worker_count());
             
-            for(size_t i=0; i<pool_limit; ++i) {
+            for(size_t i=0; i<resource_limit; ++i) {
                 q[i].push((T)test::init<T>(i));
             }
 
-            for(size_t i=0; i<pool_limit; ++i) {
+            for(size_t i=0; i<resource_limit; ++i) {
                 EXPECT_EQ((T)test::init<T>(i), (T)std::move(awts.front()));
                 awts.pop_front();
             }
 
-            EXPECT_EQ(reuse_cnt, sch->block_worker_pool_limit());
+            EXPECT_EQ(reuse_cnt, sch->block_worker_resource_limit());
             EXPECT_EQ(reuse_cnt, sch->block_worker_count());
 
             ++success_count;
@@ -626,15 +626,15 @@ size_t block_worker_pool_limit_T(const size_t pool_limit) {
 }
 }
 
-TEST(scheduler, block_worker_and_block_worker_pool_limit) {
+TEST(scheduler, block_worker_and_block_worker_resource_limit) {
     const size_t expected = 10;
-    EXPECT_EQ(expected, test::scheduler::block_worker_pool_limit_T<int>(10));
-    EXPECT_EQ(expected, test::scheduler::block_worker_pool_limit_T<unsigned int>(10));
-    EXPECT_EQ(expected, test::scheduler::block_worker_pool_limit_T<size_t>(10));
-    EXPECT_EQ(expected, test::scheduler::block_worker_pool_limit_T<float>(10));
-    EXPECT_EQ(expected, test::scheduler::block_worker_pool_limit_T<double>(10));
-    EXPECT_EQ(expected, test::scheduler::block_worker_pool_limit_T<char>(10));
-    EXPECT_EQ(expected, test::scheduler::block_worker_pool_limit_T<void*>(10));
-    EXPECT_EQ(expected, test::scheduler::block_worker_pool_limit_T<std::string>(10));
-    EXPECT_EQ(expected, test::scheduler::block_worker_pool_limit_T<test::CustomObject>(10));
+    EXPECT_EQ(expected, test::scheduler::block_worker_resource_limit_T<int>(10));
+    EXPECT_EQ(expected, test::scheduler::block_worker_resource_limit_T<unsigned int>(10));
+    EXPECT_EQ(expected, test::scheduler::block_worker_resource_limit_T<size_t>(10));
+    EXPECT_EQ(expected, test::scheduler::block_worker_resource_limit_T<float>(10));
+    EXPECT_EQ(expected, test::scheduler::block_worker_resource_limit_T<double>(10));
+    EXPECT_EQ(expected, test::scheduler::block_worker_resource_limit_T<char>(10));
+    EXPECT_EQ(expected, test::scheduler::block_worker_resource_limit_T<void*>(10));
+    EXPECT_EQ(expected, test::scheduler::block_worker_resource_limit_T<std::string>(10));
+    EXPECT_EQ(expected, test::scheduler::block_worker_resource_limit_T<test::CustomObject>(10));
 }

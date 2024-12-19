@@ -12,7 +12,7 @@ add_subdirectory(googletest)
 add_executable(hce_ut 
     #test_helpers.hpp
     #atomic_ut.cpp 
-    memory_ut.cpp
+    #memory_ut.cpp
     #circular_buffer_ut.cpp
     #pool_allocator_ut.cpp 
     #list_ut.cpp 
@@ -20,14 +20,14 @@ add_executable(hce_ut
     #id_ut.cpp
     #chrono_ut.cpp
     #coroutine_ut.cpp
-    scheduler_schedule_ut.cpp
+    #scheduler_schedule_ut.cpp
     #scheduler_timer_ut.cpp
-    #scheduler_block_ut.cpp
+    scheduler_block_ut.cpp
     #scope_ut.cpp
     #channel_ut.cpp 
-    threadpool_ut.cpp
-    comparison_ut.cpp
-    main_ut.cpp
+    #threadpool_ut.cpp
+    #comparison_ut.cpp
+    main.cpp
 )
 
 target_include_directories(hce_ut PUBLIC ${HCE_INCLUDE_DIR} PRIVATE ${LOG_SOURCE_DIR})

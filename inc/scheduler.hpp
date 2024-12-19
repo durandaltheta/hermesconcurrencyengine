@@ -1116,25 +1116,20 @@ struct scheduler : public printable {
 
         if(id) {
             std::unique_lock<spinlock> lk(lk_);
+            scheduler_halted_guard_("cancel");
             auto it = timers_.begin();
             auto end = timers_.end();
 
             while(it != end) [[likely]] {
                 // search through the timers for a matching id
                 if((*it)->id() == id) [[unlikely]] {
-                    std::unique_ptr<timer> found; 
-                    result = true;
-                    found.reset(*it);
+                    schedule_coroutine_handle_(timer::resume_op(*it,(void*)0).release());
                     timers_.erase(it);
-
+                    operations_notify_();
                     lk.unlock();
 
+                    result = true;
                     HCE_MED_METHOD_BODY("cancel","cancelled timer with id:",found->id());
-                    found->resume((void*)0);
-
-                    lk.lock();
-
-                    operations_notify_();
                     break;
                 }
 
@@ -1275,8 +1270,8 @@ private:
                         hce::spinlock,
                         hce::awt<bool>::interface>>(
                             slk_,
-                            hce::awaitable::await::defer,
-                            hce::awaitable::resume::lock),
+                            hce::awaitable::await::policy::defer,
+                            hce::awaitable::resume::policy::lock),
             tp_(tp),
             ready_(false),
             result_(false),
@@ -1327,6 +1322,11 @@ private:
 
         inline const hce::chrono::time_point& timeout() const { return tp_; }
         inline const hce::sid& id() const { return id_; }
+
+        static inline hce::co<void> resume_op(timer* t, void* val) {
+            t->resume(val);
+            co_return;
+        }
 
     private:
         hce::chrono::time_point tp_;
@@ -1473,6 +1473,9 @@ private:
                 hce::pool_allocator<std::coroutine_handle<>>(
                     coroutine_resource_limit_)));
 
+        // timers extracted from the main timers list
+        std::list<timer*,hce::allocator<timer*>> local_timers;
+
         // the current time
         hce::chrono::time_point now; 
 
@@ -1540,13 +1543,7 @@ private:
                         while(it!=end) [[likely]] {
                             // check if a timer is ready to timeout
                             if((*it)->timeout() <= now) {
-                                /*
-                                 Handle ready timers before coroutines in case 
-                                 exceptions occur in user code. Resuming a timer
-                                 will push_back a coroutine handle onto the 
-                                 `coroutine_queue_` member.
-                                  */
-                                (*it)->resume((void*)1);
+                                coroutine_queue_->push_back(timer::resume_op(*it,(void*)1).release());
                                 it = timers_.erase(it);
                             } else {
                                 // no remaining ready timers, exit loop early
