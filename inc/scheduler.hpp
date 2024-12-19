@@ -579,7 +579,9 @@ struct scheduler : public printable {
             }
 
         private:
-            manager() : state_(executing) { HCE_HIGH_CONSTRUCTOR(); }
+            manager() : state_(executing) { 
+                HCE_HIGH_CONSTRUCTOR(); 
+            }
 
             hce::spinlock lk_;
             hce::scheduler::state state_;

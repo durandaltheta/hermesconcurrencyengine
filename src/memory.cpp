@@ -9,7 +9,8 @@ std::thread::id get_main_thread_id() {
     return main_thread_id;
 }
 
-// get the cache for the main thread only
+// Get the cache for the main thread only. Static initialization means the 
+// memory for this will be available during `std::atexit()`.
 hce::memory::cache& get_main_cache() {
     static hce::memory::cache tlca;
     return tlca;
