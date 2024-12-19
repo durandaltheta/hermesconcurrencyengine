@@ -3,6 +3,7 @@
 
 #include "loguru.hpp"
 #include "atomic.hpp"
+#include "list.hpp"
 #include "coroutine.hpp"
 #include "scheduler.hpp"
 #include "channel.hpp"
@@ -58,13 +59,15 @@ void concurrent_simple_communication_op_hce_spinlock(
                 hce::channel<int> ch1,
                 std::uint64_t recv_total,
                 hce::channel<int> done_ch) {
-            hce::schedule(ops::t1(ch0,ch1,recv_total,done_ch));
+            auto awt = hce::schedule(ops::t1(ch0,ch1,recv_total,done_ch));
             int message;
 
             for(size_t recv=0; recv<recv_total; ++recv) {
                 co_await ch0.send(recv);
                 co_await ch1.recv(message);
             }
+
+            co_await std::move(awt);
         }
 
         static inline hce::co<void> t1(
@@ -87,12 +90,13 @@ void concurrent_simple_communication_op_hce_spinlock(
     done_ch.construct(std::thread::hardware_concurrency());
 
     std::uint64_t repeat = thread_total/2;
+    hce::list<hce::awt<void>> scheduled;
 
     for(std::uint64_t c=0; c<repeat; ++c) {
         hce::channel<int> ch0, ch1;
         ch0.construct(0);
         ch1.construct(0);
-        hce::schedule(ops::t0(ch0,ch1,recv_total,done_ch));
+        scheduled.push_back(hce::schedule(ops::t0(ch0,ch1,recv_total,done_ch)));
     }
 
     int x; // temp val
@@ -109,13 +113,15 @@ void concurrent_simple_communication_op_hce_lockfree(
                 hce::channel<int> ch1,
                 std::uint64_t recv_total,
                 hce::channel<int> done_ch) {
-            hce::schedule(ops::t1(ch0,ch1,recv_total,done_ch));
+            auto awt = hce::schedule(ops::t1(ch0,ch1,recv_total,done_ch));
             int message;
 
             for(size_t recv=0; recv<recv_total; ++recv) {
                 co_await ch0.send(recv);
                 co_await ch1.recv(message);
             }
+
+            co_await std::move(awt);
         }
 
         static inline hce::co<void> t1(
@@ -138,12 +144,13 @@ void concurrent_simple_communication_op_hce_lockfree(
     done_ch.construct(std::thread::hardware_concurrency());
 
     std::uint64_t repeat = thread_total/2;
+    hce::list<hce::awt<void>> scheduled;
 
     for(std::uint64_t c=0; c<repeat; ++c) {
         hce::channel<int> ch0, ch1;
         ch0.construct<hce::lockfree>(0);
         ch1.construct<hce::lockfree>(0);
-        hce::schedule(ops::t0(ch0,ch1,recv_total,done_ch));
+        scheduled.push_back(hce::schedule(ops::t0(ch0,ch1,recv_total,done_ch)));
     }
 
     int x; // temp val
@@ -160,13 +167,15 @@ void concurrent_simple_communication_op_std_mutex(
                 hce::channel<int> ch1,
                 std::uint64_t recv_total,
                 hce::channel<int> done_ch) {
-            hce::schedule(ops::t1(ch0,ch1,recv_total,done_ch));
+            auto awt = hce::schedule(ops::t1(ch0,ch1,recv_total,done_ch));
             int message;
 
             for(size_t recv=0; recv<recv_total; ++recv) {
                 co_await ch0.send(recv);
                 co_await ch1.recv(message);
             }
+
+            co_await std::move(awt);
         }
 
         static inline hce::co<void> t1(
@@ -189,12 +198,13 @@ void concurrent_simple_communication_op_std_mutex(
     done_ch.construct(std::thread::hardware_concurrency());
 
     std::uint64_t repeat = thread_total/2;
+    hce::list<hce::awt<void>> scheduled;
 
     for(std::uint64_t c=0; c<repeat; ++c) {
         hce::channel<int> ch0, ch1;
         ch0.construct<std::mutex>(0);
         ch1.construct<std::mutex>(0);
-        hce::schedule(ops::t0(ch0,ch1,recv_total,done_ch));
+        scheduled.push_back(hce::schedule(ops::t0(ch0,ch1,recv_total,done_ch)));
     }
 
     int x; // temp val
