@@ -17,9 +17,9 @@ add_executable(hce_ut
     #id_ut.cpp
     #chrono_ut.cpp
     #coroutine_ut.cpp
-    #scheduler_schedule_ut.cpp
-    #scheduler_block_ut.cpp
-    timer_ut.cpp
+    #scheduler_ut.cpp
+    #timer_ut.cpp
+    blocking_ut.cpp
     #scope_ut.cpp
     #channel_ut.cpp 
     #threadpool_ut.cpp

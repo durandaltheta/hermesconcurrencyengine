@@ -5,10 +5,12 @@
 #include <thread>
 #include <chrono>
 #include <vector>
+#include <algorithm>
 
 #include "loguru.hpp"
 #include "atomic.hpp"
 #include "scheduler.hpp"
+#include "blocking.hpp"
 
 #include <gtest/gtest.h> 
 #include "test_helpers.hpp"
@@ -32,7 +34,7 @@ T block_done_immediately_stacked_outer_T(T t, bool& ids_identical, std::thread::
     auto thd_id = std::this_thread::get_id();
     ids_identical = parent_id == thd_id;
     bool sub_ids_identical = false;
-    T result = hce::scheduler::get().block(block_done_immediately_T<T>,std::move(t), std::ref(sub_ids_identical), thd_id);
+    T result = hce::block(block_done_immediately_T<T>,std::move(t), std::ref(sub_ids_identical), thd_id);
     EXPECT_TRUE(sub_ids_identical);
     return result;
 }
@@ -41,7 +43,7 @@ void block_done_immediately_stacked_outer_void(bool& ids_identical, std::thread:
     auto thd_id = std::this_thread::get_id();
     ids_identical = parent_id == thd_id;
     bool sub_ids_identical = false;
-    hce::scheduler::get().block(block_done_immediately_void, std::ref(sub_ids_identical), thd_id);
+    hce::block(block_done_immediately_void, std::ref(sub_ids_identical), thd_id);
     EXPECT_TRUE(sub_ids_identical);
     return;
 }
@@ -52,7 +54,7 @@ hce::co<T> co_block_done_immediately_T(T t, bool& ids_identical, std::thread::id
     auto thd_id = std::this_thread::get_id();
     ids_identical = parent_id == thd_id;
     bool sub_ids_identical = true;
-    T result = co_await hce::scheduler::get().block(block_done_immediately_T<T>,std::move(t),std::ref(sub_ids_identical), parent_id);
+    T result = co_await hce::block(block_done_immediately_T<T>,std::move(t),std::ref(sub_ids_identical), parent_id);
     EXPECT_FALSE(sub_ids_identical);
     co_return std::move(result);
 }
@@ -62,7 +64,7 @@ hce::co<void> co_block_done_immediately_void(bool& ids_identical, std::thread::i
     auto thd_id = std::this_thread::get_id();
     ids_identical = parent_id == thd_id;
     bool sub_ids_identical = true;
-    co_await hce::scheduler::get().block(block_done_immediately_void,std::ref(sub_ids_identical), parent_id);
+    co_await hce::block(block_done_immediately_void,std::ref(sub_ids_identical), parent_id);
     EXPECT_FALSE(sub_ids_identical);
     co_return;
 }
@@ -73,7 +75,7 @@ hce::co<T> co_block_done_immediately_stacked_outer_T(T t, bool& ids_identical, s
     auto thd_id = std::this_thread::get_id();
     ids_identical = parent_id == thd_id;
     bool sub_ids_identical = true;
-    T result = co_await hce::scheduler::get().block(block_done_immediately_stacked_outer_T<T>,std::move(t),std::ref(sub_ids_identical), parent_id);
+    T result = co_await hce::block(block_done_immediately_stacked_outer_T<T>,std::move(t),std::ref(sub_ids_identical), parent_id);
     EXPECT_FALSE(sub_ids_identical);
     co_return std::move(result);
 }
@@ -83,7 +85,7 @@ hce::co<void> co_block_done_immediately_stacked_outer_void(bool& ids_identical, 
     auto thd_id = std::this_thread::get_id();
     ids_identical = parent_id == thd_id;
     bool sub_ids_identical = true;
-    co_await hce::scheduler::get().block(block_done_immediately_stacked_outer_void,std::ref(sub_ids_identical), parent_id);
+    co_await hce::block(block_done_immediately_stacked_outer_void,std::ref(sub_ids_identical), parent_id);
     EXPECT_FALSE(sub_ids_identical);
     co_return;
 }
@@ -105,7 +107,7 @@ T block_for_queue_stacked_outer_T(test::queue<T>& q, bool& ids_identical, std::t
     auto thd_id = std::this_thread::get_id();
     ids_identical = parent_id == thd_id;
     bool sub_ids_identical = false;
-    T result = hce::scheduler::get().block(block_for_queue_T<T>,std::ref(q), std::ref(sub_ids_identical), thd_id);
+    T result = hce::block(block_for_queue_T<T>,std::ref(q), std::ref(sub_ids_identical), thd_id);
     EXPECT_TRUE(sub_ids_identical);
     return result;
 }
@@ -114,7 +116,7 @@ void block_for_queue_stacked_outer_void(test::queue<void>& q, bool& ids_identica
     auto thd_id = std::this_thread::get_id();
     ids_identical = parent_id == thd_id;
     bool sub_ids_identical = false;
-    hce::scheduler::get().block(block_for_queue_void,std::ref(q), std::ref(sub_ids_identical), thd_id);
+    hce::block(block_for_queue_void,std::ref(q), std::ref(sub_ids_identical), thd_id);
     EXPECT_TRUE(sub_ids_identical);
     return;
 }
@@ -125,7 +127,7 @@ hce::co<T> co_block_for_queue_T(test::queue<T>& q, bool& ids_identical, std::thr
     auto thd_id = std::this_thread::get_id();
     ids_identical = parent_id == thd_id;
     bool sub_ids_identical = true;
-    T result = co_await hce::scheduler::get().block(block_for_queue_T<T>,std::ref(q),std::ref(sub_ids_identical), parent_id);
+    T result = co_await hce::block(block_for_queue_T<T>,std::ref(q),std::ref(sub_ids_identical), parent_id);
     EXPECT_FALSE(sub_ids_identical);
     co_return std::move(result);
 }
@@ -135,7 +137,7 @@ hce::co<void> co_block_for_queue_void(test::queue<void>& q, bool& ids_identical,
     auto thd_id = std::this_thread::get_id();
     ids_identical = parent_id == thd_id;
     bool sub_ids_identical = true;
-    co_await hce::scheduler::get().block(block_for_queue_void,std::ref(q),std::ref(sub_ids_identical), parent_id);
+    co_await hce::block(block_for_queue_void,std::ref(q),std::ref(sub_ids_identical), parent_id);
     EXPECT_FALSE(sub_ids_identical);
     co_return;
 }
@@ -146,7 +148,7 @@ hce::co<T> co_block_for_queue_stacked_outer_T(test::queue<T>& q, bool& ids_ident
     auto thd_id = std::this_thread::get_id();
     ids_identical = parent_id == thd_id;
     bool sub_ids_identical = true;
-    T result = co_await hce::scheduler::get().block(block_for_queue_stacked_outer_T<T>,std::ref(q),std::ref(sub_ids_identical), parent_id);
+    T result = co_await hce::block(block_for_queue_stacked_outer_T<T>,std::ref(q),std::ref(sub_ids_identical), parent_id);
     EXPECT_FALSE(sub_ids_identical);
     co_return std::move(result);
 }
@@ -157,7 +159,7 @@ hce::co<void> co_block_for_queue_stacked_outer_void(test::queue<void>& q, bool& 
     auto thd_id = std::this_thread::get_id();
     ids_identical = parent_id == thd_id;
     bool sub_ids_identical = true;
-    co_await hce::scheduler::get().block(block_for_queue_stacked_outer_void,std::ref(q),std::ref(sub_ids_identical), parent_id);
+    co_await hce::block(block_for_queue_stacked_outer_void,std::ref(q),std::ref(sub_ids_identical), parent_id);
     EXPECT_FALSE(sub_ids_identical);
     co_return;
 }
@@ -165,22 +167,31 @@ hce::co<void> co_block_for_queue_stacked_outer_void(test::queue<void>& q, bool& 
 template <typename T>
 size_t block_T() {
     size_t success_count = 0;
+    const size_t process_worker_resource_limit = 
+        hce::blocking::config::process_worker_resource_limit();
+
+    auto post_block_expected_worker_count = [&](size_t blocks_executed) {
+        return process_worker_resource_limit < blocks_executed
+            ? process_worker_resource_limit
+            : blocks_executed;
+    };
 
     {
-        HCE_INFO_LOG("thread block done immediately+");
+        HCE_INFO_LOG("thread block done immediately");
         auto schedule_blocking = [&](T t) {
+            hce::blocking::service::get().clear_workers();
             auto thd_id = std::this_thread::get_id();
             bool ids_identical = false;
             bool ids_identical2 = false;
             bool ids_identical3 = false;
-            EXPECT_EQ(0, hce::scheduler::get().block_worker_count());
-            EXPECT_EQ(t, (T)hce::scheduler::get().block(block_done_immediately_T<T>,t,std::ref(ids_identical), thd_id));
+            EXPECT_EQ(0, hce::blocking::service::get().worker_count());
+            EXPECT_EQ(t, (T)hce::block(block_done_immediately_T<T>,t,std::ref(ids_identical), thd_id));
             EXPECT_TRUE(ids_identical);
-            EXPECT_EQ(t, (T)hce::scheduler::get().block(block_done_immediately_T<T>,t,std::ref(ids_identical2), thd_id));
+            EXPECT_EQ(t, (T)hce::block(block_done_immediately_T<T>,t,std::ref(ids_identical2), thd_id));
             EXPECT_TRUE(ids_identical2);
             EXPECT_EQ(t, (T)hce::block(block_done_immediately_T<T>,t,std::ref(ids_identical3), thd_id));
             EXPECT_TRUE(ids_identical3);
-            EXPECT_EQ(0, hce::scheduler::get().block_worker_count());
+            EXPECT_EQ(0, hce::blocking::service::get().worker_count());
         };
 
         try {
@@ -192,12 +203,12 @@ size_t block_T() {
         } catch(const std::exception& e) {
             LOG_F(ERROR, e.what());
         }
-        HCE_INFO_LOG("thread block done immediately-");
     }
 
     {
-        HCE_INFO_LOG("thread block for queue+");
+        HCE_INFO_LOG("thread block for queue");
         auto schedule_blocking = [&](T t) {
+            hce::blocking::service::get().clear_workers();
             test::queue<T> q;
             auto thd_id = std::this_thread::get_id();
             bool ids_identical = false;
@@ -206,22 +217,22 @@ size_t block_T() {
 
             auto launch_sender_thd = [&]{
                 std::thread([&](T t){
-                    EXPECT_EQ(0, hce::scheduler::get().block_worker_count());
+                    EXPECT_EQ(0, hce::blocking::service::get().worker_count());
                     q.push(std::move(t));
                 },t).detach();
             };
 
-            EXPECT_EQ(0, hce::scheduler::get().block_worker_count());
+            EXPECT_EQ(0, hce::blocking::service::get().worker_count());
             launch_sender_thd();
             launch_sender_thd();
             launch_sender_thd();
-            EXPECT_EQ(t, (T)hce::scheduler::get().block(block_for_queue_T<T>,std::ref(q),std::ref(ids_identical), thd_id));
+            EXPECT_EQ(t, (T)hce::block(block_for_queue_T<T>,std::ref(q),std::ref(ids_identical), thd_id));
             EXPECT_TRUE(ids_identical);
-            EXPECT_EQ(t, (T)hce::scheduler::get().block(block_for_queue_T<T>,std::ref(q),std::ref(ids_identical2), thd_id));
+            EXPECT_EQ(t, (T)hce::block(block_for_queue_T<T>,std::ref(q),std::ref(ids_identical2), thd_id));
             EXPECT_TRUE(ids_identical2);
             EXPECT_EQ(t, (T)hce::block(block_for_queue_T<T>,std::ref(q),std::ref(ids_identical3), thd_id));
             EXPECT_TRUE(ids_identical3);
-            EXPECT_EQ(0, hce::scheduler::get().block_worker_count());
+            EXPECT_EQ(0, hce::blocking::service::get().worker_count());
         };
 
         try {
@@ -233,7 +244,6 @@ size_t block_T() {
         } catch(const std::exception& e) {
             LOG_F(ERROR, e.what());
         }
-        HCE_INFO_LOG("thread block for queue-");
     }
 
     //
@@ -243,20 +253,22 @@ size_t block_T() {
     // call should execute immediately on the current thread, leaving the 
     // 'block_worker_count()' count the same as only calling block() once. 
     {
-        HCE_INFO_LOG("thread stacked block done immediately+");
+        HCE_INFO_LOG("thread stacked block done immediately");
         auto schedule_blocking = [&](T t) {
+            hce::blocking::service::get().clear_workers();
             auto thd_id = std::this_thread::get_id();
             bool ids_identical = false;
             bool ids_identical2 = false;
             bool ids_identical3 = false;
-            EXPECT_EQ(0, hce::scheduler::get().block_worker_count());
-            EXPECT_EQ(t, (T)hce::scheduler::get().block(block_done_immediately_stacked_outer_T<T>,t,std::ref(ids_identical), thd_id));
+            EXPECT_EQ(0, hce::blocking::service::get().worker_count());
+            EXPECT_EQ(t, (T)hce::block(block_done_immediately_stacked_outer_T<T>,t,std::ref(ids_identical), thd_id));
             EXPECT_TRUE(ids_identical);
-            EXPECT_EQ(t, (T)hce::scheduler::get().block(block_done_immediately_stacked_outer_T<T>,t,std::ref(ids_identical2), thd_id));
+            EXPECT_EQ(t, (T)hce::block(block_done_immediately_stacked_outer_T<T>,t,std::ref(ids_identical2), thd_id));
             EXPECT_TRUE(ids_identical2);
             EXPECT_EQ(t, (T)hce::block(block_done_immediately_stacked_outer_T<T>,t,std::ref(ids_identical3), thd_id));
             EXPECT_TRUE(ids_identical3);
-            EXPECT_EQ(0, hce::scheduler::get().block_worker_count());
+
+            EXPECT_EQ(0, hce::blocking::service::get().worker_count());
         };
 
         try {
@@ -268,12 +280,12 @@ size_t block_T() {
         } catch(const std::exception& e) {
             LOG_F(ERROR, e.what());
         }
-        HCE_INFO_LOG("thread stacked block done immediately-");
     }
 
     {
-        HCE_INFO_LOG("thread stacked block+");
+        HCE_INFO_LOG("thread stacked block");
         auto schedule_blocking = [&](T t) {
+            hce::blocking::service::get().clear_workers();
             test::queue<T> q;
             auto thd_id = std::this_thread::get_id();
             bool ids_identical = false;
@@ -282,22 +294,23 @@ size_t block_T() {
 
             auto launch_sender_thd = [&]{
                 std::thread([&](T t){
-                    EXPECT_EQ(0, hce::scheduler::get().block_worker_count());
+                    EXPECT_EQ(0, hce::blocking::service::get().worker_count());
                     q.push(std::move(t));
                 },t).detach();
             };
 
-            EXPECT_EQ(0, hce::scheduler::get().block_worker_count());
+            EXPECT_EQ(0, hce::blocking::service::get().worker_count());
             launch_sender_thd();
             launch_sender_thd();
             launch_sender_thd();
-            EXPECT_EQ(t, (T)hce::scheduler::get().block(block_for_queue_stacked_outer_T<T>,std::ref(q),std::ref(ids_identical), thd_id));
+            EXPECT_EQ(t, (T)hce::block(block_for_queue_stacked_outer_T<T>,std::ref(q),std::ref(ids_identical), thd_id));
             EXPECT_TRUE(ids_identical);
-            EXPECT_EQ(t, (T)hce::scheduler::get().block(block_for_queue_stacked_outer_T<T>,std::ref(q),std::ref(ids_identical2), thd_id));
+            EXPECT_EQ(t, (T)hce::block(block_for_queue_stacked_outer_T<T>,std::ref(q),std::ref(ids_identical2), thd_id));
             EXPECT_TRUE(ids_identical2);
             EXPECT_EQ(t, (T)hce::block(block_for_queue_stacked_outer_T<T>,std::ref(q),std::ref(ids_identical3), thd_id));
             EXPECT_TRUE(ids_identical3);
-            EXPECT_EQ(0, hce::scheduler::get().block_worker_count());
+            
+            EXPECT_EQ(0, hce::blocking::service::get().worker_count());
         };
 
         try {
@@ -309,39 +322,33 @@ size_t block_T() {
         } catch(const std::exception& e) {
             LOG_F(ERROR, e.what());
         }
-        HCE_INFO_LOG("thread stacked block-");
     }
 
     {
-        HCE_INFO_LOG("coroutine block done immediately+");
+        HCE_INFO_LOG("coroutine block done immediately");
         test::queue<T> q;
-        auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
-
-        EXPECT_EQ(0, sch->block_worker_resource_limit());
 
         auto schedule_blocking_co = [&](T t) {
-            HCE_INFO_FUNCTION_ENTER("schedule_blocking_co");
+            hce::blocking::service::get().clear_workers();
+            auto lf = hce::scheduler::make();
+            std::shared_ptr<hce::scheduler> sch = lf->scheduler();
             auto thd_id = std::this_thread::get_id();
             bool co_ids_identical = true;
             bool co_ids_identical2 = true;
             bool co_ids_identical3 = true;
 
-            HCE_INFO_LOG("block done immediately 1");
             auto awt = sch->schedule(
                 test::scheduler::co_block_done_immediately_T(
                     t,
                     co_ids_identical, 
                     thd_id));
 
-            HCE_INFO_LOG("block done immediately 2");
             auto awt2 = sch->schedule(
                 test::scheduler::co_block_done_immediately_T(
                     t,
                     co_ids_identical2, 
                     thd_id));
 
-            HCE_INFO_LOG("block done immediately 3");
             auto awt3 = sch->schedule(
                 test::scheduler::co_block_done_immediately_T(
                     t,
@@ -355,7 +362,8 @@ size_t block_T() {
             EXPECT_EQ(t, (T)std::move(awt3));
             EXPECT_FALSE(co_ids_identical3);
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            EXPECT_EQ(0, sch->block_worker_count());
+
+            EXPECT_EQ(post_block_expected_worker_count(3), hce::blocking::service::get().worker_count());
         };
 
         try {
@@ -367,36 +375,33 @@ size_t block_T() {
         } catch(const std::exception& e) {
             LOG_F(ERROR, e.what());
         }
-        HCE_INFO_LOG("coroutine block done immediately-");
     }
 
     {
-        HCE_INFO_LOG("coroutine block for queue+");
+        HCE_INFO_LOG("coroutine block for queue");
         test::queue<T> q;
-        auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
 
         auto schedule_blocking_co = [&](T t) {
+            hce::blocking::service::get().clear_workers();
+            auto lf = hce::scheduler::make();
+            std::shared_ptr<hce::scheduler> sch = lf->scheduler();
             auto thd_id = std::this_thread::get_id();
             bool co_ids_identical = true;
             bool co_ids_identical2 = true;
             bool co_ids_identical3 = true;
 
-            HCE_INFO_LOG("block for queue 1");
             auto awt = sch->schedule(
                 test::scheduler::co_block_for_queue_T(
                     q,
                     co_ids_identical, 
                     thd_id));
 
-            HCE_INFO_LOG("block for queue 2");
             auto awt2 = sch->schedule(
                 test::scheduler::co_block_for_queue_T(
                     q,
                     co_ids_identical2, 
                     thd_id));
 
-            HCE_INFO_LOG("block for queue 3");
             auto awt3 = sch->schedule(
                 test::scheduler::co_block_for_queue_T(
                     q,
@@ -404,7 +409,7 @@ size_t block_T() {
                     thd_id));
 
             std::this_thread::sleep_for(std::chrono::milliseconds(40));
-            EXPECT_EQ(3, sch->block_worker_count());
+            EXPECT_EQ(3, hce::blocking::service::get().worker_count());
             q.push(t);
             q.push(t);
             q.push(t);
@@ -425,36 +430,33 @@ size_t block_T() {
         } catch(const std::exception& e) {
             LOG_F(ERROR, e.what());
         }
-        HCE_INFO_LOG("coroutine block for queue-");
     }
 
     {
-        HCE_INFO_LOG("coroutine stacked block done immediately+");
+        HCE_INFO_LOG("coroutine stacked block done immediately");
         test::queue<T> q;
-        auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
 
         auto schedule_blocking_co = [&](T t) {
+            hce::blocking::service::get().clear_workers();
+            auto lf = hce::scheduler::make();
+            std::shared_ptr<hce::scheduler> sch = lf->scheduler();
             auto thd_id = std::this_thread::get_id();
             bool co_ids_identical = true;
             bool co_ids_identical2 = true;
             bool co_ids_identical3 = true;
 
-            HCE_INFO_LOG("stacked block done immediately join 1");
             auto awt = sch->schedule(
                 test::scheduler::co_block_done_immediately_stacked_outer_T(
                     t,
                     co_ids_identical, 
                     thd_id));
 
-            HCE_INFO_LOG("stacked block done immediately join 2");
             auto awt2 = sch->schedule(
                 test::scheduler::co_block_done_immediately_stacked_outer_T(
                     t,
                     co_ids_identical2, 
                     thd_id));
 
-            HCE_INFO_LOG("stacked block done immediately join 3");
             auto awt3 = sch->schedule(
                 test::scheduler::co_block_done_immediately_stacked_outer_T(
                     t,
@@ -468,7 +470,8 @@ size_t block_T() {
             EXPECT_EQ(t, (T)std::move(awt3));
             EXPECT_FALSE(co_ids_identical3);
             std::this_thread::sleep_for(std::chrono::milliseconds(40));
-            EXPECT_EQ(0, sch->block_worker_count());
+
+            EXPECT_EQ(post_block_expected_worker_count(3), hce::blocking::service::get().worker_count());
         };
 
         try {
@@ -480,36 +483,33 @@ size_t block_T() {
         } catch(const std::exception& e) {
             LOG_F(ERROR, e.what());
         }
-        HCE_INFO_LOG("coroutine stacked block done immediately-");
     }
 
     {
-        HCE_INFO_LOG("coroutine stacked block+");
+        HCE_INFO_LOG("coroutine stacked block");
         test::queue<T> q;
         auto lf = hce::scheduler::make();
         std::shared_ptr<hce::scheduler> sch = lf->scheduler();
 
         auto schedule_blocking_co = [&](T t) {
+            hce::blocking::service::get().clear_workers();
             auto thd_id = std::this_thread::get_id();
             bool co_ids_identical = true;
             bool co_ids_identical2 = true;
             bool co_ids_identical3 = true;
 
-            HCE_INFO_LOG("co stacked block for queue join 1");
             auto awt = sch->schedule(
                 test::scheduler::co_block_for_queue_stacked_outer_T(
                     q,
                     co_ids_identical, 
                     thd_id));
 
-            HCE_INFO_LOG("co stacked block for queue join 2");
             auto awt2 = sch->schedule(
                 test::scheduler::co_block_for_queue_stacked_outer_T(
                     q,
                     co_ids_identical2, 
                     thd_id));
 
-            HCE_INFO_LOG("co stacked block for queue join 3");
             auto awt3 = sch->schedule(
                 test::scheduler::co_block_for_queue_stacked_outer_T(
                     q,
@@ -517,7 +517,7 @@ size_t block_T() {
                     thd_id));
 
             std::this_thread::sleep_for(std::chrono::milliseconds(40));
-            EXPECT_EQ(3, sch->block_worker_count());
+            EXPECT_EQ(3, hce::blocking::service::get().worker_count());
             q.push(t);
             q.push(t);
             q.push(t);
@@ -538,7 +538,6 @@ size_t block_T() {
         } catch(const std::exception& e) {
             LOG_F(ERROR, e.what());
         }
-        HCE_INFO_LOG("coroutine stacked block-");
     }
 
     return success_count;
@@ -571,8 +570,7 @@ T block_for_queue_simple_T(test::queue<T>& q) {
 template <typename T>
 hce::co<T> co_block_for_queue_simple_T(test::queue<T>& q) {
     HCE_INFO_FUNCTION_BODY("co_block_for_queue_simple_T",hce::coroutine::local());
-    T result = co_await hce::scheduler::get().block(block_for_queue_simple_T<T>,std::ref(q));
-    co_return std::move(result);
+    co_return co_await hce::block(block_for_queue_simple_T<T>,std::ref(q));
 }
 
 template <typename T>
@@ -580,21 +578,27 @@ size_t block_worker_resource_limit_T(const size_t resource_limit) {
     std::string fname(hce::type::templatize<T>("block_worker_resource_limit_T"));
     HCE_WARNING_FUNCTION_ENTER(fname, resource_limit);
     size_t success_count = 0;
+    const size_t process_worker_resource_limit = 
+        hce::blocking::config::process_worker_resource_limit();
+
+    EXPECT_EQ(process_worker_resource_limit, 
+              hce::blocking::service::get().worker_resource_limit());
 
     for(size_t reuse_cnt=0; reuse_cnt<resource_limit; ++reuse_cnt) {
         HCE_WARNING_FUNCTION_BODY(fname, "loop; reuse_cnt:",reuse_cnt);
         std::vector<test::queue<T>> q(resource_limit);
         auto cfg = hce::scheduler::config::make();
-        cfg->block_worker_resource_limit = reuse_cnt;
         auto lf = hce::scheduler::make(std::move(cfg));
         std::shared_ptr<hce::scheduler> sch = lf->scheduler();
 
         std::deque<hce::awt<T>> awts;
 
         try {
-            EXPECT_EQ(reuse_cnt, sch->block_worker_resource_limit());
-            EXPECT_EQ(0, sch->block_worker_count());
+            hce::blocking::service::get().clear_workers();
 
+            EXPECT_EQ(0, hce::blocking::service::get().worker_count());
+
+            // block a set of coroutines
             for(size_t i=0; i<resource_limit; ++i) {
                 awts.push_back(sch->schedule(
                     test::scheduler::co_block_for_queue_simple_T(q[i])));
@@ -602,20 +606,22 @@ size_t block_worker_resource_limit_T(const size_t resource_limit) {
 
             std::this_thread::sleep_for(std::chrono::milliseconds(40));
 
-            EXPECT_EQ(reuse_cnt, sch->block_worker_resource_limit());
-            EXPECT_EQ(resource_limit, sch->block_worker_count());
-            
+            EXPECT_EQ(resource_limit, hce::blocking::service::get().worker_count());
+
+            // unblock all the coroutines
             for(size_t i=0; i<resource_limit; ++i) {
                 q[i].push((T)test::init<T>(i));
             }
 
+            // join all the coroutines
             for(size_t i=0; i<resource_limit; ++i) {
                 EXPECT_EQ((T)test::init<T>(i), (T)std::move(awts.front()));
                 awts.pop_front();
             }
 
-            EXPECT_EQ(reuse_cnt, sch->block_worker_resource_limit());
-            EXPECT_EQ(reuse_cnt, sch->block_worker_count());
+            // worker count in the cache should have grown to this
+            size_t expected_count = std::min(resource_limit, process_worker_resource_limit);
+            EXPECT_EQ(expected_count, hce::blocking::service::get().worker_count());
 
             ++success_count;
         } catch(const std::exception& e) {

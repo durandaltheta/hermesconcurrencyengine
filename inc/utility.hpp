@@ -14,7 +14,7 @@ using unqualified = typename std::decay<T>::type;
 
 /// the return type of an arbitrary Callable
 template <typename F, typename... Args>
-using function_return_type = typename std::function<std::result_of_t<F(Args...)>()>;
+using function_return_type = std::invoke_result_t<F, Args...>;
 
 /// Callable accepting and returning no arguments
 typedef std::function<void()> thunk;
