@@ -1,5 +1,9 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
+/*
+ This file contains the various `::config::` `extern` implementations necessary 
+ for determining framework defaults. They are typically compiler define driven.
+ */
 #include <cstring>
 #include <bit>
 #include <memory>
@@ -8,10 +12,13 @@
 
 #include "loguru.hpp"
 #include "utility.hpp"
+#include "thread.hpp"
 #include "memory.hpp"
 #include "scheduler.hpp"
-#include "threadpool.hpp"
+#include "timer.hpp"
+#include "blocking.hpp"
 #include "channel.hpp"
+#include "threadpool.hpp"
 
 #ifndef HCELOGLEVEL
 /*
@@ -54,9 +61,19 @@
 #define HCEGLOBALSCHEDULERCOROUTINERESOURCELIMIT HCESCHEDULERDEFAULTCOROUTINERESOURCELIMIT
 #endif 
 
-// the limit of reusable block resources for in the global scheduler
+// the limit of reusable block workers shared among the entire process
+#ifndef HCEPROCESSBLOCKWORKERRESOURCELIMIT 
+#define HCEPROCESSBLOCKWORKERRESOURCELIMIT 1
+#endif
+
+// the limit of reusable block workers for the global scheduler cache
 #ifndef HCEGLOBALSCHEDULERBLOCKWORKERRESOURCELIMIT
 #define HCEGLOBALSCHEDULERBLOCKWORKERRESOURCELIMIT 1
+#endif 
+
+// the default limit of reusable block workers for scheduler caches
+#ifndef HCEDEFAULTSCHEDULERBLOCKWORKERRESOURCELIMIT
+#define HCEDEFAULTSCHEDULERBLOCKWORKERRESOURCELIMIT 0
 #endif 
 
 /*
@@ -74,10 +91,9 @@
 #define HCETHREADPOOLCOROUTINERESOURCELIMIT HCESCHEDULERDEFAULTCOROUTINERESOURCELIMIT
 #endif 
 
-// the limit of reusable block resources for in threadpool schedulers
-#ifndef HCETHREADPOOLBLOCKWORKERRESOURCELIMIT
-#define HCETHREADPOOLBLOCKWORKERRESOURCELIMIT 0
-#endif 
+#ifndef HCETIMERSERVICEBUSYWAITMICROSECONDTHRESHOLD
+#define HCETIMERSERVICEBUSYWAITMICROSECONDTHRESHOLD 3500
+#endif
 
 /// the default log initialization code is defined here
 void hce::config::initialize_log() {
@@ -200,7 +216,7 @@ private:
     
      To protect memory being cached unnecessarily in a system thread for 
      long periods we enforce it to a sane minimum (supporting some arbitrary 
-     count of pointer sized allocations). On a 64 bit system the blow should 
+     count of pointer sized allocations). On a 64 bit system the below should 
      resolve to 512. Any buckets which hold more than 512 bytes will hold only 
      1 cached instance of their block size.
      */
@@ -218,11 +234,10 @@ private:
 
     /*
      The global scheduler is much more likely to have more coroutines 
-     scheduled on it, as it is the scheduler selected by default by 
-     system threads. Additionally, high level mechanisms prefer to keep 
-     scheduling on their current scheduler (globally scheduled 
-     coroutines tend to call schedule() on the global scheduler). Thus 
-     the global scheduler gets more cache resources.
+     scheduled on it, as it is the scheduler selected by default. Additionally, 
+     high level mechanisms prefer to keep scheduling on their current scheduler 
+     (globally scheduled coroutines tend to call schedule() on the global 
+     scheduler). Thus the global scheduler gets more cache resources.
      */
     static constexpr size_t global_byte_limit_ = scheduler_byte_limit_ * 2;
 
@@ -250,6 +265,34 @@ hce::config::memory::cache::info& hce::config::memory::cache::info::get() {
     return info_impl::get();
 }
 
+#ifdef _WIN32
+int hce::config::timer::service::thread_priority() {
+    return THREAD_PRIORITY_ABOVE_NORMAL;
+}
+#elif defined(_POSIX_VERSION)
+int hce::config::timer::service::thread_priority() {
+    static int priority = []{
+        // Calculate the priority range
+        int min_priority = sched_get_priority_min(SCHED_OTHER);
+        int max_priority = sched_get_priority_max(SCHED_OTHER);
+
+        // Calculate an intelligent high priority (somewhere near the maximum), 
+        // 80% of max priority
+        return min_priority + (max_priority - min_priority) * 0.8;  
+    }();
+
+    return priority;
+}
+#else 
+int hce::config::timer::service::thread_priority() {
+    return 0;
+}
+#endif
+
+unsigned int hce::config::timer::service::busy_wait_microsecond_threshold() {
+    return HCETIMERSERVICEBUSYWAITMICROSECONDTHRESHOLD;
+}
+
 size_t hce::config::pool_allocator::default_block_limit() {
     return HCEPOOLALLOCATORDEFAULTBLOCKLIMIT;
 }
@@ -261,15 +304,25 @@ size_t hce::config::scheduler::default_resource_limit() {
 std::unique_ptr<hce::scheduler::config> hce::config::global::scheduler_config() {
     auto config = hce::scheduler::config::make();
     config->coroutine_resource_limit = HCEGLOBALSCHEDULERCOROUTINERESOURCELIMIT;
-    config->block_worker_resource_limit = HCEGLOBALSCHEDULERBLOCKWORKERRESOURCELIMIT;
     return config;
 }
 
 std::unique_ptr<hce::scheduler::config> hce::config::threadpool::scheduler_config() {
     auto config = hce::scheduler::config::make();
     config->coroutine_resource_limit = HCETHREADPOOLCOROUTINERESOURCELIMIT;
-    config->block_worker_resource_limit = HCETHREADPOOLBLOCKWORKERRESOURCELIMIT;
     return config;
+}
+
+size_t hce::blocking::config::process_worker_resource_limit() {
+    return HCEPROCESSBLOCKWORKERRESOURCELIMIT;
+}
+
+size_t hce::blocking::config::global_scheduler_worker_resource_limit() {
+    return HCEGLOBALSCHEDULERBLOCKWORKERRESOURCELIMIT;
+}
+
+size_t hce::blocking::config::default_scheduler_worker_resource_limit() {
+    return HCEDEFAULTSCHEDULERBLOCKWORKERRESOURCELIMIT;
 }
 
 size_t hce::config::threadpool::scheduler_count() {

@@ -95,6 +95,7 @@
 #if HCELOGLIMIT >= -3
 #define HCE_FATAL_CONSTRUCTOR(...) this->log_constructor__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_FATAL_DESTRUCTOR() this->log_destructor__(loguru::Verbosity_FATAL, __FILE__, __LINE__)
+#define HCE_FATAL_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #define HCE_FATAL_METHOD_ENTER(...) this->log_method_enter__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_FATAL_METHOD_BODY(...) this->log_method_body__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_FATAL_FUNCTION_ENTER(...) hce::printable::log_function_enter__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
@@ -103,6 +104,7 @@
 #else 
 #define HCE_FATAL_CONSTRUCTOR(...) (void)0
 #define HCE_FATAL_DESTRUCTOR() (void)0
+#define HCE_FATAL_GUARD(...) (void)0
 #define HCE_FATAL_METHOD_ENTER(...) (void)0
 #define HCE_FATAL_METHOD_BODY(...) (void)0
 #define HCE_FATAL_FUNCTION_ENTER(...) (void)0
@@ -113,6 +115,7 @@
 #if HCELOGLIMIT >= -2
 #define HCE_ERROR_CONSTRUCTOR(...) this->log_constructor__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_ERROR_DESTRUCTOR() this->log_destructor__(loguru::Verbosity_ERROR, __FILE__, __LINE__)
+#define HCE_ERROR_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #define HCE_ERROR_METHOD_ENTER(...) this->log_method_enter__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_ERROR_METHOD_BODY(...) this->log_method_body__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_ERROR_FUNCTION_ENTER(...) hce::printable::log_function_enter__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
@@ -121,6 +124,7 @@
 #else 
 #define HCE_ERROR_CONSTRUCTOR(...) (void)0
 #define HCE_ERROR_DESTRUCTOR() (void)0
+#define HCE_ERROR_GUARD(...) (void)0
 #define HCE_ERROR_METHOD_ENTER(...) (void)0
 #define HCE_ERROR_METHOD_BODY(...) (void)0
 #define HCE_ERROR_FUNCTION_ENTER(...) (void)0
@@ -131,6 +135,7 @@
 #if HCELOGLIMIT >= -1
 #define HCE_WARNING_CONSTRUCTOR(...) this->log_constructor__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_WARNING_DESTRUCTOR() this->log_destructor__(loguru::Verbosity_WARNING, __FILE__, __LINE__)
+#define HCE_WARNING_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #define HCE_WARNING_METHOD_ENTER(...) this->log_method_enter__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_WARNING_METHOD_BODY(...) this->log_method_body__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_WARNING_FUNCTION_ENTER(...) hce::printable::log_function_enter__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
@@ -139,6 +144,7 @@
 #else
 #define HCE_WARNING_CONSTRUCTOR(...) (void)0
 #define HCE_WARNING_DESTRUCTOR() (void)0
+#define HCE_WARNING_GUARD(...) (void)0
 #define HCE_WARNING_METHOD_ENTER(...) (void)0
 #define HCE_WARNING_METHOD_BODY(...) (void)0
 #define HCE_WARNING_FUNCTION_ENTER(...) (void)0
@@ -149,6 +155,7 @@
 #if HCELOGLIMIT >= 0
 #define HCE_INFO_CONSTRUCTOR(...) this->log_constructor__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_INFO_DESTRUCTOR() this->log_destructor__(loguru::Verbosity_INFO, __FILE__, __LINE__)
+#define HCE_INFO_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #define HCE_INFO_METHOD_ENTER(...) this->log_method_enter__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_INFO_METHOD_BODY(...) this->log_method_body__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_INFO_FUNCTION_ENTER(...) hce::printable::log_function_enter__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
@@ -157,6 +164,7 @@
 #else
 #define HCE_INFO_CONSTRUCTOR(...) (void)0
 #define HCE_INFO_DESTRUCTOR() (void)0
+#define HCE_INFO_GUARD(...) (void)0
 #define HCE_INFO_METHOD_ENTER(...) (void)0
 #define HCE_INFO_METHOD_BODY(...) (void)0
 #define HCE_INFO_FUNCTION_ENTER(...) (void)0
@@ -168,11 +176,11 @@
 #if HCELOGLIMIT >= 1
 #define HCE_HIGH_CONSTRUCTOR(...) this->log_constructor__(1, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_HIGH_DESTRUCTOR() this->log_destructor__(1, __FILE__, __LINE__)
-#define HCE_HIGH_LIFECYCLE_GUARD(test, ...) if(test) { __VA_ARGS__; }
+#define HCE_HIGH_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #else
 #define HCE_HIGH_CONSTRUCTOR(...) (void)0
 #define HCE_HIGH_DESTRUCTOR() (void)0
-#define HCE_HIGH_LIFECYCLE_GUARD(...) (void)0
+#define HCE_HIGH_GUARD(...) (void)0
 #endif 
 
 // high criticality functions and methods
@@ -196,11 +204,11 @@
 #if HCELOGLIMIT >= 3
 #define HCE_MED_CONSTRUCTOR(...) this->log_constructor__(3, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_MED_DESTRUCTOR() this->log_destructor__(3, __FILE__, __LINE__)
-#define HCE_MED_LIFECYCLE_GUARD(test, ...) if(test) { __VA_ARGS__; }
+#define HCE_MED_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #else
 #define HCE_MED_CONSTRUCTOR(...) (void)0
 #define HCE_MED_DESTRUCTOR() (void)0
-#define HCE_MED_LIFECYCLE_GUARD(...) (void)0
+#define HCE_MED_GUARD(...) (void)0
 #endif 
 
 // medium criticality functions and methods
@@ -224,11 +232,11 @@
 #if HCELOGLIMIT >= 5
 #define HCE_LOW_CONSTRUCTOR(...) this->log_constructor__(5, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_LOW_DESTRUCTOR() this->log_destructor__(5, __FILE__, __LINE__)
-#define HCE_LOW_LIFECYCLE_GUARD(test, ...) if(test) { __VA_ARGS__; }
+#define HCE_LOW_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #else
 #define HCE_LOW_CONSTRUCTOR(...) (void)0
 #define HCE_LOW_DESTRUCTOR() (void)0
-#define HCE_LOW_LIFECYCLE_GUARD(...) (void)0
+#define HCE_LOW_GUARD(...) (void)0
 #endif 
 
 // low criticality functions and methods
@@ -252,11 +260,11 @@
 #if HCELOGLIMIT >= 7
 #define HCE_MIN_CONSTRUCTOR(...) this->log_constructor__(7, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_MIN_DESTRUCTOR() this->log_destructor__(7, __FILE__, __LINE__)
-#define HCE_MIN_LIFECYCLE_GUARD(test, ...) if(test) { __VA_ARGS__; }
+#define HCE_MIN_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #else
 #define HCE_MIN_CONSTRUCTOR(...) (void)0
 #define HCE_MIN_DESTRUCTOR() (void)0
-#define HCE_MIN_LIFECYCLE_GUARD(...) (void)0
+#define HCE_MIN_GUARD(...) (void)0
 #endif 
 
 // minimal criticality functions and methods
@@ -282,7 +290,7 @@
 #if HCELOGLIMIT >= 9
 #define HCE_TRACE_CONSTRUCTOR(...) this->log_constructor__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_TRACE_DESTRUCTOR() this->log_destructor__(9, __FILE__, __LINE__)
-#define HCE_TRACE_LIFECYCLE_GUARD(test, ...) if(test) { __VA_ARGS__; }
+#define HCE_TRACE_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #define HCE_TRACE_METHOD_ENTER(...) this->log_method_enter__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_TRACE_METHOD_BODY(...) this->log_method_body__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_TRACE_FUNCTION_ENTER(...) hce::printable::log_function_enter__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
@@ -292,7 +300,7 @@
 #else
 #define HCE_TRACE_CONSTRUCTOR(...) (void)0
 #define HCE_TRACE_DESTRUCTOR() (void)0
-#define HCE_TRACE_LIFECYCLE_GUARD(...) (void)0
+#define HCE_TRACE_GUARD(...) (void)0
 #define HCE_TRACE_METHOD_ENTER(...) (void)0
 #define HCE_TRACE_METHOD_BODY(...) (void)0
 #define HCE_TRACE_FUNCTION_ENTER(...) (void)0

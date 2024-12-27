@@ -577,9 +577,12 @@ hce::co<T> co_block_for_queue_simple_T(test::queue<T>& q) {
 
 template <typename T>
 size_t block_worker_resource_limit_T(const size_t resource_limit) {
+    std::string fname(hce::type::templatize<T>("block_worker_resource_limit_T"));
+    HCE_WARNING_FUNCTION_ENTER(fname, resource_limit);
     size_t success_count = 0;
 
     for(size_t reuse_cnt=0; reuse_cnt<resource_limit; ++reuse_cnt) {
+        HCE_WARNING_FUNCTION_BODY(fname, "loop; reuse_cnt:",reuse_cnt);
         std::vector<test::queue<T>> q(resource_limit);
         auto cfg = hce::scheduler::config::make();
         cfg->block_worker_resource_limit = reuse_cnt;

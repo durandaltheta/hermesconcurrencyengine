@@ -96,7 +96,19 @@ namespace memory {
  of with a block size at least as large as the cached pointer.
  */
 struct cache { 
-    struct bad_empty_alloc : public std::exception {
+    struct bad_size_alloc : public std::exception {
+        inline const char* what() const noexcept { 
+            return "hce::memory::cache: cannot allocate block size of 0"; 
+        }
+    };
+
+    struct bad_dealloc : public std::exception {
+        inline const char* what() const noexcept { 
+            return "hce::memory::cache: cannot deallocate a nullptr"; 
+        }
+    };
+
+    struct bad_size_dealloc : public std::exception {
         inline const char* what() const noexcept { 
             return "hce::memory::cache: cannot allocate block size of 0"; 
         }
@@ -121,11 +133,17 @@ struct cache {
 
     ~cache() { }
 
-    /// return the thread_local cache
+    /**
+     The cache for the main thread is a static global (enabling use during 
+     non-global object destructors at process shutdown). Additional threads use 
+     `thread_local` caches.
+
+     @return the thread's assigned cache
+     */
     static cache& get();
 
     inline void* allocate(size_t size) {
-        if(!size) [[unlikely]] { throw bad_empty_alloc(); }
+        if(!size) [[unlikely]] { throw bad_size_alloc(); }
 
         size_t idx = index_(size);
 
@@ -136,11 +154,10 @@ struct cache {
         }
     }
 
-    inline void* allocate(size_t alignment, size_t size) {
-        return allocate(aligned_size_(alignment, size));
-    }
-
     inline void deallocate(void* ptr, size_t size) {
+        if(!ptr) [[unlikely]] { throw bad_dealloc(); }
+        if(!size) [[unlikely]] { throw bad_size_dealloc(); }
+
         size_t idx = index_(size);
 
         if(idx < buckets_.size()) [[likely]] {
@@ -148,10 +165,6 @@ struct cache {
         } else [[unlikely]] {
             std::free(ptr);
         }
-    }
-
-    inline void deallocate(void* ptr, size_t alignment, size_t size) {
-        deallocate(ptr, aligned_size_(alignment, size));
     }
 
     // return the bucket count
@@ -164,11 +177,6 @@ struct cache {
         return index_(size);
     }
 
-    // return the bucket index for a given aligned allocation size
-    inline size_t index(size_t alignment, size_t size) const {
-        return index(aligned_size_(alignment, size));
-    }
-
     // return the count of available cached allocations for a given size
     inline size_t available(size_t size) const {
         size_t idx = index_(size);
@@ -178,11 +186,6 @@ struct cache {
         } else [[unlikely]] {
             return 0;
         }
-    }
-    
-    // return the count of available cached allocations for a given aligned size
-    inline size_t available(size_t alignment, size_t size) const {
-        return available(aligned_size_(alignment, size));
     }
 
     // return the max count of available cached allocations for a given size
@@ -194,11 +197,6 @@ struct cache {
         } else [[unlikely]] {
             return 0;
         }
-    }
-    
-    // return the max count of available cached allocations for a given aligned size
-    inline size_t limit(size_t alignment, size_t size) const {
-        return limit(aligned_size_(alignment, size));
     }
 
 private:
@@ -249,11 +247,6 @@ private:
         std::vector<void*> free_list; 
     };
 
-    // bitwise aligned size calculation
-    inline size_t aligned_size_(size_t alignment, size_t size) const {
-        return (size + alignment - 1) & ~(alignment - 1);
-    }
-
     /*
      Bucket index calculation function. It accepts a memory block size and 
      returns the index of the bucket that contains at least that size.
@@ -269,6 +262,8 @@ private:
 };
 
 /**
+ @brief allocate a pointer of `size` bytes
+ @param size the size of the requested allocation
  @return an allocated pointer of at least `size` bytes
  */
 inline void* allocate(size_t size) {
@@ -276,24 +271,22 @@ inline void* allocate(size_t size) {
 }
 
 /**
- @return an aligned allocated pointer of at least `size` bytes
- */
-inline void* allocate(size_t alignment, size_t size) {
-    return hce::memory::cache::get().allocate(alignment, size);
-}
-
-/**
  @brief deallocate a pointer of `size` bytes
+ @param p the allocated pointer 
+ @param size the size that the pointer was `memory::allocate()` with
  */
 inline void deallocate(void* p, size_t size) {
     return hce::memory::cache::get().deallocate(p, size);
 }
 
 /**
- @brief deallocate a pointer of aligned `size` bytes
+ @brief bitwise aligned size calculation
+ @param n the count of elements T
+ @return the alignment adjusted size for all elements T
  */
-inline void deallocate(void* p, size_t alignment, size_t size) {
-    return hce::memory::cache::get().deallocate(p, alignment, size);
+template <typename T>
+inline size_t aligned_size(size_t n) {
+    return ((sizeof(T) * n) + alignof(T) - 1) & ~(alignof(T) - 1);
 }
 
 }
@@ -305,23 +298,23 @@ inline void deallocate(void* p, size_t alignment, size_t size) {
  */
 template <typename T>
 inline T* allocate(size_t n=1) {
-    return reinterpret_cast<T*>(memory::allocate(alignof(T), sizeof(T) * n));
+    return reinterpret_cast<T*>(memory::allocate(memory::aligned_size<T>(n)));
 }
 
 /**
- @brief high level deallocate `hce::allocate<T>()`ed memory 
+ @brief high level, alignment aware, `hce::allocate<T>()`ed memory deallocation
 
  Memory `p` can be optionally deleted by regular `delete` or `std::free()`. The 
  advantage of using this mechanism is that the implementation of 
  `memory::deallocate()` can cache allocated values in a thread_local mechanism 
  for reuse on calls to `memory::allocate()`. 
 
- @param p pointer to memory
- @param n size passed to allocate()
+ @param p pointer to allocated memory
+ @param n T element count passed to allocate<T>()
  */
-template <typename T>
-inline void deallocate(void* p, size_t n=1) { 
-    memory::deallocate(p, alignof(T), sizeof(T) * n);
+template <typename T, typename U>
+inline void deallocate(U* p, size_t n=1) { 
+    memory::deallocate((void*)p, memory::aligned_size<T>(n));
 }
 
 /**
@@ -418,7 +411,6 @@ struct allocator {
     bool operator!=(const std::allocator<T>&) const noexcept { return false; }
 };
 
-
 namespace memory {
 
 /// std::unique_ptr deleter function template
@@ -445,7 +437,12 @@ struct deleter<T,1> {
 
 }
 
-/// unique_ptr type enforcing cache deallocation
+/**
+ @brief unique_ptr type enforcing cache deallocation 
+ 
+ The allocated `T` must be constructed with an aligned size. IE, 
+ `hce::allocate<T>(...)`. Failure to do this an error.
+ */
 template <typename T>
 using unique_ptr = std::unique_ptr<T,memory::deleter<T,1>>;
 
@@ -480,6 +477,44 @@ auto make_shared(Args&&... args) {
     return std::shared_ptr<T>(t,memory::deleter<T,1>());
 }
 
+namespace memory {
+
+/**
+ @brief construct an allocated std::function<R()> pointer from a callable and arguments 
+ @param callable a Callable
+ @param args... any arguments to be bound to callable 
+ */
+template <typename Callable, typename... Args>
+inline void construct_callable_ptr(
+        std::function<std::result_of_t<Callable(Args...)>()>* ft, 
+        Callable&& callable, 
+        Args&&... args) 
+{
+    using FunctionType = std::function<std::result_of_t<Callable(Args...)>()>;
+
+    new(ft) FunctionType(
+        [callable = std::forward<Callable>(callable),
+         ...args = std::forward<Args>(args)]() mutable {
+            return callable(args...);
+        });
+}
+
+/**
+ @brief construct an allocated thunk pointer from a callable and arguments 
+ @param callable a Callable
+ @param args... any arguments to be bound to callable 
+ */
+template <typename Callable, typename... Args>
+inline void construct_thunk_ptr(hce::thunk* th, Callable&& callable, Args&&... args) {
+    new(th) hce::thunk(
+        [callable = std::forward<Callable>(callable),
+         ...args = std::forward<Args>(args)]() mutable {
+            callable(args...);
+        });
+}
+
+}
+
 /**
  @brief allocate and construct a hce::unique_ptr of std::function<R()> from a callable and optional arguments 
 
@@ -496,11 +531,10 @@ auto make_unique_callable(Callable&& callable, Args&&... args) {
 
     FunctionType* ft = hce::allocate<FunctionType>(1);
 
-    new(ft) FunctionType(
-        [callable = std::forward<Callable>(callable),
-         ...args = std::forward<Args>(args)]() mutable {
-            return callable(args...);
-        });
+    memory::construct_callable_ptr(
+        ft,
+        std::forward<Callable>(callable), 
+        std::forward<Args>(args)...);
 
     return hce::unique_ptr<FunctionType>(ft);
 }
@@ -519,11 +553,10 @@ template <typename Callable, typename... Args>
 auto make_unique_thunk(Callable&& callable, Args&&... args) {
     hce::thunk* th = hce::allocate<hce::thunk>(1);
 
-    new(th) hce::thunk(
-        [callable = std::forward<Callable>(callable),
-         ...args = std::forward<Args>(args)]() mutable {
-            callable(args...);
-        });
+    memory::construct_thunk_ptr(
+        th, 
+        std::forward<Callable>(callable), 
+        std::forward<Args>(args)...);
 
     return hce::unique_ptr<hce::thunk>(th);
 }

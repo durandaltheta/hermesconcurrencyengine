@@ -242,13 +242,13 @@ struct coroutine : public printable {
     coroutine(const coroutine&) = delete;
 
     coroutine(coroutine&& rhs) {
-        HCE_MED_LIFECYCLE_GUARD(rhs.handle_, HCE_MED_CONSTRUCTOR(rhs)); 
+        HCE_MED_GUARD(rhs.handle_, HCE_MED_CONSTRUCTOR(rhs)); 
         swap(rhs); 
     }
 
     // construct the coroutine from a type erased handle
     coroutine(std::coroutine_handle<>&& h) : handle_(h) { 
-        HCE_MIN_LIFECYCLE_GUARD(h,HCE_MIN_CONSTRUCTOR(h));
+        HCE_MIN_GUARD(h,HCE_MIN_CONSTRUCTOR(h));
 
         // ensure source memory no longer has access to the handle
         h = std::coroutine_handle<>();
@@ -263,7 +263,7 @@ struct coroutine : public printable {
     }
 
     virtual ~coroutine() {
-        HCE_MED_LIFECYCLE_GUARD(handle_,HCE_MED_DESTRUCTOR()); 
+        HCE_MED_GUARD(handle_,HCE_MED_DESTRUCTOR()); 
         reset(); 
     }
 

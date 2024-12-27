@@ -4,8 +4,6 @@
 #define __HERMES_COROUTINE_ENGINE_UTILITY__
 
 #include <utility>
-#include <memory>
-#include <string>
 #include <functional>
 #include <type_traits>
 
@@ -15,8 +13,8 @@ template <typename T>
 using unqualified = typename std::decay<T>::type;
 
 /// the return type of an arbitrary Callable
-template <typename F, typename... Ts>
-using function_return_type = typename std::invoke_result<F,Ts...>::type;
+template <typename F, typename... Args>
+using function_return_type = typename std::function<std::result_of_t<F(Args...)>()>;
 
 /// Callable accepting and returning no arguments
 typedef std::function<void()> thunk;

@@ -15,13 +15,11 @@ This framework generally replaces usages of `new`/`delete` keywords with these m
 `hce::allocate<T>()`/`hce::deallocate<T>()` call these underlying functions:
 ```
 void* hce::memory::allocate(size_t size);
-void* hce::memory::allocate(size_t alignment, size_t size);
-void hce::memory::deallocate(void* p);
 void hce::memory::deallocate(void* p, size_t size);
 ```
 
 ## Thread Local Caching
-The first, and most general, allocation caching mechanism is each thread has a `thread_local` `hce::memory::cache`. `cache`s cache a variety of relatively small allocation tiers for reuse. `hce::memory::allocate()`/`hce::memory::deallocate()` functions are abstractions to calling the `thread_local` `cache`'s methods, which are lockless.
+The first, and most general, allocation caching mechanism is each thread has a `thread_local` `hce::memory::cache`. `cache`s house a variety of relatively small allocation buckets for allocation reuse. `hce::memory::allocate()`/`hce::memory::deallocate()` functions are abstractions to calling the `thread_local` `cache`'s methods, which are lockless.
 
 The `cache` is configured at framework build time with the following `cmake` defined values:
 - `HCETHREADLOCALMEMORYBUCKETCOUNT`: the count of buckets which cache memory chunks in powers of 2, ie: bucket[0] holds allocations of 1 byte, bucket[1] holds allocations of 2 bytes, bucket[2] holds allocations of 4 bytes, etc.
@@ -55,3 +53,21 @@ List of memory related resource limits:
 Resource limits are more of a heuristic than the previously described strategies. Specifically, they are tied to the specific size limits of `hce::pool_allocator<T>`s used internally by `hce::scheduler` objects, related to things like coroutine queue memory caching. Sane limits allow for more efficient coroutine processing in the median case, because less time is spent by the `hce::scheduler` allocating resources which are constantly being reused. 
 
 These values have *no* effect on the actual code running *inside* the coroutines running on a given `hce::scheduler`. They are instead about smoothing the algorithmic processing of scheduling itself.
+
+## Blocking Call Resource Limits
+A fourth example of memory allocation optimization is in the creation and caching of `hce::blocking::call()` workers because threads are unavoidably expensive:
+ - they require system calls for startup, kernel scheduling, and shutdown (very slow)
+ - their memory cost is larger than most user objects (due to stack size and `thread_local`s)
+
+Due to this there is a need to balance startup speed via worker thread caching versus holding unnecessary amounts of memory from caching worker threads. 
+
+Therefore this framework provides a few key configurations which allow the user to fine tune their blocking call management:
+- `HCEPROCESSBLOCKWORKERRESOURCELIMIT`: The count of cacheable workers shared amongst a process-wide cache.
+- `HCEGLOBALSCHEDULERBLOCKWORKERRESOURCELIMIT`: The count of cacheable workers for *only* the thread running the global scheduler in a lockfree cache.
+- `HCEDEFAULTSCHEDULERBLOCKWORKERRESOURCELIMIT`: The count of cacheable workers for threads running  other schedulers in their own lockfree caches.
+
+If memory consumption is a primary concern, consider limiting or setting to `0` each of these values, forcing deallocation after every `hce::blocking::call()`.
+
+If CPU efficiency is the primary concern, set `HCEPROCESSBLOCKWORKERRESOURCELIMIT` high enough to handle the median count of blocking tasks. 
+
+If lock contention on the `hce::blocking::service` object is a limiting factor, ensure the scheduler resource limits are high enough so that the lock on the `hce::blocking::service` is lowered.
