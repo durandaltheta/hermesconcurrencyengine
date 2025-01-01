@@ -61,17 +61,21 @@ template <>
 struct queue<void> {
     void push() {
         HCE_TRACE_LOG("test::queue<T>::push()+");
+
         {
             std::lock_guard<hce::spinlock> lk(slk);
             vals.push_back(0);
         }
+
         cv.notify_one();
         HCE_TRACE_LOG("test::queue<T>::push()-");
     }
 
     void pop() {
         HCE_TRACE_LOG("test::queue<T>::pop()+");
+
         std::unique_lock<hce::spinlock> lk(slk);
+
         while(!vals.size()) {
             cv.wait(lk);
         }

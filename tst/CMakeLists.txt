@@ -20,7 +20,7 @@ add_executable(hce_ut
     scheduler_ut.cpp
     timer_ut.cpp
     blocking_ut.cpp
-    #scope_ut.cpp
+    scope_ut.cpp
     channel_ut.cpp 
     threadpool_ut.cpp
     comparison_ut.cpp

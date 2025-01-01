@@ -476,21 +476,6 @@ inline hce::awt<bool> start(hce::sid& sid, As&&... as) {
 }
 
 /**
- @brief start a timer 
-
- Calls `hce::timer::start()` but abstracts away the timer's id. 
-
- @param as the arguments will be passed to `hce::chrono::duration()`
- @return an awaitable to join with the timer timing out or being cancelled
- */
-template <typename... As>
-inline hce::awt<bool> sleep(As&&... as) {
-    HCE_MED_FUNCTION_ENTER("hce::sleep");
-    hce::sid sid;
-    return start(sid, std::forward<As>(as)...);
-}
-
-/**
  @brief determine if a timer with the given id is running
  @return true if the timer is running, else false
  */
@@ -517,6 +502,23 @@ inline bool cancel(const hce::sid& sid) {
 }
 
 }
+
+/**
+ @brief start a timer to sleep for a period
+
+ Calls `hce::timer::start()` but abstracts away the timer's id. 
+
+ @param as the arguments will be passed to `hce::chrono::duration()`
+ @return an awaitable to join with the timer timing out or being cancelled
+ */
+template <typename... As>
+inline hce::awt<void> sleep(As&&... as) {
+    HCE_MED_FUNCTION_ENTER("hce::sleep");
+    hce::sid sid;
+    // start the timer and convert from awt<bool> to awt<void>
+    return hce::awt<void>(timer::start(sid, std::forward<As>(as)...).release());
+}
+
 }
 
 #endif

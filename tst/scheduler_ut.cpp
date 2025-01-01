@@ -125,24 +125,21 @@ namespace scheduler {
 
 template <typename T>
 size_t schedule_T(std::function<hce::co<void>(test::queue<T>& q, T t)> Coroutine) {
-    std::string T_name = hce::type::name<T>();
+    std::string fname = hce::type::templatize<T>("schedule_T");
 
-    HCE_INFO_LOG("schedule_T<%s>",T_name.c_str());
+    HCE_INFO_FUNCTION_ENTER(fname);
 
     size_t success_count = 0;
 
-    // schedule individually
     {
         test::queue<T> q;
         auto lf = hce::scheduler::make();
         std::shared_ptr<hce::scheduler> sch = lf->scheduler();
-        HCE_INFO_LOG("schedule_T<%s> started scheduler",T_name.c_str());
 
         auto awt1 = sch->schedule(Coroutine(q,test::init<T>(3)));
         auto awt2 = sch->schedule(Coroutine(q,test::init<T>(2)));
         auto awt3 = sch->schedule(Coroutine(q,test::init<T>(1)));
         
-        HCE_INFO_LOG("schedule_T<%s> launched coroutines",T_name.c_str());
 
         try {
             EXPECT_EQ((T)test::init<T>(3), q.pop());
@@ -150,15 +147,10 @@ size_t schedule_T(std::function<hce::co<void>(test::queue<T>& q, T t)> Coroutine
             EXPECT_EQ((T)test::init<T>(1), q.pop());
 
             ++success_count;
-            HCE_INFO_LOG("schedule_T<%s> received values",T_name.c_str());
         } catch(const std::exception& e) {
             LOG_F(ERROR, e.what());
         }
-
-        HCE_INFO_LOG("schedule_T<%s> end of scope",T_name.c_str());
     }
-
-    HCE_INFO_LOG("schedule_T<%s> done",T_name.c_str());
 
     return success_count;
 }
@@ -249,17 +241,15 @@ namespace scheduler {
 
 template <typename T>
 size_t join_schedule_T() {
-    std::string T_name = []() -> std::string {
-        std::stringstream ss;
-        ss << typeid(T).name();
-        return ss.str();
-    }();
+    std::string T_name = hce::type::name<T>();
+    std::string fname = hce::type::templatize<T>("join_schedule_T");
 
-    HCE_INFO_LOG("join_schedule_T<%s>",T_name.c_str());
+    HCE_INFO_FUNCTION_ENTER(fname);
+
     size_t success_count = 0;
 
-    // schedule individually
     {
+        HCE_INFO_FUNCTION_BODY(fname, "schedule");
         auto lf = hce::scheduler::make();
         std::shared_ptr<hce::scheduler> sch = lf->scheduler();
         std::deque<hce::awt<T>> schedules;
@@ -288,8 +278,8 @@ size_t join_schedule_T() {
         }
     } 
 
-    // schedule individually in reverse order
     {
+        HCE_INFO_FUNCTION_BODY(fname, "schedule in reverse order");
         auto lf = hce::scheduler::make();
         std::shared_ptr<hce::scheduler> sch = lf->scheduler();
         std::deque<hce::awt<T>> schedules;
@@ -315,8 +305,8 @@ size_t join_schedule_T() {
         }
     }
 
-    // schedule void
     {
+        HCE_INFO_FUNCTION_BODY(fname, "schedule void");
         auto lf = hce::scheduler::make();
         std::shared_ptr<hce::scheduler> sch = lf->scheduler();
         std::deque<hce::awt<void>> schedules;

@@ -800,8 +800,15 @@ struct scheduler : public printable {
      in which case the returned awaitable should be called with `co_await` but 
      no value shall be assigned from the result of the statement.
 
+     Scheduling order is not guaranteed to be FIFO (first in, first out). This 
+     is not because of a piority mechanism, but because scheduling is done 
+     based on throughput efficiency and *not* ordering. This includes using 
+     lockless batch scheduling, which may incidentally cause coroutines to 
+     execute out of order. Ordering can be enforced by using awaitable 
+     mechanisms to block coroutines and synchronize operations.
+
      @param co a coroutine to schedule
-     @return an awaitable which when `co_await`ed will return an the result of the completed coroutine
+     @return an awaitable which when `co_await`ed will join with and return the result of the completed coroutine
      */
     template <typename T>
     inline hce::awt<T> schedule(hce::co<T> co) {
@@ -880,7 +887,8 @@ private:
     inline void schedule_(std::coroutine_handle<> h) {
         if(this == detail::scheduler::tl_this_scheduler()) [[likely]] {
             HCE_TRACE_METHOD_BODY("schedule_","pushing ",h," onto local queue ");
-            // scheduling inside scheduler::run(), lockfree push to local queue 
+            // scheduling inside call to executing scheduler::run(), can do a 
+            // lockfree push to local queue 
             (*detail::scheduler::tl_this_scheduler_local_queue())->push_back(h);
         } else [[unlikely]] {
             HCE_TRACE_METHOD_BODY("schedule_","pushing ",h," onto remote queue ");

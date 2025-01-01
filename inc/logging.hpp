@@ -440,78 +440,10 @@ struct info<T, std::void_t<decltype(T::info_name())>> {
     }
 };
 
-/**
- @brief acquire a runtime accessible name string of a type T
-
- This is the framework's source for getting name strings for arbitrary types 
- for when there is no instance of said type. That is, when a name for a given 
- type `T` is required but no object or variable of `T` is present (and therefore 
- `hce::printable` interface cannot be implemented). 
-
- @return a name string
- */
-template <typename T>
-inline std::string name() { 
-    std::stringstream ss;
-    ss << cv_name<T>() << info<unqualified<T>>::name() << reference_name<T>(); 
-    return ss.str();
-};
-
-namespace detail {
-
-template <typename T>
-inline void templatize_rest(std::stringstream& ss) { 
-    ss << "," << name<T>();
-}
-
-template <typename T, typename T2, typename... Ts>
-inline void templatize_rest(std::stringstream& ss) {
-    ss << "," << name<T>();
-    templatize_rest<T2,Ts...>(ss);
-}
-
-template <typename T>
-inline void templatize(std::stringstream& ss) { 
-    ss << name<T>() << ">";
-}
-
-template <typename T, typename T2, typename... Ts>
-inline void templatize(std::stringstream& ss) {
-    ss << name<T>();
-
-    // get the names of any further types in the template list
-    templatize_rest<T2,Ts...>(ss);
-   
-    // append the final tag
-    ss << ">";
-}
-
-}
-
-/**
- @brief transform a string by appendng template tags and template types' names
-
- The final string returned by `templatize` will use the real type names instead 
- of `Ts...` or any other template typename. For example, the resulting string 
- when calling `hce::type::name<my_type<int,std::string>>()` will be 
- "my_type<int,std::string>".
- */
-template <typename T, typename... Ts>
-inline std::string templatize(const std::string& s) {
-    std::stringstream ss;
-
-    // get the template base name
-    ss << s << "<";
-
-    // get the names of any further types in the template list
-    detail::templatize<T,Ts...>(ss);
-    return ss.str();
-}
-
 // void 
 
 template <>
-struct info<void> {
+struct info<void,void> {
     static inline std::string name(){ return "void"; }
 };
 
@@ -668,6 +600,95 @@ template <typename T>
 struct info<std::weak_ptr<T>,void> {
     static inline std::string name(){ return templatize<T>("std::weak_ptr"); }
 };
+
+/**
+ @brief acquire a runtime accessible name string of a type T
+
+ This is the framework's source for getting name strings for arbitrary types 
+ for when there is no instance of said type. That is, when a name for a given 
+ type `T` is required but no object or variable of `T` is present (and therefore 
+ `hce::printable` interface cannot be implemented). 
+
+ @return a name string
+ */
+template <typename T>
+inline std::string name() { 
+    std::stringstream ss;
+    ss << cv_name<T>() << info<unqualified<T>>::name() << reference_name<T>(); 
+    return ss.str();
+};
+
+template <>
+inline std::string name<void>() { 
+    std::stringstream ss;
+    ss << cv_name<void>() << info<void,void>::name() << reference_name<void>(); 
+    return ss.str();
+};
+
+template <>
+inline std::string name<void*>() { 
+    std::stringstream ss;
+    ss << cv_name<void*>() << info<void,void>::name() << reference_name<void*>(); 
+    return ss.str();
+};
+
+template <>
+inline std::string name<const void*>() { 
+    std::stringstream ss;
+    ss << cv_name<const void*>() << info<void,void>::name() << reference_name<void*>(); 
+    return ss.str();
+};
+
+namespace detail {
+
+template <typename T>
+inline void templatize_rest(std::stringstream& ss) { 
+    ss << "," << name<T>();
+}
+
+template <typename T, typename T2, typename... Ts>
+inline void templatize_rest(std::stringstream& ss) {
+    ss << "," << name<T>();
+    templatize_rest<T2,Ts...>(ss);
+}
+
+template <typename T>
+inline void templatize(std::stringstream& ss) { 
+    ss << name<T>() << ">";
+}
+
+template <typename T, typename T2, typename... Ts>
+inline void templatize(std::stringstream& ss) {
+    ss << name<T>();
+
+    // get the names of any further types in the template list
+    templatize_rest<T2,Ts...>(ss);
+   
+    // append the final tag
+    ss << ">";
+}
+
+}
+
+/**
+ @brief transform a string by appendng template tags and template types' names
+
+ The final string returned by `templatize` will use the real type names instead 
+ of `Ts...` or any other template typename. For example, the resulting string 
+ when calling `hce::type::name<my_type<int,std::string>>()` will be 
+ "my_type<int,std::string>".
+ */
+template <typename T, typename... Ts>
+inline std::string templatize(const std::string& s) {
+    std::stringstream ss;
+
+    // get the template base name
+    ss << s << "<";
+
+    // get the names of any further types in the template list
+    detail::templatize<T,Ts...>(ss);
+    return ss.str();
+}
 
 }
 

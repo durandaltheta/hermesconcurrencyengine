@@ -45,22 +45,37 @@ struct scope {
      @brief construct scope with one or more awaitables add()ed to it 
      @param one or more awaitables 
      */
-    template <typename... As>
-    scope(As&&... as) :
-        // unlimited channel never blocks on send
-        root_ch_(hce::channel<hce::awaitable::interface*>::make<Lock,typename Allocator::rebind<hce::awaitable::interface*>::other>(-1)),
-        root_awt_(hce::schedule(root_awaiter_(root_ch_)))
-    {
+    template <typename... Awts>
+    scope(Awts&&... awts) {
+        init_();
+
         // add all the constructed awaitables to the scope
-        add_(std::forward<As>(as)...);
+        add_(std::forward<Awts>(awts)...);
 
         HCE_MED_CONSTRUCTOR();
     }
 
+    scope(scope&& rhs) :
+        root_ch_(std::move(rhs.root_ch_)),
+        root_awt_(std::move(rhs.root_awt_))
+    {
+        HCE_MED_CONSTRUCTOR(rhs);
+    }
+
     ~scope() {
         HCE_MED_DESTRUCTOR();
-        root_ch_.close(); // sanity enable root awaiter to end 
+
+        if(root_ch_) [[likely]] {
+            root_ch_.close(); // sanity enable root awaiter to end  
+        }
         // root_awt_ will block the current thread and wait() if await() not called
+    }
+
+    inline scope& operator=(scope&& rhs) {
+        HCE_MED_METHOD_ENTER("operator=",rhs);
+        root_ch_ = std::move(rhs.root_ch_);
+        root_awt_ = std::move(rhs.root_awt_);
+        return *this;
     }
 
     static inline std::string info_name() { return "hce::scope"; }
@@ -71,24 +86,24 @@ struct scope {
 
      This operation will fail if `await()` has already been called.
 
-     @param a the first awaitable
-     @param as any remaining awaitables
+     @param awt the first awaitable
+     @param awts any remaining awaitables
      @return `true` if successfully added, else `false`
      */
-    template <typename A, typename... As >
-    inline bool add(A&& a, As&&... as) {
-        HCE_MED_METHOD_ENTER("add", a, as...);
-        
-        if(root_ch_.closed()) {
-            return false;
-        } else {
-            add_(std::forward<A>(a), std::forward<As>(as)...);
+    template <typename Awt, typename... Awts >
+    inline bool add(Awt&& awt, Awts&&... awts) {
+        HCE_MED_METHOD_ENTER("add", awt, awts...);
+       
+        if(root_ch_ && !root_ch_.closed()) {
+            add_(std::forward<Awt>(awt), std::forward<Awts>(awts)...);
             return true;
+        } else {
+            return false;
         }
     }
 
     /// return `true` if the scope can be await()ed, else `false`
-    inline operator bool() {
+    inline bool awaitable() const {
         return root_awt_.valid();
     }
 
@@ -100,16 +115,27 @@ struct scope {
     }
 
 private:
-    template <typename A, typename... As >
-    inline scope& add_(A&& a, As&&... as) {
-        // add an awaitable 
-        root_ch_.send(a.release());
-
-        // add more awaitables
-        add_(std::forward<As>(as)...);
+    inline void init_() {
+        // unlimited channel never blocks on send
+        root_ch_ = hce::channel<hce::awaitable::interface*>::make<Lock,typename Allocator::rebind<hce::awaitable::interface*>::other>(-1);
+        root_awt_ = hce::schedule(root_awaiter_(root_ch_));
     }
 
-    inline scope& add_() { return *this; }
+    template <typename T>
+    inline void add_awt_(hce::awt<T>& awt) {
+        root_ch_.send(awt.release());
+    }
+
+    template <typename T, typename... Awts >
+    inline void add_(hce::awt<T> awt, Awts&&... awts) {
+        // add an awaitable 
+        root_ch_.send(awt.release());
+
+        // add more awaitables
+        add_(std::forward<Awts>(awts)...);
+    }
+
+    inline void add_() { }
 
     // a root awaiter coroutine which awaits all the launched awaiter coroutines
     static inline hce::co<void> root_awaiter_(
@@ -118,6 +144,7 @@ private:
         hce::awaitable::interface* i = nullptr;
 
         while(co_await awaiters.recv(i)) {
+            // join with the awaitable
             co_await hce::awt<void>(i);
         }
 
