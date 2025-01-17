@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HERMES_COROUTINE_ENGINE_SCHEDULER__
-#define __HERMES_COROUTINE_ENGINE_SCHEDULER__ 
+#ifndef HERMES_COROUTINE_ENGINE_SCHEDULER
+#define HERMES_COROUTINE_ENGINE_SCHEDULER
 
 // c++
 #include <cstddef>
@@ -619,7 +619,7 @@ struct scheduler : public printable {
 
     private:
         config() :
-            log_level(hce::printable::default_log_level()),
+            log_level(hce::logger::default_log_level()),
             coroutine_resource_limit(hce::config::scheduler::default_resource_limit())
         { }
     };
@@ -1013,9 +1013,9 @@ private:
                     size_t log_level,
                     scheduler* s, 
                     std::unique_ptr<hce::list<std::coroutine_handle<>>>* q) :
-                prev_log_level_(hce::printable::thread_log_level())
+                prev_log_level_(hce::logger::thread_log_level())
             { 
-                hce::printable::thread_log_level(log_level);
+                hce::logger::thread_log_level(log_level);
                 detail::scheduler::tl_this_scheduler() = s;
                 detail::scheduler::tl_this_scheduler_local_queue() = q;
             }
@@ -1023,7 +1023,7 @@ private:
             ~scoped_locals() {
                 detail::scheduler::tl_this_scheduler_local_queue() = nullptr;
                 detail::scheduler::tl_this_scheduler() = nullptr;
-                hce::printable::thread_log_level(prev_log_level_);
+                hce::logger::thread_log_level(prev_log_level_);
             }
 
         private:

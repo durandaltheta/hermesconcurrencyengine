@@ -96,7 +96,7 @@
 #endif
 
 /// the default log initialization code is defined here
-void hce::config::initialize_log() {
+void hce::config::logger::initialize() {
     std::stringstream ss;
     ss << "-v" << HCELOGLEVEL;
     std::string process("hce");
@@ -287,9 +287,9 @@ int hce::config::timer::service::thread_priority() {
 int hce::config::timer::service::thread_priority() {
     return 0;
 }
-#endif
+#endif 
 
-unsigned int hce::config::timer::service::busy_wait_microsecond_threshold() {
+size_t hce::config::timer::service::micro_busy_wait_threshold() {
     return HCETIMERSERVICEBUSYWAITMICROSECONDTHRESHOLD;
 }
 

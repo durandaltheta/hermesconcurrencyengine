@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HERMES_COROUTINE_ENGINE_BLOCKING__
-#define __HERMES_COROUTINE_ENGINE_BLOCKING__
+#ifndef HERMES_COROUTINE_ENGINE_BLOCKING
+#define HERMES_COROUTINE_ENGINE_BLOCKING
 
 #include <memory>
 #include <type_traits>

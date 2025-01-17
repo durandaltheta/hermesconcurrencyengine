@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HERMES_COROUTINE_ENGINE_SCOPE__
-#define __HERMES_COROUTINE_ENGINE_SCOPE__ 
+#ifndef HERMES_COROUTINE_ENGINE_SCOPE
+#define HERMES_COROUTINE_ENGINE_SCOPE
 
 #include <coroutine>
 #include <unordered_set>
@@ -40,7 +40,7 @@ namespace hce {
  No additional coroutines can be `add()`ed after `await()` is called.
  */
 template <typename Lock=hce::spinlock, typename Allocator=hce::pool_allocator<size_t>>
-struct scope {
+struct scope : public hce::printable {
     /**
      @brief construct scope with one or more awaitables add()ed to it 
      @param one or more awaitables 

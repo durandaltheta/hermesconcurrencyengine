@@ -31,7 +31,10 @@ inline hce::co<T*> co_ptr(T* t) {
 
 template <typename T>
 inline void co_return_value_T() {
+    std::string fname = hce::type::templatize<T>("co_return_value_T");
+
     {
+        HCE_INFO_FUNCTION_BODY(fname, "hce::co<T>");
         T t = test::init<T>(3);
         hce::co<T> co = test::coroutine::co(&t);
         EXPECT_TRUE(co);
@@ -42,8 +45,8 @@ inline void co_return_value_T() {
         EXPECT_NE(&t, hce::get_promise(co).result.get());
     }
 
-    // type erased
     {
+        HCE_INFO_FUNCTION_BODY(fname, "type erased hce::coroutine");
         T t = test::init<T>(3);
         hce::coroutine co = test::coroutine::co(&t);
         EXPECT_TRUE(co);
@@ -448,8 +451,10 @@ hce::co<void> co_yield_T_and_return_void(T& t, T value) {
 
 template <typename T>
 void co_await_yield_T(const int init) {
-    // yield void
+    std::string fname = hce::type::templatize<T>("co_await_yield_T");
+
     {
+        HCE_INFO_FUNCTION_BODY(fname, "yield void");
         const int value = init + 1;
         T t = test::init<T>(init);
         hce::co<void> co(
@@ -470,8 +475,8 @@ void co_await_yield_T(const int init) {
         EXPECT_EQ((T)test::init<T>(value),t);
     }
 
-    // yield T
     {
+        HCE_INFO_FUNCTION_BODY(fname, "yield T");
         const int value = init + 1;
         T i = test::init<T>(init);
         hce::co<void> co(

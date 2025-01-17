@@ -1,3 +1,5 @@
+//SPDX-License-Identifier: MIT
+//Author: Blayne Dennis 
 #include <thread>
 
 #include "memory.hpp"

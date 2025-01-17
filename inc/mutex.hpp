@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HERMES_COROUTINE_ENGINE_MUTEX__
-#define __HERMES_COROUTINE_ENGINE_MUTEX__
+#ifndef HERMES_COROUTINE_ENGINE_MUTEX
+#define HERMES_COROUTINE_ENGINE_MUTEX
 
 // c++
 #include <mutex>

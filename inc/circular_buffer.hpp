@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HERMES_COROUTINE_ENGINE_CIRCULAR_BUFFER__
-#define __HERMES_COROUTINE_ENGINE_CIRCULAR_BUFFER__
+#ifndef HERMES_COROUTINE_ENGINE_CIRCULAR_BUFFER
+#define HERMES_COROUTINE_ENGINE_CIRCULAR_BUFFER
 
 #include <cstdlib>
 #include <algorithm>

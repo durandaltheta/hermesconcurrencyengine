@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HERMES_COROUTINE_ENGINE__
-#define __HERMES_COROUTINE_ENGINE__
+#ifndef HERMES_COROUTINE_ENGINE
+#define HERMES_COROUTINE_ENGINE
 
 #include "utility.hpp"
 #include "logging.hpp"

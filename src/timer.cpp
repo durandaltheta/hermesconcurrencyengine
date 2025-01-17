@@ -1,3 +1,5 @@
+//SPDX-License-Identifier: MIT
+//Author: Blayne Dennis 
 #include "timer.hpp"
 
 hce::timer::service& hce::timer::service::get() {

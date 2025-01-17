@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HERMES_COROUTINE_ENGINE_MEMORY__
-#define __HERMES_COROUTINE_ENGINE_MEMORY__
+#ifndef HERMES_COROUTINE_ENGINE_MEMORY
+#define HERMES_COROUTINE_ENGINE_MEMORY
 
 #include <cstdlib>
 #include <limits>

@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HERMES_COROUTINE_ENGINE_THREADPOOL__
-#define __HERMES_COROUTINE_ENGINE_THREADPOOL__
+#ifndef HERMES_COROUTINE_ENGINE_THREADPOOL
+#define HERMES_COROUTINE_ENGINE_THREADPOOL
 
 // c++
 #include <vector>

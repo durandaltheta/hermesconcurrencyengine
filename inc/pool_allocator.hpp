@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HERMES_COROUTINE_ENGINE_POOL_ALLOCATOR__
-#define __HERMES_COROUTINE_ENGINE_POOL_ALLOCATOR__ 
+#ifndef HERMES_COROUTINE_ENGINE_POOL_ALLOCATOR
+#define HERMES_COROUTINE_ENGINE_POOL_ALLOCATOR
 
 #include <cstdlib>
 #include <type_traits>
