@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HERMES_COROUTINE_ENGINE_POOL_ALLOCATOR__
-#define __HERMES_COROUTINE_ENGINE_POOL_ALLOCATOR__ 
+#ifndef HERMES_COROUTINE_ENGINE_POOL_ALLOCATOR
+#define HERMES_COROUTINE_ENGINE_POOL_ALLOCATOR
 
 #include <cstdlib>
 #include <type_traits>
@@ -128,7 +128,7 @@ struct pool_allocator : public printable {
 
         // free all memory
         while(pool_.size()) {
-            hce::deallocate<T>(pool_.back(), 1); 
+            hce::deallocate<T>(pool_.back()); 
             pool_.pop_back();
         }
     }
@@ -183,7 +183,7 @@ struct pool_allocator : public printable {
             pool_.push_back(t); 
         } else [[unlikely]] { 
             // free memory if necessary
-            hce::deallocate<T>(t, n);
+            hce::deallocate<T>(t);
         }
     }
 

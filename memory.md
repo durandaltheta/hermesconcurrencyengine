@@ -1,5 +1,5 @@
 # Synopsis 
-This framework makes extensive use of allocated memory, in such a way that allocation itself is potentially a bottleneck. This is because `coroutine`s, and their single-use `awaitable` communication primitives, are allocated implementations. Furthermore, objects which implement communication mechanisms are often utilizing containers which frequently allocate and deallocate.
+This framework makes extensive use of allocated memory, in such a way that allocation itself is potentially a bottleneck. This is because `coroutine`s, and their single-use `awaitable` communication primitives, are allocated implementations. Furthermore, objects which implement communication mechanisms are often utilizing containers which themselves frequently allocate and deallocate.
 
 Allocation and deallocation, while very fast, may utilize process-wide atomic locking, which adds a small cost when every allocation has to acquire the lock, and a larger cost whenever multiple threads of execution need to allocate. Because coroutine communication (and thus context switching) is a primary point of improvement over traditional inter-thread mechanisms, it is important to address the problem of allocation, especially as inter-thread communication increases in user code.
 
@@ -8,14 +8,14 @@ This framework implements several tiers and types of memory allocation caching i
 Ultimately, `malloc()`/`free()` are *still* used for every allocated value, and are called as necessary. The following mechanisms only exist to limit how frequently they need to be called.
 
 ## High Level Allocation/Deallocation
-Allocation and deallocation are done through the templated `hce::allocate<T>(size_t count)`/`hce::deallocate<T>(size_t count)` mechanisms. These functions implement memory aligned allocation (similar to `std::aligned_alloc()`). They *do not* construct the memory `T`. The template `T` is used only for determining the size of the allocation. 
+Allocation and deallocation are done through the templated `hce::allocate<T>(size_t count)`/`hce::deallocate<T>()` mechanisms. These functions implement memory aligned allocation (similar to `std::aligned_alloc()`). They *do not* construct the memory `T`. The template `T` is used only for determining the size of the allocation. 
 
 This framework generally replaces usages of `new`/`delete` keywords with these mechanisms, and uses "placement `new`" in order to construct allocated pointers and explicit calls to `~T()` to destruct.
 
-`hce::allocate<T>()`/`hce::deallocate<T>()` call these underlying functions:
+`hce::allocate<T>()`/`hce::deallocate()` call these underlying functions:
 ```
 void* hce::memory::allocate(size_t size);
-void hce::memory::deallocate(void* p, size_t size);
+void hce::memory::deallocate(void* p);
 ```
 
 ## Thread Local Caching
@@ -30,7 +30,7 @@ The default `hce::config` function which is used to initialize the `cache` is th
 extern hce::config::memory::cache::info& hce::config::memory::cache::info::get();
 ```
 
-The user can either modify the `cmake` defines or implement a custom `get()`. The default implementation provides different caching configurations based on the type of thread that needs the cache. For example, the thread running the `hce::scheduler` returned by `hce::scheduler::global()` is expected to have the highest memory reuse burden of any system thread, and is given due consideration.
+The user can either modify the `cmake` defines or implement and link a custom `hce::config::memory::cache::info::get()`. The default implementation provides different caching configurations based on the type of thread that needs the cache. For example, the thread running the `hce::scheduler` returned by `hce::scheduler::global()` is expected to have the highest memory reuse burden of any system thread, and is given due consideration.
 
 Custom implementations of `info()` provide the opportunity for fine-grained control of the cache. For example, if the user determines that a few buckets needs a much higher (or lower) byte limit, they can implement the *exact* bucket limits and block size values in their implementation.
 

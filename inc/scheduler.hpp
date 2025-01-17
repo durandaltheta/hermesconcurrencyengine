@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HERMES_COROUTINE_ENGINE_SCHEDULER__
-#define __HERMES_COROUTINE_ENGINE_SCHEDULER__ 
+#ifndef HERMES_COROUTINE_ENGINE_SCHEDULER
+#define HERMES_COROUTINE_ENGINE_SCHEDULER
 
 // c++
 #include <cstddef>
@@ -17,6 +17,7 @@
 
 // local 
 #include "logging.hpp"
+#include "base.hpp"
 #include "utility.hpp"
 #include "atomic.hpp"
 #include "memory.hpp"
@@ -65,7 +66,7 @@ namespace config {
 namespace scheduler {
    
 // specify the value for `hce::scheduler::config::coroutine_resource_limit`
-extern size_t default_resource_limit();
+size_t default_resource_limit();
 
 }
 }
@@ -89,12 +90,12 @@ template <typename T>
 struct joiner : 
     public hce::awaitable::lockable<
         hce::spinlock,
-        hce::awt_interface<T>>
+        typename hce::awt<T>::interface>
 {
     joiner(hce::co<T>& co) :
         hce::awaitable::lockable<
             hce::spinlock,
-            hce::awt_interface<T>>(
+            typename hce::awt<T>::interface>(
                 lk_,
                 hce::awaitable::await::policy::defer,
                 hce::awaitable::resume::policy::lock),
@@ -180,12 +181,12 @@ template <>
 struct joiner<void> : 
     public hce::awaitable::lockable<
         hce::spinlock,
-        hce::awt_interface<void>>
+        typename hce::awt<void>::interface>
 {
     joiner(hce::co<void>& co) :
         hce::awaitable::lockable<
             hce::spinlock,
-            hce::awt_interface<void>>(
+            typename hce::awt<void>::interface>(
                 lk_,
                 hce::awaitable::await::policy::defer,
                 hce::awaitable::resume::policy::lock),
@@ -409,6 +410,10 @@ struct scheduler : public printable {
          @brief process-wide object responsible for managing global scheduler lifecycles
          */
         struct manager : public printable {
+            manager() : state_(executing) { 
+                HCE_HIGH_CONSTRUCTOR(); 
+            }
+
             virtual ~manager() { 
                 HCE_HIGH_DESTRUCTOR(); 
             }
@@ -423,7 +428,7 @@ struct scheduler : public printable {
              @brief access the process wide manager object
              @return a reference to the manager 
              */
-            static manager& instance();
+            static inline manager& instance() { return *instance_; }
 
             inline std::string content() const { 
                 std::stringstream ss;
@@ -484,16 +489,15 @@ struct scheduler : public printable {
             }
 
         private:
-            manager() : state_(executing) { 
-                HCE_HIGH_CONSTRUCTOR(); 
-            }
-
+            static manager* instance_;
             hce::spinlock lk_;
             hce::scheduler::state state_;
 
             // it is important that the lifecycles are destroyed last, so this
             // list is declared first (destructors are called first-in-last-out)
             std::list<std::unique_ptr<scheduler::lifecycle>> lifecycle_pointers_;
+
+            friend hce::lifecycle;
         };
 
         /**
@@ -584,24 +588,7 @@ struct scheduler : public printable {
      requiring the user to link their own implementation.
      */
     struct config {
-        config(const config& rhs) = delete;
-        config(config&& rhs) = delete;
-
-        ~config() { }
-
-        config& operator=(const config& rhs) = delete;
-        config& operator=(config&& rhs) = delete;
-
-        /**
-         @brief allocate and construct a config 
-
-         This is the only mechanism to allocate an `hce::scheduler::config`.
-
-         @return an allocated and constructed config
-        */
-        static inline std::unique_ptr<config> make() { 
-            return std::unique_ptr<config>(new config);
-        }
+        config(){}
 
         /**
          Set the log level of the thread the scheduler is installed on.
@@ -609,19 +596,13 @@ struct scheduler : public printable {
          Maximum value: 9
          Minimum value: -9
          */
-        int log_level;
+        int log_level = -1;
 
         /**
          The count of coroutine resources the scheduler can pool for reuse 
          without deallocating.
          */
-        size_t coroutine_resource_limit;
-
-    private:
-        config() :
-            log_level(hce::printable::default_log_level()),
-            coroutine_resource_limit(hce::config::scheduler::default_resource_limit())
-        { }
+        size_t coroutine_resource_limit = 64;
     };
 
     virtual ~scheduler() {
@@ -649,9 +630,8 @@ struct scheduler : public printable {
      @param c optional config unique pointer to configure the runtime behavior of the scheduler
      @return an allocated lifecycle unique pointer containing the scheduler shared pointer
      */
-    static inline std::unique_ptr<lifecycle> make(
-            std::unique_ptr<config> c = {}) {
-        return make_(std::move(c),false);
+    static inline std::unique_ptr<lifecycle> make(config c = {})  {
+        return scheduler::make_(c, false);
     }
 
     /**
@@ -688,7 +668,7 @@ struct scheduler : public printable {
      */
     static inline scheduler& global() {
         HCE_TRACE_FUNCTION_ENTER("hce::scheduler::global");
-        return global_();
+        return *(scheduler::global_);
     }
 
     /**
@@ -842,42 +822,30 @@ private:
         reset_flags_(); // initialize flags
     }
 
-    static inline std::unique_ptr<lifecycle> make_(
-            std::unique_ptr<config> c, 
-            bool is_global) 
-    {
-        // ensure our config is allocated and assigned
-        if(!c) { c = config::make(); }
+    // initialize the lifecycle manager
+    static std::shared_ptr<scheduler> init_lifecycle_manager_();
 
+    static inline std::unique_ptr<lifecycle> make_(const config& c, bool is_global) {
         HCE_HIGH_FUNCTION_ENTER("hce::scheduler::make",c.get());
 
         // make the first shared pointer
         std::shared_ptr<scheduler> s(new scheduler);
 
         // finish initialization and configure the scheduler's runtime behavior
-        s->configure_(s, std::move(c));
+        s->configure_(s, c);
 
         // allocate and return the lifecycle pointer 
-        lifecycle* lp = hce::allocate<lifecycle>(1);
-
-        new(lp) lifecycle(std::move(s), is_global);
+        lifecycle* lp = new lifecycle(std::move(s), is_global);
         return std::unique_ptr<lifecycle>(lp);
     }
 
-    // initialize the lifecycle manager
-    static std::shared_ptr<scheduler> init_lifecycle_manager_();
-   
-    // retrieve reference to the global scheduler. 
-    static scheduler& global_();
-
     // finish initializing and configuring the scheduler
-    void configure_(std::shared_ptr<scheduler>& self, 
-                    std::unique_ptr<config> cfg) {
+    void configure_(std::shared_ptr<scheduler>& self, const config& cfg) {
         // set the weak_ptr
         self_wptr_ = self;
 
-        log_level_ = cfg->log_level;
-        coroutine_resource_limit_ = cfg->coroutine_resource_limit;
+        log_level_ = cfg.log_level;
+        coroutine_resource_limit_ = cfg.coroutine_resource_limit;
         coroutine_queue_.reset(new hce::list<std::coroutine_handle<>>(
             hce::pool_allocator<std::coroutine_handle<>>(
                 coroutine_resource_limit_)));
@@ -1013,9 +981,9 @@ private:
                     size_t log_level,
                     scheduler* s, 
                     std::unique_ptr<hce::list<std::coroutine_handle<>>>* q) :
-                prev_log_level_(hce::printable::thread_log_level())
+                prev_log_level_(hce::logger::thread_log_level())
             { 
-                hce::printable::thread_log_level(log_level);
+                hce::logger::thread_log_level(log_level);
                 detail::scheduler::tl_this_scheduler() = s;
                 detail::scheduler::tl_this_scheduler_local_queue() = q;
             }
@@ -1023,7 +991,7 @@ private:
             ~scoped_locals() {
                 detail::scheduler::tl_this_scheduler_local_queue() = nullptr;
                 detail::scheduler::tl_this_scheduler() = nullptr;
-                hce::printable::thread_log_level(prev_log_level_);
+                hce::logger::thread_log_level(prev_log_level_);
             }
 
         private:
@@ -1207,6 +1175,11 @@ private:
     // there's no reason to pull memory from the cache for something that is 
     // generally allocated for an entire process' lifecycle.
     std::unique_ptr<hce::list<std::coroutine_handle<>>> coroutine_queue_;
+
+    // reference to the global scheduler. 
+    static scheduler* global_;
+
+    friend hce::lifecycle;
 };
 
 namespace config {
@@ -1225,7 +1198,7 @@ namespace global {
 
  @return a copy of the global configuration 
  */
-extern std::unique_ptr<hce::scheduler::config> scheduler_config();
+extern hce::scheduler::config scheduler_config();
 
 }
 }

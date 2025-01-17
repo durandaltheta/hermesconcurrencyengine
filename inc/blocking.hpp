@@ -1,12 +1,13 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HERMES_COROUTINE_ENGINE_BLOCKING__
-#define __HERMES_COROUTINE_ENGINE_BLOCKING__
+#ifndef HERMES_COROUTINE_ENGINE_BLOCKING
+#define HERMES_COROUTINE_ENGINE_BLOCKING
 
 #include <memory>
 #include <type_traits>
 #include <thread>
 
+#include "base.hpp"
 #include "utility.hpp"
 #include "memory.hpp"
 #include "logging.hpp"
@@ -20,9 +21,28 @@ namespace hce {
 namespace blocking {
 namespace config {
 
-extern size_t process_worker_resource_limit();
-extern size_t global_scheduler_worker_resource_limit();
-extern size_t default_scheduler_worker_resource_limit();
+/**
+ @brief the count of reusable worker blocking threads shared by the process 
+
+ Can be increased if `hce::block()` calls are made frequently to avoid having to 
+ launch new system threads by reusing old ones.
+
+ In almost every case modifying this value is the proper way to improve 
+ `hce::block()` call throughput. The remaining values are relevant in edgecases 
+ where the user code must execute `hce::block()` calls very frequently from a 
+ very large number of threads.
+ */
+size_t process_worker_resource_limit();
+
+/**
+ @brief the count of reusable worker blocking threads for the global scheduler
+ */
+size_t global_scheduler_worker_resource_limit();
+
+/**
+ @brief the count of reusable worker blocking threads for default schedulers
+ */
+size_t default_scheduler_worker_resource_limit();
 
 }
 
@@ -508,10 +528,8 @@ private:
         HCE_HIGH_CONSTRUCTOR();
     }
 
-    ~service() {
-        HCE_HIGH_DESTRUCTOR();
-    }
-   
+    ~service() { HCE_HIGH_DESTRUCTOR(); }
+ 
     // a thread_local worker cache 
     static cache& tl_worker_cache_();
 
@@ -621,6 +639,8 @@ private:
         }
     }
 
+    static service* instance_;
+
     // synchronize checkin/checkout of workers
     mutable hce::spinlock lk_;
 
@@ -633,6 +653,8 @@ private:
      executed the operation will be placed in this queue if there is room. 
      */
     hce::circular_buffer<std::unique_ptr<worker>> workers_;
+
+    friend hce::lifecycle;
 };
 
 }

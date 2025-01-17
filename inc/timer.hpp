@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HERMES_COROUTINE_ENGINE_TIMER__
-#define __HERMES_COROUTINE_ENGINE_TIMER__
+#ifndef HERMES_COROUTINE_ENGINE_TIMER
+#define HERMES_COROUTINE_ENGINE_TIMER
 
 #include <list>
 #include <exception>
@@ -10,6 +10,7 @@
 #include <mutex>
 #include <condition_variable>
 
+#include "base.hpp"
 #include "utility.hpp"
 #include "memory.hpp"
 #include "logging.hpp"
@@ -27,18 +28,56 @@ namespace timer {
 namespace service {
 
 /**
- If a timer would timeout at this threshold or lower, the timer will 
- busy-wait until the timeout occurs in order to increase timeout accuracy.
-
- @return the millisecond busy-wait threshold for timer timeouts
+ Get the platform specific thread priority to pass to hce::set_thread_priority() 
+ for the timer processing thread. This priority is expected to be above normal 
+ to increase timeout precision.
  */
-extern unsigned int busy_wait_microsecond_threshold();
+int thread_priority();
 
 /**
- Get the platform specific thread priority to pass to hce::set_thread_priority() 
- for the timer processing thread.
+ Busy-waiting is not ideal, but is sometimes necessary to guarantee precision 
+ during short timeouts. This value should be set low (IE, less than 10ms) in 
+ order to encourage busy-waiting to occur only when timers are very close to 
+ timeout. The larger this threshold, the more CPU will be wasted busy-waiting 
+ (with potentially increased timeout precision).
+
+ @return threshold in microseconds before timer service will busy wait for timeout
  */
-extern int thread_priority();
+hce::chrono::duration busy_wait_threshold();
+
+/**
+ The duration, in microseconds, that the timer service thread should 
+ automatically wakeup *early* in order to increase precision of timeouts.
+
+ How this value is used is determined by the timeout_algorithm().
+
+ That is, longer sleeps can have imprecise wakeups due to OS and CPU power 
+ saving behavior, so we set an "early" wakeup a short time before timeout so 
+ that when the thread goes back to sleep, it's encouraged to wakeup with 
+ increased precision the second time.
+
+ @return microsecond early wakeup duration
+ */
+hce::chrono::duration early_wakeup_threshold();
+
+/**
+ An additional duration, in microseconds, that the timer service thread should 
+ wakeup early with very long timeouts. 
+
+ How this value is used is determined by the timeout_algorithm().
+
+ This may become necessary because the OS or CPU can enter deeper power saving 
+ modes during longer timeouts which can significantly impact timeout precision. 
+ This allows the CPU to wakeup somewhat early, hopefully accounting for extra 
+ delay and then wait again a much shorter timer before being woken up early at 
+ the normal early wakeup threshold.
+
+ The cost for this additional wakeup is quite low, as the longer the timeout
+ the less this thread is consuming CPU anyway.
+
+ @return microsecond early wakeup long duration
+ */
+hce::chrono::duration early_wakeup_long_threshold();
 
 }
 }
@@ -46,88 +85,13 @@ extern int thread_priority();
 
 namespace timer {
 
-// timer awaitable implementation
-struct awaitable : public 
-    hce::scheduler::reschedule<
-       hce::awaitable::lockable<
-            hce::spinlock,
-            hce::awt<bool>::interface>>
-{
-    awaitable() : 
-        hce::scheduler::reschedule<
-            hce::awaitable::lockable<
-                hce::spinlock,
-                hce::awt<bool>::interface>>(
-                    slk_,
-                    hce::awaitable::await::policy::defer,
-                    hce::awaitable::resume::policy::lock),
-        ready_(false),
-        result_(false)
-    { 
-        HCE_MED_CONSTRUCTOR();
-    }
-
-    inline virtual ~awaitable(){
-        HCE_MED_DESTRUCTOR();
-
-        if(!ready_) {
-            std::stringstream ss;
-            ss << *this << "was not awaited nor resumed";
-            HCE_FATAL_METHOD_BODY("~awaitable",ss.str());
-            std::terminate();
-        }
-    }
-
-    static inline std::string info_name() { 
-        return "hce::timer::awaitable"; 
-    }
-
-    inline std::string name() const { return awaitable::info_name(); }
-
-    inline bool on_ready() { 
-        HCE_MED_METHOD_BODY("on_ready",ready_);
-        return ready_; 
-    }
-
-    inline void on_resume(void* m) { 
-        HCE_MED_METHOD_ENTER("on_resume",m);
-        ready_ = true;
-        result_ = (bool)m; 
-    }
-
-    inline bool get_result() { 
-        HCE_MED_METHOD_BODY("get_result",result_);
-        return result_; 
-    }
-
-private:
-    bool ready_; 
-    bool result_;
-    hce::spinlock slk_;
-};
-
-
 /**
  @brief an object capable of starting, cancelling, and handling timer timeouts 
-
- This object is optimized to efficiently handle timeouts generally, including 
- some effort to increase precision.
  */
 struct service : public hce::printable {
-    struct bad_timer_timeout : public std::exception {
-        bad_timer_timeout(service* s) :
-            estr([&]() -> std::string {
-                std::stringstream ss;
-                ss << s << " cannot start timer with null on_timeout callback";
-                return ss.str();
-            }())
-        { }
-
-        inline const char* what() const noexcept { return estr.c_str(); }
-
-    private:
-        const std::string estr;
-    };
+    typedef hce::chrono::time_point (*algorithm_function_ptr)(
+        const hce::chrono::time_point& now, 
+        const hce::chrono::time_point& requested_timeout);
 
     static inline std::string info_name() { return "hce::timer::service"; }
     inline std::string name() const { return service::info_name(); }
@@ -138,60 +102,30 @@ struct service : public hce::printable {
     /**
      @brief start a timer 
      @param sid to overwrite with the started timer sid 
-     @param timeout the timeout of the timer
-     @param on_timeout the callback to execute when the timer times out 
-     @param on_cancel the callback to execute if the timer is cancelled early 
-     @return `true` on success, else `false`
+     @param timeout the time_point of the timer timeout
      */
-    void start(
-        hce::sid& sid, 
-        const hce::chrono::time_point& timeout,
-        // std:: instead of hce::unique_ptr used to avoid stealing cache memory
-        std::unique_ptr<hce::thunk> on_timeout,
-        std::unique_ptr<hce::thunk> on_cancel = std::unique_ptr<hce::thunk>()) 
-    {
-        sid.make();
-        HCE_MED_METHOD_ENTER("start",sid);
-
-        if(on_timeout) {
-            timer* t = hce::allocate<timer>(1);
-            new(t) timer(sid, 
-                         timeout,
-                         std::move(on_timeout), 
-                         std::move(on_cancel));
-
-            std::lock_guard<hce::spinlock> lk(lk_);
-
-            timers_.push_back(t);
-            timers_.sort([](timer* lhs, timer* rhs) {
-                return lhs->timeout < rhs->timeout;
-            });
-
-            notify_();
-        } else {
-            throw bad_timer_timeout(this);
-        }
+    hce::awt<bool> start(hce::sid& sid, const hce::chrono::time_point& timeout){
+        sid.make(); 
+        HCE_LOW_METHOD_ENTER("start", sid, timeout);
+        return start_(sid, timeout);
     }
 
     /**
      @brief start a timer 
      @param sid to overwrite with the started timer sid 
-     @param dur the duration of the timer
-     @param as... additional arguments passed to start()
-     @return `true` on success, else `false`
+     @param dur the duration of the timer timeout
      */
-    template <typename... As>
-    bool start(hce::sid& sid, 
-               const hce::chrono::duration& dur,
-               As&&... as) {
-        return start(sid, hce::chrono::now() + dur, std::forward<As>(as)...);
+    hce::awt<bool> start(hce::sid& sid, const hce::chrono::duration& dur) {
+        sid.make();
+        HCE_LOW_METHOD_ENTER("start", sid, dur);
+        return start_(sid, hce::chrono::now() + dur);
     }
 
     /**
      @return `true` if timer is running, else `false`
      */
     bool running(const hce::sid& sid) {
-        HCE_MED_METHOD_ENTER("running",sid);
+        HCE_LOW_METHOD_ENTER("running",sid);
         bool result = false;
 
         {
@@ -199,7 +133,7 @@ struct service : public hce::printable {
 
             for(auto& t : timers_) {
                 if(sid == t->sid) {
-                    HCE_MED_METHOD_BODY("running","timer found");
+                    HCE_LOW_METHOD_BODY("running","timer found");
                     result = true;
                     break;
                 }
@@ -215,11 +149,12 @@ struct service : public hce::printable {
      @return `true` if the timer was found running and canceled, else `false`
      */
     bool cancel(const hce::sid& sid) {
-        HCE_MED_METHOD_ENTER("cancel",sid);
+        HCE_LOW_METHOD_ENTER("cancel",sid);
         bool result = false;
 
         if(sid) {
-            hce::unique_ptr<timer> t;
+            // let unique_ptr call destructor
+            std::unique_ptr<timer> t;
 
             std::unique_lock<hce::spinlock> lk(lk_);
 
@@ -232,17 +167,13 @@ struct service : public hce::printable {
                     t.reset(*it);
                     timers_.erase(it);
                     notify_();
-                    lk_.unlock();
+                    lk.unlock();
                    
                     // do operations outside lock which don't require it
                     result = true;
+                    t->awt->resume((void*)0); // cancel awaitable
 
-                    // on_cancel is optional
-                    if(t->on_cancel) [[likely]] {
-                        (*(t->on_cancel))(); 
-                    }
-
-                    HCE_MED_METHOD_BODY("cancel","cancelled timer with ",sid);
+                    HCE_LOW_METHOD_BODY("cancel","cancelled timer with ",sid);
                     break;
                 }
             }
@@ -251,36 +182,106 @@ struct service : public hce::printable {
         return result;
     }
 
+    /**
+     @brief microsecond ticks info struct
+     */
+    struct ticks {
+        size_t runtime; // microsecond ticks spent running
+        size_t busywait; // microsecond ticks spent busy-waiting 
+    };
+    
+    /**
+     @return timer service runtime ticks information
+     */
+    ticks get_ticks() const { 
+        std::lock_guard<hce::spinlock> lk(lk_);
+        return { micro_runtime_ticks_, micro_busywait_ticks_ };
+    }
+    
+    /**
+     @brief reset all timer service ticks for fresh calculation
+     */
+    void reset_ticks() {
+        std::lock_guard<hce::spinlock> lk(lk_);
+        micro_runtime_ticks_ = 0;
+        micro_busywait_ticks_ = 0;
+    }
+
 private:
+    // timer service awaitable implementation
+    struct awaitable : public 
+        hce::scheduler::reschedule<
+           hce::awaitable::lockable<
+                hce::spinlock,
+                hce::awt<bool>::interface>>
+    {
+        awaitable() : 
+            hce::scheduler::reschedule<
+                hce::awaitable::lockable<
+                    hce::spinlock,
+                    hce::awt<bool>::interface>>(
+                        slk_,
+                        hce::awaitable::await::policy::defer,
+                        hce::awaitable::resume::policy::lock),
+            ready_(false),
+            result_(false)
+        { 
+            HCE_MED_CONSTRUCTOR();
+        }
+
+        inline virtual ~awaitable(){
+            HCE_MED_DESTRUCTOR();
+
+            if(!ready_) {
+                std::stringstream ss;
+                ss << *this << "was not awaited nor resumed";
+                HCE_FATAL_METHOD_BODY("~awaitable",ss.str());
+                std::terminate();
+            }
+        }
+
+        static inline std::string info_name() { 
+            return "hce::timer::service::awaitable"; 
+        }
+
+        inline std::string name() const { return awaitable::info_name(); }
+
+        inline bool on_ready() { 
+            HCE_MED_METHOD_BODY("on_ready",ready_);
+            return ready_; 
+        }
+
+        inline void on_resume(void* m) { 
+            HCE_MED_METHOD_ENTER("on_resume",m);
+            ready_ = true;
+            result_ = (bool)m; 
+        }
+
+        inline bool get_result() { 
+            HCE_MED_METHOD_BODY("get_result",result_);
+            return result_; 
+        }
+
+    private:
+        bool ready_; 
+        bool result_;
+        hce::spinlock slk_;
+    };
+
+    // internal timer object
     struct timer {
         hce::sid sid;
         hce::chrono::time_point timeout;
-        std::unique_ptr<hce::thunk> on_timeout;
-        std::unique_ptr<hce::thunk> on_cancel;
+        hce::timer::service::awaitable* awt;
     };
 
-    service() : 
-        running_(true),
-        waiting_(false),
-        busy_wait_timer_(nullptr),
-        thd_([](service* ts) { 
-            HCE_HIGH_FUNCTION_ENTER("hce::timer::service::thread");
-            ts->run(); 
-            HCE_HIGH_FUNCTION_BODY("hce::timer::service::thread","exit");
-        }, this) 
-    {
-        HCE_HIGH_CONSTRUCTOR();
-        hce::set_thread_priority(
-            thd_, 
-            hce::config::timer::service::thread_priority());
-    }
+    service();
 
     ~service() {
         HCE_HIGH_DESTRUCTOR();
 
         {
             std::lock_guard<hce::spinlock> lk(lk_);
-            busy_wait_timer_ = nullptr; // stop busy waiting
             running_ = false; 
             notify_();
         }
@@ -289,24 +290,62 @@ private:
 
         // properly cancel and cleanup timers
         while(timers_.size()) {
-            timer* t = timers_.front();
+            // let unique_ptr call destructor
+            std::unique_ptr<timer> t(timers_.front());
             timers_.pop_front();
-
-            if(t->on_cancel) {
-                (*(t->on_cancel))();
-            }
+            t->awt->resume((void*)0); // cancel awaitable
 
             HCE_HIGH_METHOD_BODY("~service","cancelled timer with ", t->sid);
-
-            t->~timer();
-            hce::deallocate<timer>(t,1);
         }
     }
 
-    inline void notify_() {
-        // ensure busy wait stops for reprocessing
-        busy_wait_timer_ = nullptr;
+    /*
+      The default algorithm for determining how long the timer service should 
+      wait for until the next timeout
 
+      If the returned time_point is greater than the requested_timeout, the 
+      requested_timeout will be taken instead.
+
+      An timer will not actually timeout until it's timeout is reached. This 
+      operation is for putting the entire *timer service* thread to sleep.
+
+      This operation allows for manipulation of timeouts to improve overall timeout 
+      precision. Factors which influence timeout precision generally are often 
+      non-trivial and non-deterministic, such as OS and power configurations.
+     */
+    static hce::chrono::time_point default_timeout_algorithm(
+        const hce::chrono::time_point& now, 
+        const hce::chrono::time_point& requested_timeout);
+
+   
+    // sid must be set at this point
+    hce::awt<bool> start_(hce::sid& sid, const hce::chrono::time_point& timeout)
+    {
+        HCE_TRACE_METHOD_ENTER("start_",sid,timeout);
+
+        // allocate and construct the timer service awaitable
+        auto awt = new hce::timer::service::awaitable;
+
+        // allocate and construct timer using default `new` (don't need to steal 
+        // from calling thread's memory cache
+        timer* t = new timer(sid, timeout, awt);
+
+        {
+            std::lock_guard<hce::spinlock> lk(lk_);
+
+            timers_.push_back(t);
+            timers_.sort([](timer* lhs, timer* rhs) {
+                return lhs->timeout < rhs->timeout;
+            });
+
+            notify_();
+        }
+
+        // return the awaitable
+        return hce::awt<bool>(awt);
+    }
+
+    inline void notify_() {
         if(waiting_) {
             waiting_ = false;
             cv_.notify_one();
@@ -315,12 +354,29 @@ private:
 
     inline void run() {
         HCE_HIGH_METHOD_ENTER("run");
-        const hce::chrono::duration busy_wait_microsecond_threshold(
-            std::chrono::milliseconds(
-                hce::config::timer::service::busy_wait_microsecond_threshold()));
-        hce::chrono::time_point now;
+        hce::chrono::time_point now = hce::chrono::now();
+        hce::chrono::time_point prev = now;
         hce::chrono::time_point timeout;
-        hce::list<std::unique_ptr<hce::thunk>> timed_out;
+        hce::list<hce::timer::service::awaitable*> timed_out;
+
+        auto update_now = [&](bool busy){ 
+            prev = now;
+            now = hce::chrono::now();
+            size_t ticks = hce::chrono::to<std::chrono::microseconds>(now - prev).count();
+
+            // update the service total runtime
+            micro_runtime_ticks_ += ticks;
+
+            // runtime wrapped around somehow, reset calculation
+            if(micro_runtime_ticks_ < micro_busywait_ticks_) [[unlikely]] {
+                micro_busywait_ticks_ = 0;
+            }
+
+            // update busywait time
+            if(busy) [[likely]] {
+                micro_busywait_ticks_ += ticks;
+            }
+        };
 
         std::unique_lock<hce::spinlock> lk(lk_);
 
@@ -328,8 +384,8 @@ private:
         while(running_) [[likely]] {
             // check for any ready timers 
             if(timers_.size()) [[unlikely]] {
-                // update the current timepoint
-                now = hce::chrono::now();
+                // update the current timepoint 
+                update_now(false);
                 auto it = timers_.begin();
                 auto end = timers_.end();
 
@@ -340,71 +396,71 @@ private:
                 // check if a timer is ready to timeout
                 if(timeout_ready()) [[unlikely]] {
                     do {
-                        timer* t = *it;
+                        // let unique_ptr call destructor
+                        std::unique_ptr<timer> t(*it);
                         // handle timeout callbacks outside lock
-                        timed_out.push_back(std::move(t->on_timeout));
-                        t->~timer();
-                        hce::deallocate<timer>(t,1);
+                        timed_out.push_back(t->awt);
                         it = timers_.erase(it);
+                    } while(timeout_ready()); 
 
-                        // Explicitly evaluate the condition and apply [[likely]]
-                        if(timeout_ready()) [[likely]] {
-                            continue;
-                        } else {
-                            break;
-                        }
-                    // need to continue processing at this point to check what 
-                    // has changed during unlocked state
-                    // a sane implementation should default `true` to [[likely]]
-                    } while(true); 
-
-                    // execute on_timeout callbacks outside the lock
+                    // resume awaitables outside the lock
                     lk.unlock();
 
                     do {
-                        (*(timed_out.front()))();
+                        timed_out.front()->resume((void*)1); // resume awaitable
                         timed_out.pop();
                     } while(timed_out.size()); [[likely]]
 
+                    // re-acquire the lock
                     lk.lock();
                 } else [[likely]] {
-                    hce::chrono::duration time_left = now - (*it)->timeout;
-                    bool busy_wait_not_ready = false;
+                    auto below_busy_wait_threshold = [&]{
+                        // only ever need to wait if we haven't reached timeout
+                        if(now < timeout) {
+                            // only need to busy-wait if the difference between 
+                            // now and the timeout is less than the threshold
+                            return (timeout - now) <= busy_wait_threshold_;
+                        } else {
+                            // break out of loop
+                            return false;
+                        }
+                    };
+                           
+                    // update latest timeout to the latest timeout
+                    timeout = timers_.front()->timeout;
 
-                    // if the time till timeout is less than the configured 
-                    // busy-wait threshold then we busy-wait for increased 
-                    // timeout precision
-                    if(time_left < busy_wait_microsecond_threshold) [[unlikely]] {
-                        busy_wait_timer_ = *it;
+                    if(below_busy_wait_threshold()) [[unlikely]] {
+                        // spend as much time busy waiting as possible unlocked
+                        lk_.unlock();
 
                         do {
-                            // The short unlocked window allows API calls to
-                            // start()/cancel() during busy-wait. CPU usage
-                            // doesn't matter because we're already trying 
-                            // to waste CPU. 
-                            lk.unlock();
-                            now = hce::chrono::now();
-                            lk.lock();
+                            // spend some time acquiring the time and keeping 
+                            // the service unlocked
+                            update_now(true);
 
-                            // we break out if busy_wait_timer_ is set to 
-                            // nullptr or timeout occured
-                            busy_wait_not_ready =
-                                busy_wait_timer_ && 
-                                now < busy_wait_timer_->timeout;
+                            lk_.lock();
+                            // update latest timeout each check because the lock 
+                            // is not held
+                            timeout = timers_.front()->timeout;
+                            lk_.unlock();
 
-                        } while(busy_wait_not_ready);
+                            // don't actually need to lock during this check
+                        } while(below_busy_wait_threshold());
+                            
+                        lk_.lock();
                     } else [[likely]] {
+                        auto tmp_timeout = timeout_algorithm_(now, timeout);
+
+                        // force a maximum of the user's timeout
+                        if(tmp_timeout < timeout) [[likely]] {
+                            timeout = tmp_timeout;
+                        }
+
+                        // wait till timeout
                         waiting_ = true;
-
-                        // take a copy of the timeout because the list may be 
-                        // resorted while blocking and the timeout is passed in 
-                        // as a reference
-                        timeout = timers_.front()->timeout;
-
-                        // wait till the first available timeout
                         cv_.wait_until(lk, timeout);
                     }
-                } 
+                }
             } else {
                 // wait for something to happen
                 waiting_ = true;
@@ -415,68 +471,48 @@ private:
         HCE_HIGH_METHOD_BODY("run","exit");
     }
 
-    hce::spinlock lk_;
+    static service* instance_;
+
+    mutable hce::spinlock lk_;
     bool running_;
     bool waiting_; // help guard against unnecessary system calls
+    size_t micro_runtime_ticks_;
+    size_t micro_busywait_ticks_;
+    const hce::chrono::duration busy_wait_threshold_;
     std::condition_variable_any cv_;
-    timer* busy_wait_timer_;
     std::list<timer*,hce::allocator<timer*>> timers_;
     std::thread thd_;
+    algorithm_function_ptr timeout_algorithm_;
+
+    friend hce::lifecycle;
 };
 
 /**
- @brief start a timer 
+ @brief start a timer  
+
+ A simplification for calling hce::timer::service::get().start().
 
  The returned awaitable will result in `true` if the timer timeout was 
  reached, else `false` will be returned if it was cancelled early due to 
  scheduler being totally .
 
  @param id a reference to an hce::sid which will be set to the launched timer's id
- @param as the remaining arguments which will be passed to `hce::chrono::duration()`
+ @param timeout an hce::chrono::time_point or hce::chrono::duration when the timer should time out
  @return an awaitable to join with the timer timing out (returning true) or being cancelled (returning false)
  */
-template <typename... As>
-inline hce::awt<bool> start(hce::sid& sid, As&&... as) {
-    // construct the sid with a guaranteed newly allocated address
-    sid.make();
-
-    // construct the timeout 
-    hce::chrono::time_point timeout =
-        hce::chrono::now() + hce::chrono::duration(std::forward<As>(as)...);
-
-    // construct the timer awaitable
-    auto a = new awaitable;
-
-    // put in unique_ptr in case start() throws exception
-    std::unique_ptr<awaitable> upa(a);
-
-    // allocate callbacks
-    auto* on_timeout = new hce::thunk;
-    auto* on_cancel = new hce::thunk;
-
-    // construct on_timeout callback
-    hce::memory::construct_thunk_ptr(
-        on_timeout, 
-        [=]() mutable { a->resume((void*)1); });
-
-    // construct on_cancel callback
-    hce::memory::construct_thunk_ptr(
-        on_cancel, 
-        [=]() mutable { a->resume((void*)0); });
-
-    // start the actual timer on the timer
-    service::get().start(sid,
-                         timeout,
-                         std::unique_ptr<hce::thunk>(on_timeout), 
-                         std::unique_ptr<hce::thunk>(on_cancel));
-
-    // acquire the id of the constructed timer
+template <typename TIMEOUT>
+inline hce::awt<bool> start(hce::sid& sid, const TIMEOUT& timeout) {
+    auto awt = service::get().start(sid, timeout);
     HCE_MED_FUNCTION_ENTER("hce::start", sid, timeout);
-    return hce::awt<bool>(upa.release());
+    return awt;
 }
 
 /**
- @brief determine if a timer with the given id is running
+ @brief determine if a timer is running
+
+ A simplification for calling hce::timer::service::get().running().
+
+ @param sid the sid associated with a launched timer
  @return true if the timer is running, else false
  */
 inline bool running(const hce::sid& sid) {
@@ -488,6 +524,8 @@ inline bool running(const hce::sid& sid) {
 
 /**
  @brief attempt to cancel a scheduled timer
+
+ A simplification for calling hce::timer::service::get().cancel().
 
  The `hce::sid` should be constructed from a call to the `hce::timer::start()` method.
 
@@ -503,20 +541,47 @@ inline bool cancel(const hce::sid& sid) {
 
 }
 
+namespace config {
+namespace timer {
+namespace service {
+
+/**
+  @brief the algorithm for determining how long the timer service should wait for until the next timeout
+
+  If the returned time_point is greater than the requested_timeout, the 
+  requested_timeout will be taken instead.
+
+  An timer will not actually timeout until it's timeout is reached. This 
+  operation is for putting the entire *timer service* thread to sleep.
+
+  This operation allows for manipulation of timeouts to improve overall timeout 
+  precision. Factors which influence timeout precision generally are often 
+  non-trivial and non-deterministic, such as OS and power configurations.
+
+  @return an algorithm to calculate service timeouts 
+ */
+hce::timer::service::algorithm_function_ptr timeout_algorithm();
+
+}
+}
+}
+
 /**
  @brief start a timer to sleep for a period
 
- Calls `hce::timer::start()` but abstracts away the timer's id. 
+ Calls `hce::timer::start()` but abstracts away the timer's sid and success 
+ state (no need to track success when timer is uncancellable).
 
- @param as the arguments will be passed to `hce::chrono::duration()`
+ @param timeout an hce::chrono::time_point or hce::chrono::duration when the sleep should time out
  @return an awaitable to join with the timer timing out or being cancelled
  */
-template <typename... As>
-inline hce::awt<void> sleep(As&&... as) {
-    HCE_MED_FUNCTION_ENTER("hce::sleep");
+template <typename TIMEOUT>
+inline hce::awt<void> sleep(const TIMEOUT& timeout) {
+    HCE_MED_FUNCTION_ENTER("hce::sleep", timeout);
     hce::sid sid;
+
     // start the timer and convert from awt<bool> to awt<void>
-    return hce::awt<void>(timer::start(sid, std::forward<As>(as)...).release());
+    return hce::awt<void>(timer::start(sid, timeout).release());
 }
 
 }

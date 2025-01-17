@@ -5,8 +5,12 @@
 
 #include "utility.hpp"
 #include "memory.hpp"
+#include "lifecycle.hpp"
 #include "scheduler.hpp"
 #include "channel.hpp"
+
+hce::scheduler::lifecycle::manager* hce::scheduler::lifecycle::manager::instance_ = nullptr;
+hce::scheduler* hce::scheduler::global_ = nullptr;
 
 hce::scheduler*& hce::detail::scheduler::tl_this_scheduler() {
     thread_local hce::scheduler* tlts = nullptr;
@@ -17,11 +21,6 @@ std::unique_ptr<hce::list<std::coroutine_handle<>>>*&
 hce::detail::scheduler::tl_this_scheduler_local_queue() {
     thread_local std::unique_ptr<hce::list<std::coroutine_handle<>>>* tllq = nullptr;
     return tllq;
-}
-
-hce::scheduler::lifecycle::manager& hce::scheduler::lifecycle::manager::instance() {  
-    static hce::scheduler::lifecycle::manager m;
-    return m;
 }
 
 void hce::scheduler::lifecycle::global_thread_function(hce::scheduler* sch) {
@@ -36,18 +35,4 @@ void hce::scheduler::lifecycle::scheduler_thread_function(hce::scheduler* sch) {
     hce::config::memory::cache::info::thread::get_type() = 
         hce::config::memory::cache::info::thread::type::scheduler;
     sch->run();
-}
-
-hce::scheduler& hce::scheduler::global_() {
-    static std::shared_ptr<hce::scheduler> sch(
-        []() -> std::shared_ptr<hce::scheduler> {
-            // set the global request flag before construction so lifecycle is 
-            // notified
-            auto lf = hce::scheduler::make_(hce::config::global::scheduler_config(),true);
-            std::shared_ptr<hce::scheduler> scheduler = lf->scheduler();
-            hce::scheduler::lifecycle::manager::instance().registration(std::move(lf));
-            return scheduler;
-        }());
-
-    return *sch;
 }

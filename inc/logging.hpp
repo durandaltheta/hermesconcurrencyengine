@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HERMES_COROUTINE_ENGINE_LOGGING__
-#define __HERMES_COROUTINE_ENGINE_LOGGING__
+#ifndef HERMES_COROUTINE_ENGINE_LOGGING
+#define HERMES_COROUTINE_ENGINE_LOGGING
 
 #include <utility>
 #include <string>
@@ -10,6 +10,7 @@
 #include <iostream>
 #include <coroutine>
 #include <cstdlib>
+#include <chrono>
 #include <memory>
 #include <any>
 #include <mutex>
@@ -18,6 +19,7 @@
 #include "loguru.hpp"
 #include "utility.hpp"
 #include "memory.hpp"
+#include "chrono.hpp"
 
 /**
  User source code compile time macro determining compiled log code. Keeping this 
@@ -93,13 +95,13 @@
 #endif
 
 #if HCELOGLIMIT >= -3
-#define HCE_FATAL_CONSTRUCTOR(...) this->log_constructor__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_FATAL_DESTRUCTOR() this->log_destructor__(loguru::Verbosity_FATAL, __FILE__, __LINE__)
+#define HCE_FATAL_CONSTRUCTOR(...) hce::logger::constructor(this, loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_FATAL_DESTRUCTOR() hce::logger::destructor(this, loguru::Verbosity_FATAL, __FILE__, __LINE__)
 #define HCE_FATAL_GUARD(test, ...) if(test) { __VA_ARGS__; }
-#define HCE_FATAL_METHOD_ENTER(...) this->log_method_enter__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_FATAL_METHOD_BODY(...) this->log_method_body__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_FATAL_FUNCTION_ENTER(...) hce::printable::log_function_enter__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_FATAL_FUNCTION_BODY(...) hce::printable::log_function_body__(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_FATAL_METHOD_ENTER(...) hce::logger::method_enter(this, loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_FATAL_METHOD_BODY(...) hce::logger::method_body(this, loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_FATAL_FUNCTION_ENTER(...) hce::logger::function_enter(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_FATAL_FUNCTION_BODY(...) hce::logger::function_body(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_FATAL_LOG(...) loguru::log(loguru::Verbosity_FATAL, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #else 
 #define HCE_FATAL_CONSTRUCTOR(...) (void)0
@@ -113,13 +115,13 @@
 #endif
 
 #if HCELOGLIMIT >= -2
-#define HCE_ERROR_CONSTRUCTOR(...) this->log_constructor__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_ERROR_DESTRUCTOR() this->log_destructor__(loguru::Verbosity_ERROR, __FILE__, __LINE__)
+#define HCE_ERROR_CONSTRUCTOR(...) hce::logger::constructor(this, loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_ERROR_DESTRUCTOR() hce::logger::destructor(this, loguru::Verbosity_ERROR, __FILE__, __LINE__)
 #define HCE_ERROR_GUARD(test, ...) if(test) { __VA_ARGS__; }
-#define HCE_ERROR_METHOD_ENTER(...) this->log_method_enter__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_ERROR_METHOD_BODY(...) this->log_method_body__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_ERROR_FUNCTION_ENTER(...) hce::printable::log_function_enter__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_ERROR_FUNCTION_BODY(...) hce::printable::log_function_body__(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_ERROR_METHOD_ENTER(...) hce::logger::method_enter(this, loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_ERROR_METHOD_BODY(...) hce::logger::method_body(this, loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_ERROR_FUNCTION_ENTER(...) hce::logger::function_enter(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_ERROR_FUNCTION_BODY(...) hce::logger::function_body(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_ERROR_LOG(...) loguru::log(loguru::Verbosity_ERROR, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #else 
 #define HCE_ERROR_CONSTRUCTOR(...) (void)0
@@ -133,13 +135,13 @@
 #endif
 
 #if HCELOGLIMIT >= -1
-#define HCE_WARNING_CONSTRUCTOR(...) this->log_constructor__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_WARNING_DESTRUCTOR() this->log_destructor__(loguru::Verbosity_WARNING, __FILE__, __LINE__)
+#define HCE_WARNING_CONSTRUCTOR(...) hce::logger::constructor(this, loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_WARNING_DESTRUCTOR() hce::logger::destructor(this, loguru::Verbosity_WARNING, __FILE__, __LINE__)
 #define HCE_WARNING_GUARD(test, ...) if(test) { __VA_ARGS__; }
-#define HCE_WARNING_METHOD_ENTER(...) this->log_method_enter__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_WARNING_METHOD_BODY(...) this->log_method_body__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_WARNING_FUNCTION_ENTER(...) hce::printable::log_function_enter__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_WARNING_FUNCTION_BODY(...) hce::printable::log_function_body__(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_WARNING_METHOD_ENTER(...) hce::logger::method_enter(this, loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_WARNING_METHOD_BODY(...) hce::logger::method_body(this, loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_WARNING_FUNCTION_ENTER(...) hce::logger::function_enter(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_WARNING_FUNCTION_BODY(...) hce::logger::function_body(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_WARNING_LOG(...) loguru::log(loguru::Verbosity_WARNING, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #else
 #define HCE_WARNING_CONSTRUCTOR(...) (void)0
@@ -153,13 +155,13 @@
 #endif
 
 #if HCELOGLIMIT >= 0
-#define HCE_INFO_CONSTRUCTOR(...) this->log_constructor__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_INFO_DESTRUCTOR() this->log_destructor__(loguru::Verbosity_INFO, __FILE__, __LINE__)
+#define HCE_INFO_CONSTRUCTOR(...) hce::logger::constructor(this, loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_INFO_DESTRUCTOR() hce::logger::destructor(this, loguru::Verbosity_INFO, __FILE__, __LINE__)
 #define HCE_INFO_GUARD(test, ...) if(test) { __VA_ARGS__; }
-#define HCE_INFO_METHOD_ENTER(...) this->log_method_enter__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_INFO_METHOD_BODY(...) this->log_method_body__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_INFO_FUNCTION_ENTER(...) hce::printable::log_function_enter__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_INFO_FUNCTION_BODY(...) hce::printable::log_function_body__(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_INFO_METHOD_ENTER(...) hce::logger::method_enter(this, loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_INFO_METHOD_BODY(...) hce::logger::method_body(this, loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_INFO_FUNCTION_ENTER(...) hce::logger::function_enter(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_INFO_FUNCTION_BODY(...) hce::logger::function_body(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_INFO_LOG(...) loguru::log(loguru::Verbosity_INFO, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #else
 #define HCE_INFO_CONSTRUCTOR(...) (void)0
@@ -174,8 +176,8 @@
 
 // high criticality lifecycle
 #if HCELOGLIMIT >= 1
-#define HCE_HIGH_CONSTRUCTOR(...) this->log_constructor__(1, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_HIGH_DESTRUCTOR() this->log_destructor__(1, __FILE__, __LINE__)
+#define HCE_HIGH_CONSTRUCTOR(...) hce::logger::constructor(this, 1, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_HIGH_DESTRUCTOR() hce::logger::destructor(this, 1, __FILE__, __LINE__)
 #define HCE_HIGH_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #else
 #define HCE_HIGH_CONSTRUCTOR(...) (void)0
@@ -185,10 +187,10 @@
 
 // high criticality functions and methods
 #if HCELOGLIMIT >= 2
-#define HCE_HIGH_METHOD_ENTER(...) this->log_method_enter__(2, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_HIGH_METHOD_BODY(...) this->log_method_body__(2, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_HIGH_FUNCTION_ENTER(...) hce::printable::log_function_enter__(2, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_HIGH_FUNCTION_BODY(...) hce::printable::log_function_body__(2, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_HIGH_METHOD_ENTER(...) hce::logger::method_enter(this, 2, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_HIGH_METHOD_BODY(...) hce::logger::method_body(this, 2, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_HIGH_FUNCTION_ENTER(...) hce::logger::function_enter(2, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_HIGH_FUNCTION_BODY(...) hce::logger::function_body(2, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_HIGH_LOG_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #define HCE_HIGH_LOG(...) loguru::log(2, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #else
@@ -202,8 +204,8 @@
 
 // medium criticality lifecycle
 #if HCELOGLIMIT >= 3
-#define HCE_MED_CONSTRUCTOR(...) this->log_constructor__(3, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MED_DESTRUCTOR() this->log_destructor__(3, __FILE__, __LINE__)
+#define HCE_MED_CONSTRUCTOR(...) hce::logger::constructor(this, 3, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MED_DESTRUCTOR() hce::logger::destructor(this, 3, __FILE__, __LINE__)
 #define HCE_MED_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #else
 #define HCE_MED_CONSTRUCTOR(...) (void)0
@@ -213,10 +215,10 @@
 
 // medium criticality functions and methods
 #if HCELOGLIMIT >= 4
-#define HCE_MED_METHOD_ENTER(...) this->log_method_enter__(4, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MED_METHOD_BODY(...) this->log_method_body__(4, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MED_FUNCTION_ENTER(...) hce::printable::log_function_enter__(4, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MED_FUNCTION_BODY(...) hce::printable::log_function_body__(4, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MED_METHOD_ENTER(...) hce::logger::method_enter(this, 4, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MED_METHOD_BODY(...) hce::logger::method_body(this, 4, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MED_FUNCTION_ENTER(...) hce::logger::function_enter(4, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MED_FUNCTION_BODY(...) hce::logger::function_body(4, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_MED_LOG_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #define HCE_MED_LOG(...) loguru::log(4, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #else
@@ -230,8 +232,8 @@
 
 // low criticality lifecycle
 #if HCELOGLIMIT >= 5
-#define HCE_LOW_CONSTRUCTOR(...) this->log_constructor__(5, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_LOW_DESTRUCTOR() this->log_destructor__(5, __FILE__, __LINE__)
+#define HCE_LOW_CONSTRUCTOR(...) hce::logger::constructor(this, 5, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_LOW_DESTRUCTOR() hce::logger::destructor(this, 5, __FILE__, __LINE__)
 #define HCE_LOW_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #else
 #define HCE_LOW_CONSTRUCTOR(...) (void)0
@@ -241,10 +243,10 @@
 
 // low criticality functions and methods
 #if HCELOGLIMIT >= 6
-#define HCE_LOW_METHOD_ENTER(...) this->log_method_enter__(6, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_LOW_METHOD_BODY(...) this->log_method_body__(6, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_LOW_FUNCTION_ENTER(...) hce::printable::log_function_enter__(6, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_LOW_FUNCTION_BODY(...) hce::printable::log_function_body__(6, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_LOW_METHOD_ENTER(...) hce::logger::method_enter(this, 6, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_LOW_METHOD_BODY(...) hce::logger::method_body(this, 6, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_LOW_FUNCTION_ENTER(...) hce::logger::function_enter(6, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_LOW_FUNCTION_BODY(...) hce::logger::function_body(6, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_LOW_LOG_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #define HCE_LOW_LOG(...) loguru::log(6, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #else
@@ -258,8 +260,8 @@
 
 // minimal criticality lifecycle
 #if HCELOGLIMIT >= 7
-#define HCE_MIN_CONSTRUCTOR(...) this->log_constructor__(7, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MIN_DESTRUCTOR() this->log_destructor__(7, __FILE__, __LINE__)
+#define HCE_MIN_CONSTRUCTOR(...) hce::logger::constructor(this, 7, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MIN_DESTRUCTOR() hce::logger::destructor(this, 7, __FILE__, __LINE__)
 #define HCE_MIN_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #else
 #define HCE_MIN_CONSTRUCTOR(...) (void)0
@@ -269,10 +271,10 @@
 
 // minimal criticality functions and methods
 #if HCELOGLIMIT >= 8
-#define HCE_MIN_METHOD_ENTER(...) this->log_method_enter__(8, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MIN_METHOD_BODY(...) this->log_method_body__(8, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MIN_FUNCTION_ENTER(...) hce::printable::log_function_enter__(8, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_MIN_FUNCTION_BODY(...) hce::printable::log_function_body__(8, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MIN_METHOD_ENTER(...) hce::logger::method_enter(this, 8, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MIN_METHOD_BODY(...) hce::logger::method_body(this, 8, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MIN_FUNCTION_ENTER(...) hce::logger::function_enter(8, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_MIN_FUNCTION_BODY(...) hce::logger::function_body(8, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_MIN_LOG_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #define HCE_MIN_LOG(...) loguru::log(8, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #else
@@ -288,13 +290,13 @@
 // trying to actively debug code when stepping through with a debugger would be 
 // painful or otherwise not useful
 #if HCELOGLIMIT >= 9
-#define HCE_TRACE_CONSTRUCTOR(...) this->log_constructor__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_TRACE_DESTRUCTOR() this->log_destructor__(9, __FILE__, __LINE__)
+#define HCE_TRACE_CONSTRUCTOR(...) hce::logger::constructor(this, 9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_TRACE_DESTRUCTOR() hce::logger::destructor(this, 9, __FILE__, __LINE__)
 #define HCE_TRACE_GUARD(test, ...) if(test) { __VA_ARGS__; }
-#define HCE_TRACE_METHOD_ENTER(...) this->log_method_enter__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_TRACE_METHOD_BODY(...) this->log_method_body__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_TRACE_FUNCTION_ENTER(...) hce::printable::log_function_enter__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
-#define HCE_TRACE_FUNCTION_BODY(...) hce::printable::log_function_body__(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_TRACE_METHOD_ENTER(...) hce::logger::method_enter(this, 9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_TRACE_METHOD_BODY(...) hce::logger::method_body(this, 9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_TRACE_FUNCTION_ENTER(...) hce::logger::function_enter(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
+#define HCE_TRACE_FUNCTION_BODY(...) hce::logger::function_body(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #define HCE_TRACE_LOG_GUARD(test, ...) if(test) { __VA_ARGS__; }
 #define HCE_TRACE_LOG(...) loguru::log(9, __FILE__, __LINE__ __VA_OPT__(,) __VA_ARGS__)
 #else
@@ -312,6 +314,8 @@
 namespace hce {
 
 /**
+ @brief namespace for type information deduction 
+
  There are two types of type name string generation used in this library:
  - hce::type::info disambiguation
  - hce::printable object interface
@@ -601,6 +605,34 @@ struct info<std::weak_ptr<T>,void> {
     static inline std::string name(){ return templatize<T>("std::weak_ptr"); }
 };
 
+template <std::intmax_t Num, std::intmax_t Denom>
+struct info<std::ratio<Num,Denom>,void> {
+    static inline std::string name(){ 
+        std::stringstream ss;
+        ss << "std::ratio<" << Num << "," << Denom << ">";
+        return ss.str();
+    }
+};
+
+template <typename Rep, typename Period>
+struct info<std::chrono::duration<Rep,Period>,void> {
+    static inline std::string name(){ 
+        return templatize<Rep,Period>("std::chrono::duration");
+    }
+};
+
+template <>
+struct info<std::chrono::steady_clock,void> {
+    static inline std::string name(){ return "std::chrono::steady_clock"; }
+};
+
+template <typename Clock, typename Duration>
+struct info<std::chrono::time_point<Clock,Duration>,void> {
+    static inline std::string name(){ 
+        return templatize<Clock,Duration>("std::chrono::time_point"); 
+    }
+};
+
 /**
  @brief acquire a runtime accessible name string of a type T
 
@@ -642,24 +674,32 @@ inline std::string name<const void*>() {
 namespace detail {
 
 template <typename T>
+inline void templatize_ingest(std::stringstream& ss) {
+    ss << name<T>();
+}
+
+template <typename T>
 inline void templatize_rest(std::stringstream& ss) { 
-    ss << "," << name<T>();
+    ss << ",";
+    templatize_ingest<T>(ss);
 }
 
 template <typename T, typename T2, typename... Ts>
 inline void templatize_rest(std::stringstream& ss) {
-    ss << "," << name<T>();
+    ss << ",";
+    templatize_ingest<T>(ss);
     templatize_rest<T2,Ts...>(ss);
 }
 
 template <typename T>
 inline void templatize(std::stringstream& ss) { 
-    ss << name<T>() << ">";
+    templatize_ingest<T>(ss);
+    ss << ">";
 }
 
 template <typename T, typename T2, typename... Ts>
 inline void templatize(std::stringstream& ss) {
-    ss << name<T>();
+    templatize_ingest<T>(ss);
 
     // get the names of any further types in the template list
     templatize_rest<T2,Ts...>(ss);
@@ -692,15 +732,63 @@ inline std::string templatize(const std::string& s) {
 
 }
 
+// time-to-string conversions
+namespace chrono {
+namespace detail {
+
+template <typename Rep, typename Period>
+inline void ingest_duration_ticks(
+        std::stringstream& ss,
+        const std::chrono::duration<Rep, Period>& d)
+{
+    ss << d.count() << " ";
+
+    if (std::ratio_equal<Period, std::nano>::value) {
+        ss << "ns";
+    } else if (std::ratio_equal<Period, std::micro>::value) {
+        ss << "µs";
+    } else if (std::ratio_equal<Period, std::milli>::value) {
+        ss << "ms";
+    } else if (std::ratio_equal<Period, std::ratio<1>>::value) {
+        ss << "s";
+    } else if (std::ratio_equal<Period, std::ratio<60>>::value) {
+        ss << "min";
+    } else if (std::ratio_equal<Period, std::ratio<3600>>::value) {
+        ss << "h";
+    } else {
+        ss << "unknown_period";
+    }
+}
+
+}
+
+template <typename Rep, typename Period>
+inline std::string to_string(const std::chrono::duration<Rep, Period>& d) {
+    std::stringstream ss;
+    ss << hce::type::name<const std::chrono::duration<Rep, Period>&>() << "[";
+    detail::ingest_duration_ticks(ss, d);
+    ss << "]";
+    return ss.str();
+}
+
+template <typename Clock, typename Duration>
+inline std::string to_string(const std::chrono::time_point<Clock, Duration>& t) 
+{
+    std::stringstream ss;
+    ss << hce::type::name<const std::chrono::time_point<Clock, Duration>&>() << "[";
+    detail::ingest_duration_ticks(ss, t.time_since_epoch());
+    ss << "]";
+    return ss.str();
+}
+
+}
+
 /*
  @brief interface for allowing an object instance to be printable
 
  Objects which implement printable can passed to streams (IE, 
  `std::stringstream`, `std::cout`) and also converted to `std::string` 
  representation.
-
- This object's namespace also contains a variety of static loglevel 
- introspection and modification methods.
  */
 struct printable {
     /**
@@ -740,175 +828,6 @@ struct printable {
 
     /// std::string conversion
     virtual inline operator std::string() const final { return to_string(); }
-
-    /**
-     @brief the process wide default_log_level
-
-     Set to compiler define HCELOGLEVEL. Threads inherit this log level.
-
-     @return the thread local log level
-     */
-    static int default_log_level();
-
-    /**
-     @brief threads inherit the default_log_level()
-     @return the current thread local log level
-     */
-    static int thread_log_level();
-
-    /**
-     @brief set the thread local log level 
-
-     Maximum value: 9
-     Minimum value: -9
-
-     @param the new log level for the calling thread
-     */
-    static void thread_log_level(int level);
-
-    //--------------------------------------------------------------------------
-    // The following public methods should be called by macros *ONLY*
-    
-    template <typename... As>
-    inline void log_constructor__(int verbosity, const char* file, int line, As&&... as) const {
-        if(verbosity <= printable::thread_log_level()) {
-            std::stringstream ss;
-            printable::ingest_args_(ss, std::forward<As>(as)...);
-            std::string self(*this);
-            std::string ingested(ss.str());
-            std::string name_str(type::basename(this->name()));
-
-            loguru::log(verbosity, 
-                        file, 
-                        line, 
-                        "%s::%s(%s)", 
-                        self.c_str(), 
-                        name_str.c_str(), 
-                        ingested.c_str());
-        }
-    }
-
-    inline void log_destructor__(int verbosity, const char* file, int line) const {
-        if(verbosity <= printable::thread_log_level()) {
-            std::string self(*this);
-            std::string name_str(type::basename(this->name()));
-
-            loguru::log(verbosity, 
-                        file, 
-                        line, 
-                        "%s::~%s()", 
-                        self.c_str(), 
-                        name_str.c_str());
-        }
-    }
-
-    template <typename... As>
-    inline void log_method_enter__(int verbosity, const char* file, int line, std::string method_name, As&&... as) const {
-        if(verbosity <= printable::thread_log_level()) {
-            std::stringstream ss;
-            printable::ingest_args_(ss, std::forward<As>(as)...);
-            std::string self(*this);
-            std::string ingested(ss.str());
-
-            loguru::log(verbosity, 
-                        file, 
-                        line, 
-                        "%s::%s(%s)", 
-                        self.c_str(), 
-                        method_name.c_str(), 
-                        ingested.c_str());
-        }
-    }
-
-    template <typename... As>
-    inline void log_method_body__(int verbosity, const char* file, int line, std::string method_name, As&&... as) const {
-        if(verbosity <= printable::thread_log_level()) {
-            std::stringstream ss;
-            printable::ingest_(ss, std::forward<As>(as)...);
-            std::string self(*this);
-            std::string ingested(ss.str());
-
-            loguru::log(verbosity, 
-                        file, 
-                        line, 
-                        "%s::%s():%s", 
-                        self.c_str(), 
-                        method_name.c_str(), 
-                        ingested.c_str());
-        }
-    }
-
-    template <typename... As>
-    static inline void log_function_enter__(int verbosity, const char* file, int line, std::string method_name, As&&... as) {
-        if(verbosity <= printable::thread_log_level()) {
-            std::stringstream ss;
-            printable::ingest_args_(ss, std::forward<As>(as)...);
-            std::string ingested(ss.str());
-
-            loguru::log(verbosity, 
-                        file, 
-                        line, 
-                        "%s(%s)", 
-                        method_name.c_str(), 
-                        ingested.c_str());
-        }
-    }
-
-    template <typename... As>
-    static inline void log_function_body__(int verbosity, const char* file, int line, std::string method_name, As&&... as) {
-        if(verbosity <= printable::thread_log_level()) {
-            std::stringstream ss;
-            printable::ingest_(ss, std::forward<As>(as)...);
-            std::string ingested(ss.str());
-
-            loguru::log(verbosity, 
-                        file, 
-                        line, 
-                        "%s():%s", 
-                        method_name.c_str(), 
-                        ingested.c_str());
-        }
-    }
-
-private:
-    // thread_local loglevel
-    static int& tl_loglevel();
-
-    // ingest a single item
-    template <typename A>
-    static inline void ingest_item_(std::stringstream& ss, A&& a) {
-        ss << std::forward<A>(a);
-    }
-
-    static inline void ingest_rest_of_args_(std::stringstream& ss) { }
-
-    // in argument lists, begin inserting "," between arguments
-    template <typename A, typename... As>
-    static inline void ingest_rest_of_args_(std::stringstream& ss, A&& a, As&&... as) {
-        ss << ", "; 
-        ingest_item_(ss,std::forward<A>(a));
-        ingest_rest_of_args_(ss, std::forward<As>(as)...);
-    }
-   
-    // final ingest
-    static inline void ingest_args_(std::stringstream& ss) { }
-
-    // for ingesting a list of function or method arguments
-    template <typename A, typename... As>
-    static inline void ingest_args_(std::stringstream& ss, A&& a, As&&... as) {
-        ingest_item_(ss,std::forward<A>(a));
-        ingest_rest_of_args_(ss, std::forward<As>(as)...);
-    }
-    
-    // final ingest
-    static inline void ingest_(std::stringstream& ss) { }
-
-    // for ingesting arbitrary data into a logline
-    template <typename A, typename... As>
-    static inline void ingest_(std::stringstream& ss, A&& a, As&&... as) {
-        ingest_item_(ss,std::forward<A>(a));
-        ingest_(ss, std::forward<As>(as)...);
-    }
 };
 
 /// convenience Callable->std::string conversion
@@ -919,17 +838,6 @@ inline std::string callable_to_string(Callable& f) {
     return ss.str();
 }
 
-namespace config {
-
-/**
- Declaration of user replacable log initialization function 
-
- This method is called when logging is being initialized, and is responsible for
- calling any necessary `loguru::` namespace functions such as `loguru::init()`..
- */
-extern void initialize_log();
-
-}
 }
 
 namespace std {
@@ -965,6 +873,278 @@ inline std::ostream& operator<<(std::ostream& out, const std::coroutine_handle<P
         << "@"
         << h.address();
     return out;
+}
+
+namespace hce {
+namespace config {
+namespace logger {
+
+/**
+ Declaration of user replacable log initialization function 
+
+ This method is called when logging is being initialized, and is responsible for
+ calling any necessary `loguru::` namespace functions such as `loguru::init()`..
+ */
+extern void initialize();
+
+}
+}
+
+/**
+ @brief namespace object for underlying logging functions
+
+ This object's namespace also contains a variety of static loglevel 
+ introspection and modification methods.
+
+ `logger` is rarely utilized by the user directly, but through macros which 
+ determine at compile time if logging statements need to be written.
+ */
+struct logger {
+    /**
+     @brief the process wide default_log_level
+
+     Set to compiler define HCELOGLEVEL. Threads inherit this log level.
+
+     @return the thread local log level
+     */
+    static int default_log_level();
+
+    /**
+     @brief threads inherit the default_log_level()
+     @return the current thread local log level
+     */
+    static int thread_log_level();
+
+    /**
+     @brief set the thread local log level 
+
+     Maximum value: 9
+     Minimum value: -9
+
+     @param the new log level for the calling thread
+     */
+    static void thread_log_level(int level);
+
+    template <typename... As>
+    static inline void constructor(printable* p, 
+                                   int verbosity, 
+                                   const char* file, 
+                                   int line, 
+                                   As&&... as) {
+        if(verbosity <= logger::thread_log_level()) {
+            std::stringstream ss;
+            logger::ingest_parameters_(ss, std::forward<As>(as)...);
+            std::string self(*p);
+            std::string ingested(ss.str());
+            std::string name_str(type::basename(p->name()));
+
+            loguru::log(verbosity, 
+                        file, 
+                        line, 
+                        "%s::%s(%s)", 
+                        self.c_str(), 
+                        name_str.c_str(), 
+                        ingested.c_str());
+        }
+    }
+
+    static inline void destructor(printable* p, 
+                                  int verbosity, 
+                                  const char* file, 
+                                  int line) {
+        if(verbosity <= logger::thread_log_level()) {
+            std::string self(*p);
+            std::string name_str(type::basename(p->name()));
+
+            loguru::log(verbosity, 
+                        file, 
+                        line, 
+                        "%s::~%s()", 
+                        self.c_str(), 
+                        name_str.c_str());
+        }
+    }
+
+    template <typename... As>
+    static inline void method_enter(printable* p, 
+                                    int verbosity, 
+                                    const char* file, 
+                                    int line, 
+                                    std::string method_name, 
+                                    As&&... as) {
+        if(verbosity <= logger::thread_log_level()) {
+            std::stringstream ss;
+            logger::ingest_parameters_(ss, std::forward<As>(as)...);
+            std::string self(*p);
+            std::string ingested(ss.str());
+
+            loguru::log(verbosity, 
+                        file, 
+                        line, 
+                        "%s::%s(%s)", 
+                        self.c_str(), 
+                        method_name.c_str(), 
+                        ingested.c_str());
+        }
+    }
+
+    template <typename... As>
+    static inline void method_body(printable* p, 
+                                   int verbosity, 
+                                   const char* file, 
+                                   int line, 
+                                   std::string method_name, 
+                                   As&&... as) {
+        if(verbosity <= logger::thread_log_level()) {
+            std::stringstream ss;
+            logger::ingest_(ss, std::forward<As>(as)...);
+            std::string self(*p);
+            std::string ingested(ss.str());
+
+            loguru::log(verbosity, 
+                        file, 
+                        line, 
+                        "%s::%s():%s", 
+                        self.c_str(), 
+                        method_name.c_str(), 
+                        ingested.c_str());
+        }
+    }
+
+    template <typename... As>
+    static inline void function_enter(int verbosity, 
+                                      const char* file, 
+                                      int line, 
+                                      std::string method_name, 
+                                      As&&... as) {
+        if(verbosity <= logger::thread_log_level()) {
+            std::stringstream ss;
+            logger::ingest_parameters_(ss, std::forward<As>(as)...);
+            std::string ingested(ss.str());
+
+            loguru::log(verbosity, 
+                        file, 
+                        line, 
+                        "%s(%s)", 
+                        method_name.c_str(), 
+                        ingested.c_str());
+        }
+    }
+
+    template <typename... As>
+    static inline void function_body(int verbosity, 
+                                     const char* file, 
+                                     int line, 
+                                     std::string method_name, 
+                                     As&&... as) {
+        if(verbosity <= logger::thread_log_level()) {
+            std::stringstream ss;
+            logger::ingest_(ss, std::forward<As>(as)...);
+            std::string ingested(ss.str());
+
+            loguru::log(verbosity, 
+                        file, 
+                        line, 
+                        "%s():%s", 
+                        method_name.c_str(), 
+                        ingested.c_str());
+        }
+    }
+
+private:
+    logger(){}
+
+    // thread_local loglevel
+    static int& tl_loglevel();
+
+    // ingest a single item
+    template <typename A>
+    static inline void ingest_item_(std::stringstream& ss, A&& a) {
+        ss << std::forward<A>(a);
+    }
+
+    // template specializations for duration
+    template <class Rep, class Period>
+    static inline void ingest_item_(
+            std::stringstream& ss, 
+            const std::chrono::duration<Rep,Period>& d) 
+    {
+        ss << hce::chrono::to_string(d);
+    }
+
+    template <class Rep, class Period>
+    static inline void ingest_item_(
+            std::stringstream& ss, 
+            std::chrono::duration<Rep,Period>& d) 
+    {
+        ss << hce::chrono::to_string(d);
+    }
+
+    template <class Rep, class Period>
+    static inline void ingest_item_(
+            std::stringstream& ss, 
+            std::chrono::duration<Rep,Period>&& d) 
+    {
+        ss << hce::chrono::to_string(d);
+    }
+
+    // template specializations for time_point
+    template <class Clock, class Duration>
+    static inline void ingest_item_(
+            std::stringstream& ss, 
+            const std::chrono::time_point<Clock, Duration>& tp) 
+    {
+        ss << hce::chrono::to_string(tp);
+    }
+
+    template <class Clock, class Duration>
+    static inline void ingest_item_(
+            std::stringstream& ss, 
+            std::chrono::time_point<Clock, Duration>& tp) 
+    {
+        ss << hce::chrono::to_string(tp);
+    }
+
+    template <class Clock, class Duration>
+    static inline void ingest_item_(
+            std::stringstream& ss, 
+            std::chrono::time_point<Clock, Duration>&& tp) 
+    {
+        ss << hce::chrono::to_string(tp);
+    }
+
+    // final ingest
+    static inline void ingest_rest_of_args_(std::stringstream& ss) { }
+
+    // in argument lists, begin inserting "," between arguments
+    template <typename A, typename... As>
+    static inline void ingest_rest_of_args_(std::stringstream& ss, A&& a, As&&... as) {
+        ss << ", "; 
+        ingest_item_(ss,std::forward<A>(a));
+        ingest_rest_of_args_(ss, std::forward<As>(as)...);
+    }
+   
+    // final ingest
+    static inline void ingest_parameters_(std::stringstream& ss) { }
+
+    // for ingesting a list of function or method arguments
+    template <typename A, typename... As>
+    static inline void ingest_parameters_(std::stringstream& ss, A&& a, As&&... as) {
+        ingest_item_(ss,std::forward<A>(a));
+        ingest_rest_of_args_(ss, std::forward<As>(as)...);
+    }
+    
+    // final ingest
+    static inline void ingest_(std::stringstream& ss) { }
+
+    // for ingesting arbitrary data into a logline
+    template <typename A, typename... As>
+    static inline void ingest_(std::stringstream& ss, A&& a, As&&... as) {
+        ingest_item_(ss,std::forward<A>(a));
+        ingest_(ss, std::forward<As>(as)...);
+    }
+};
+
 }
 
 #endif

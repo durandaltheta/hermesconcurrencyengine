@@ -3,6 +3,9 @@
 #include <sstream>
 
 #include "threadpool.hpp"
+#include "lifecycle.hpp"
+
+hce::threadpool* hce::threadpool::instance_ = nullptr;
 
 std::string hce::threadpool::content() const { 
     std::stringstream ss;
@@ -21,15 +24,14 @@ std::string hce::threadpool::content() const {
 }
     
 hce::threadpool& hce::threadpool::get() {
-    static threadpool tp;
-    return tp;
+    return *(hce::threadpool::instance_);
 }
     
 hce::threadpool::threadpool() :
     // initialize const vector
     schedulers_([]() -> std::vector<std::shared_ptr<hce::scheduler>> { 
         // acquire the selected worker count from compiler define
-        size_t worker_count = hce::config::threadpool::scheduler_count();
+        size_t worker_count = hce::config::threadpool::count();
 
         if(worker_count == 0) {
             // try to match worker_count to CPU count

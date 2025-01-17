@@ -1,13 +1,14 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HERMES_COROUTINE_ENGINE_COROUTINE__
-#define __HERMES_COROUTINE_ENGINE_COROUTINE__
+#ifndef HERMES_COROUTINE_ENGINE_COROUTINE
+#define HERMES_COROUTINE_ENGINE_COROUTINE
 
 // c++
 #include <memory>
 #include <mutex>
 #include <condition_variable>
 #include <coroutine>
+#include <thread>
 #include <exception>
 #include <string>
 #include <ostream>
@@ -18,6 +19,7 @@
 #include "utility.hpp"
 #include "logging.hpp"
 #include "memory.hpp"
+#include "chrono.hpp"
 
 namespace hce {
 
@@ -61,11 +63,8 @@ struct coroutine : public printable {
         /// a function pointer to a cleanup operation
         using cleanup_operation = void (*)(cleanup_data&);
 
-        promise_type() : alloc_size_(stashed_alloc_size()) { }
-
-        virtual ~promise_type(){
-            stashed_alloc_size() = alloc_size_;
-        }
+        promise_type() { }
+        virtual ~promise_type(){ }
 
         // ensure the use of non-throwing operator-new
         static coroutine get_return_object_on_allocation_failure() {
@@ -75,90 +74,16 @@ struct coroutine : public printable {
 
         /**
          @brief implement custom new to make use of thread local allocation caching
-
-         Uses the allocation stash set in the constructor.
-
-         WARNING: Because of how `new` allocation sizes are temporarily stashed 
-         it is an ERROR to call new on any inheritor of `promise_type` within 
-         the constructor argument list of another inheritor of `promise_type`, 
-         either explicitly or implicitly.
-
-         BAD1:
-         ```
-         struct my_promise_type : public hce::coroutine::promise_type {
-            // ...
-         };
-
-         struct my_promise_type2 : public hce::coroutine::promise_type {
-            // cannot call `new` explicitly on an inheritor of `promise_type` in 
-            // the argument list
-            my_promise_type2(my_promise_type* mpt = new my_promise_type) {
-                // ...
-            }
-            // ...
-         };
-         ```
-
-         BAD2:
-         ```
-         struct my_promise_type : public hce::coroutine::promise_type {
-            // ...
-         };
-
-         struct my_promise_type2 : public hce::coroutine::promise_type {
-            // cannot call `new` implicitly on an inheritor of `promise_type` in 
-            // the argument list
-            my_promise_type2(std::unique_ptr<my_promise_type> mpt = 
-                                std::make_unique<my_promise_type>()) {
-                // ...
-            }
-            // ...
-         };
-         ```
-
-         GOOD1:
-         ```
-         struct my_promise_type : public hce::coroutine::promise_type {
-            // ...
-         };
-
-         struct my_promise_type2 : public hce::coroutine::promise_type {
-            my_promise_type2() {
-                my_promise_type* mpt = new my_promise_type;
-                // ...
-            }
-            // ...
-         };
-         ```
-
-         GOOD2:
-         ```
-         struct my_promise_type : public hce::coroutine::promise_type {
-            // ...
-         };
-
-         struct my_promise_type2 : public hce::coroutine::promise_type {
-            // initialize list if fine, because parent type `promise_type` is 
-            // constructed prior to later elements in the initialization list
-            my_promise_type2() : mpt(new my_promise_type) {
-                // ...
-            }
-            // ...
-         };
-         ```
          */
         inline void* operator new(std::size_t n) noexcept {
-            stashed_alloc_size() = n;
             return hce::memory::allocate(n);
         }
 
         /**
          @brief implement custom delete to make use of thread local allocation caching 
-
-         Uses the allocation stash set in the destructor.
          */
         inline void operator delete(void* ptr) noexcept {
-            hce::memory::deallocate(ptr, stashed_alloc_size());
+            hce::memory::deallocate(ptr);
         }
 
         inline coroutine get_return_object() {
@@ -170,9 +95,6 @@ struct coroutine : public printable {
         inline std::suspend_always initial_suspend() { return {}; }
         inline std::suspend_always final_suspend() noexcept { return {}; }
         inline void unhandled_exception() { eptr = std::current_exception(); }
-
-        /// thread_local stash of allocated size
-        static size_t& stashed_alloc_size();
 
         /// exception pointer to the most recently raised exception
         std::exception_ptr eptr = nullptr; 
@@ -218,7 +140,7 @@ struct coroutine : public printable {
                     cleanup_list_->co(d);
                     node* old = cleanup_list_;
                     cleanup_list_ = cleanup_list_->next;
-                    hce::deallocate<node>(old,1);
+                    hce::deallocate<node>(old);
                 } while(cleanup_list_);
             } else {
                 HCE_LOW_METHOD_BODY("cleanup", "no cleanup operation");
@@ -233,8 +155,6 @@ struct coroutine : public printable {
             void* install; /// data pointer provied to install()
         };
 
-        /// written on object construction just after `new` from stashed_alloc_size()
-        const std::size_t alloc_size_;
         node* cleanup_list_ = nullptr; // list of cleanup handlers
     };
 
@@ -562,7 +482,10 @@ private:
 
     template <typename LOCK>
     inline void block_(LOCK& lk) {
-        while(!ready) { cv.wait(lk); }
+        while(!ready) { 
+            cv.wait(lk); 
+        }
+
         ready = false; // reset flag
     }
 
@@ -757,16 +680,12 @@ struct awaitable : public printable {
      objects.
      */
     struct interface : public printable {
-        interface() : alloc_size_(stashed_alloc_size()) { 
-            HCE_LOW_CONSTRUCTOR(); 
-        }
-
+        interface() { HCE_LOW_CONSTRUCTOR(); }
         interface(const interface& rhs) = delete;
         interface(interface&& rhs) = delete;
 
         virtual ~interface() { 
             HCE_TRACE_DESTRUCTOR();
-            stashed_alloc_size() = alloc_size_;
 
             if(this->handle_) [[unlikely]] {
                 // place handle in coroutine for printing purposes
@@ -794,12 +713,11 @@ struct awaitable : public printable {
          `hce::coroutine::promise_type`
          */
         inline void* operator new(std::size_t n) noexcept {
-            stashed_alloc_size() = n;
             return hce::memory::allocate(n);
         }
 
         inline void operator delete(void* ptr) noexcept {
-            hce::memory::deallocate(ptr, stashed_alloc_size());
+            hce::memory::deallocate(ptr);
         }
         
         interface& operator=(const interface& rhs) = delete;
@@ -810,8 +728,6 @@ struct awaitable : public printable {
         }
 
         inline std::string name() const { return interface::info_name(); }
-
-        static size_t& stashed_alloc_size();
 
         virtual inline bool awaited() final { return this->awaited_; }
 
@@ -857,6 +773,8 @@ struct awaitable : public printable {
                 // block the calling thread using traditional mechanisms
                 this->tt_ = detail::coroutine::this_thread::get(); 
                 HCE_TRACE_METHOD_BODY("await_suspend","tt_:",(void*)tt_);
+
+                // allow condition_variable::wait() to unlock `this`
                 detail::coroutine::this_thread::block(*this);
             }
         }
@@ -967,7 +885,6 @@ struct awaitable : public printable {
         virtual void on_resume(void* m) = 0;
 
     private:
-        const std::size_t alloc_size_;
         bool awaited_ = false;
         detail::coroutine::this_thread* tt_ = nullptr;
         std::coroutine_handle<> handle_;
@@ -1133,7 +1050,13 @@ protected:
     { }
 
 private:
-    std::unique_ptr<interface> impl_;
+    struct interface_deleter {
+        inline void operator()(interface* ptr) const noexcept {
+            ptr->operator delete(ptr);  // Call custom delete for your class
+        }
+    };
+
+    std::unique_ptr<interface, interface_deleter> impl_;
 };
 
 /**

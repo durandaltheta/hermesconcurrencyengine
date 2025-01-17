@@ -1,8 +1,10 @@
 #include "blocking.hpp"
+#include "lifecycle.hpp"
+
+hce::blocking::service* hce::blocking::service::instance_ = nullptr;
 
 hce::blocking::service& hce::blocking::service::get() {
-    static hce::blocking::service s;
-    return s;
+    return *(hce::blocking::service::instance_);
 }
 
 hce::blocking::service::cache& 

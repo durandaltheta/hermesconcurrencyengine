@@ -1,12 +1,13 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HERMES_COROUTINE_ENGINE_THREADPOOL__
-#define __HERMES_COROUTINE_ENGINE_THREADPOOL__
+#ifndef HERMES_COROUTINE_ENGINE_THREADPOOL
+#define HERMES_COROUTINE_ENGINE_THREADPOOL
 
 // c++
 #include <vector>
 
 // local
+#include "base.hpp"
 #include "logging.hpp"
 #include "scheduler.hpp"
 
@@ -26,11 +27,10 @@ namespace hce {
  threadpool is always the default process wide scheduler returned by 
  `hce::scheduler::global()`.
 
- Assuming the default implementation of `hce::config::` extern functions, the 
- count of workers can be configured at library compile time with environment 
- variable `HCETHREADPOOLSCHEDULERCOUNT`. If this value is undefined or 0 then 
- the framework will determine the count of worker threads (an attempt is made to 
- match the count of worker threads with the count of CPU cores).
+ The default count of workers can be configured at library compile time with 
+ environment variable `HCETHREADPOOLSCHEDULERCOUNT`. If this value is undefined 
+ or 0 then the framework will determine the count of worker threads (an attempt 
+ is made to match the count of worker threads with the count of CPU cores).
 
  If `HCETHREADPOOLSCHEDULERCOUNT` is set to 1, no threads beyond the default 
  global scheduler (returned by `hce::scheduler::global()`) will be launched.
@@ -99,8 +99,12 @@ private:
     threadpool& operator=(const threadpool&) = delete;
     threadpool& operator=(threadpool&&) = delete;
 
+    static threadpool* instance_;
+
     const std::vector<std::shared_ptr<hce::scheduler>> schedulers_;
     hce::scheduler& (*algorithm_)();
+
+    friend hce::lifecycle;
 };
 
 namespace config {
@@ -114,7 +118,7 @@ namespace threadpool {
 
  @return the configured scheduler count for this threadpool
  */
-extern size_t scheduler_count();
+size_t count();
 
 /**
  @brief provide the default threadpool scheduler configuration
@@ -128,7 +132,7 @@ extern size_t scheduler_count();
 
  @return a copy of the global configuration 
  */
-extern std::unique_ptr<hce::scheduler::config> scheduler_config();
+hce::scheduler::config scheduler_config();
 
 // Define a function pointer type that matches your function pointer
 using algorithm_function_ptr = hce::scheduler& (*)();
@@ -136,7 +140,7 @@ using algorithm_function_ptr = hce::scheduler& (*)();
 /**
  @return an algorithm to be called by `hce::threadpool::algorithm()`
  */
-extern algorithm_function_ptr algorithm();
+algorithm_function_ptr algorithm();
 
 }
 }

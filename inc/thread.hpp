@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef __HERMES_COROUTINE_ENGINE_THREAD__
-#define __HERMES_COROUTINE_ENGINE_THREAD__
+#ifndef HERMES_COROUTINE_ENGINE_THREAD
+#define HERMES_COROUTINE_ENGINE_THREAD
 
 #include <thread>
 
@@ -19,7 +19,6 @@ namespace hce {
 
 /**
  @brief attempt to set a thread's priority in a system agnostic way 
-
  */
 inline bool set_thread_priority(std::thread& thr, int priority) {
 #if defined(_WIN32) || defined(_WIN64)
@@ -50,7 +49,7 @@ inline bool set_thread_priority(std::thread& thr, int priority) {
     HCE_INFO_FUNCTION_BODY("set_thread_priority", "Count not set thread scheduling policy on POSIX: Unsupported policy for non-superuser adjustment");
     return false;
 #else
-    HCE_ERROR_FUNCTION_BODY("set_thread_priority", "Failed to set thread scheduling policy: Unsupported platform");
+    HCE_WARNING_FUNCTION_BODY("set_thread_priority", "Failed to set thread scheduling policy: Unsupported platform");
     return false;
 #endif
 }
