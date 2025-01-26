@@ -1,0 +1,13 @@
+#!/bin/bash 
+
+SCRIPT_PATH=$(dirname $(readlink -f "$0"))
+BUILD_TYPE=$1
+ROOT_PATH=$(realpath "$SCRIPT_PATH/..")
+UNIT_TEST_PATH=$(realpath "$ROOT_PATH/tst")
+
+cd $ROOT_PATH
+cmake -DCMAKE_BUILD_TYPE=$BUILD_TYPE .
+make -j hce_ut 
+
+export LSAN_OPTIONS="verbosity=2"
+$UNIT_TEST_PATH/hce_ut

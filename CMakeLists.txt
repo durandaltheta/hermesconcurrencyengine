@@ -210,7 +210,8 @@ set(HCE_COMPILE_DEFS
 
 target_compile_definitions(hce PRIVATE ${HCE_COMPILE_DEFS})
 message("-- HCE LIBRARY -- ")
-message("-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
+message("CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
+message("CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
 message("-- HCE LIBRARY HEADERS -- ")
 message(${PRETTY_HCE_HEADER_FILES})
 message("-- HCE LIBRARY SOURCES -- ")

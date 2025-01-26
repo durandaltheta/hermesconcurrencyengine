@@ -18,14 +18,14 @@ add_executable(hce_ut
     main.cpp
     test_helpers.hpp
     test_memory_helpers.hpp
-    #atomic_ut.cpp 
+    atomic_ut.cpp 
     memory_ut.cpp
-    #circular_buffer_ut.cpp
-    #pool_allocator_ut.cpp 
-    #list_ut.cpp 
-    #synchronized_list_ut.cpp 
-    #id_ut.cpp
-    #coroutine_ut.cpp
+    circular_buffer_ut.cpp
+    pool_allocator_ut.cpp 
+    list_ut.cpp 
+    synchronized_list_ut.cpp 
+    id_ut.cpp
+    coroutine_ut.cpp
     scheduler_ut.cpp
     #timer_ut.cpp
     #blocking_ut.cpp
