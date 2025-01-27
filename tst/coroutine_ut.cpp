@@ -192,7 +192,7 @@ TEST(coroutine, co_await_void) {
 
             inline void on_resume(void* m) { }
 
-            inline void destination(std::coroutine_handle<> hdl) { 
+            inline void to_destination(std::coroutine_handle<> hdl) { 
                 *hdl_ = hdl; 
             }
 
@@ -285,7 +285,7 @@ TEST(coroutine, co_await_int) {
             inline void on_resume(void* m) { }
             inline int get_result() { return i_; }
 
-            inline void destination(std::coroutine_handle<> hdl) { 
+            inline void to_destination(std::coroutine_handle<> hdl) { 
                 *hdl_ = hdl; 
             }
 
@@ -380,7 +380,7 @@ TEST(coroutine, co_await_string) {
             inline void on_resume(void* m) { }
             inline std::string get_result() { return s_; }
 
-            inline void destination(std::coroutine_handle<> hdl) { 
+            inline void to_destination(std::coroutine_handle<> hdl) { 
                 *hdl_ = hdl; 
             }
 

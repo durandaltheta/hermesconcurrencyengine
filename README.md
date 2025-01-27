@@ -23,7 +23,7 @@ hce::co<void> my_coroutine(hce::channel<int> ch) {
 }
 
 int main() {
-    auto lf = hce::initialize(); // start the framework
+    auto lifecycle = hce::initialize(); // start the framework
     auto ch = hce::channel<int>::make();
     auto awt = hce::schedule(my_coroutine(ch));
     ch.send(1);
@@ -214,14 +214,14 @@ WARNING: `lambda` functions, as well as Functors (objects with implement the Cal
 Generate `Doxygen` documentation to see more for `hce` coroutine creation.
 
 ## Starting the Framework
-To initialize the framework user code is responsible for calling `std::unique_ptr<hce::lifecycle> hce::initialize()` and holding onto the resulting pointer. The returned pointer should stay in scope until all other `hce` operations have completed and joined:
+To initialize the framework user code is responsible for calling `hce::initialize()` and holding onto the resulting `std::unique_ptr`. The returned pointer should stay in scope until all other `hce` operations have completed and joined:
 ```
 #include <hce/hce.hpp>
 
 int main() {
-    auto lf = hce::initialize();
+    auto lifecycle = hce::initialize();
     // ... user code...
-    return 0;
+    return 0; // lf goes out of scope and the framework shuts down
 }
 ```
 
@@ -232,7 +232,7 @@ int main() {
 int main() {
     hce::lifecycle::config cfg;
     cfg.log.loglevel = 6;
-    auto lf = hce::initialize(cfg);
+    auto lifecycle = hce::initialize(cfg);
     // ... user code...
     return 0;
 }
@@ -240,9 +240,9 @@ int main() {
 
 The default values in an `hce::lifecycle::config` are defined by `CMake` compiler defines. See [building primer](building.md) for additional information on these defines. The various `hce::config::` functions fetch their values from the `hce::lifecycle`'s `hce::lifecycle::config` object.
 
-Generate `Doxygen` documentation to see more for `hce::lifecycle::config` and `hce::config::` functions.
+Generate `Doxygen` documentation to see more for `hce::lifecycle::config` and `hce::config::` functions and the associated `HCE` compiler defines setting defaults.
 
-NOTE: One compiler define affects both this library AND user code, and is not configurable using the `hce::lifecycle::config` mechanism: `HCELOGLIMIT`. This value is a compile time constant only, and limits what debug logging code that is compiled. See [logging primer](logging.md) for additional information.
+NOTE: One compiler define affects both this library AND user code, and is not configurable using the `hce::lifecycle::config` mechanism: `HCELOGLIMIT`. This value is a compile time constant only, and limits what debug logging code is compiled. See [logging primer](logging.md) for additional information.
 
 ## Scheduling
 This library includes high level, and very efficient, scheduling operations:
@@ -267,7 +267,7 @@ hce::co<int> my_coroutine(int arg) {
 }
 
 int main() {
-    auto lf = hce::initialize();
+    auto lifecycle = hce::initialize();
     int my_result = hce::schedule(my_coroutine(14));
     std::cout << "main joined with my_coroutine and received " << my_result << std::endl;
     return 0;
@@ -304,7 +304,7 @@ hce::co<int> co2() {
 }
 
 int main() {
-    auto lf = hce::initialize();
+    auto lifecycle = hce::initialize();
     // conversion of an hce::awt<T> blocks the thread in a non-coroutine
     int result = hce::schedule(co2());
     std::cout <<  "received " << result << std::endl;
@@ -332,7 +332,7 @@ hce::co<void> co() {
 }
 
 int main() {
-    auto lf = hce::initialize();
+    auto lifecycle = hce::initialize();
     auto awt = hce::schedule(co());
     // ... do things ...
     return 0; // destruction of awt finally blocks main()
@@ -379,7 +379,7 @@ hce::co<void> synchronizing_co() {
 }
 
 int main() {
-    auto lf = hce::initialize();
+    auto lifecycle = hce::initialize();
     // schedules synchronizing_co and blocks the main thread (when the returned 
     // hce::awt<void> destructs) until synchronizing_co returns
     hce::schedule(synchronizing_co());
@@ -402,7 +402,7 @@ hce::co<std::string> co2() {
 }
 
 int main() {
-    auto lf = hce::initialize();
+    auto lifecycle = hce::initialize();
     // automatically await()s on ~scope()
     hce::scope(hce::schedule(co1()), hce::schedule(co2()));
     return 0;
@@ -439,7 +439,7 @@ hce::co<void> my_coroutine(hce::channel<int> in_ch, hce::channel<int> out_ch) {
 }
 
 int main() {
-    auto lf = hce::initialize();
+    auto lifecycle = hce::initialize();
     auto in_ch = hce::channel<int>::make();
     auto out_ch = hce::channel<int>::make();
     auto awt = hce::schedule(my_coroutine(in_ch, out_ch));
@@ -499,7 +499,7 @@ hce::co<void> my_coroutine(int arg) {
 }
 
 int main() {
-    auto lf = hce::initialize();
+    auto lifecycle = hce::initialize();
     int my_result = hce::schedule(my_coroutine(3));
     std::cout << "main joined with my_coroutine and received " << my_result << std::endl;
     return 0;

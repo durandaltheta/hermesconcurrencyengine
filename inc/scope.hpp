@@ -10,7 +10,7 @@
 #include "logging.hpp"
 #include "memory.hpp"
 #include "atomic.hpp"
-#include "pool_allocator.hpp"
+#include "alloc.hpp"
 #include "coroutine.hpp"
 #include "scheduler.hpp"
 #include "channel.hpp"
@@ -46,9 +46,11 @@ struct scope : public hce::printable {
      @param one or more awaitables 
      */
     template <typename... Awts>
-    scope(Awts&&... awts) {
-        init_();
-
+    scope(Awts&&... awts) :
+        // unlimited channel never blocks on send
+        root_ch_(hce::make_unique<channel_t>()),
+        root_awt_(hce::schedule(root_awaiter_(root_ch_.get())))
+    {
         // add all the constructed awaitables to the scope
         add_(std::forward<Awts>(awts)...);
 
@@ -65,10 +67,12 @@ struct scope : public hce::printable {
     ~scope() {
         HCE_MED_DESTRUCTOR();
 
-        if(root_ch_) [[likely]] {
-            root_ch_.close(); // sanity enable root awaiter to end  
+        if(root_ch_ && !(root_ch_->closed())) [[likely]] {
+            root_ch_->close(); // sanity enable root awaiter to end  
         }
-        // root_awt_ will block the current thread and wait() if await() not called
+
+        // root_awt_'s destructor will block the current thread and wait() if 
+        // await() not called
     }
 
     inline scope& operator=(scope&& rhs) {
@@ -94,7 +98,7 @@ struct scope : public hce::printable {
     inline bool add(Awt&& awt, Awts&&... awts) {
         HCE_MED_METHOD_ENTER("add", awt, awts...);
        
-        if(root_ch_ && !root_ch_.closed()) {
+        if(root_ch_ && !(root_ch_->closed())) {
             add_(std::forward<Awt>(awt), std::forward<Awts>(awts)...);
             return true;
         } else {
@@ -110,21 +114,22 @@ struct scope : public hce::printable {
     /// return awaiter of scoped awaitables
     inline hce::awt<void> await() {
         HCE_MED_METHOD_ENTER("await");
-        root_ch_.close();
+
+        if(root_ch_ && !(root_ch_->closed())) [[likely]] {
+            root_ch_->close();
+        }
+
         return std::move(root_awt_);
     }
 
 private:
-    inline void init_() {
-        // unlimited channel never blocks on send
-        root_ch_ = hce::channel<hce::awaitable::interface*>::make<Lock,typename Allocator::rebind<hce::awaitable::interface*>::other>(-1);
-        root_awt_ = hce::schedule(root_awaiter_(root_ch_));
-    }
+    typedef typename Allocator::rebind<hce::awaitable::interface*>::other alloc_t;
+    typedef hce::channel::unlimited<hce::awaitable::interface*,Lock,alloc_t> channel_t;
 
     template <typename T, typename... Awts >
     inline void add_(hce::awt<T> awt, Awts&&... awts) {
         // add an awaitable 
-        root_ch_.send(awt.release());
+        root_ch_->send(awt.release());
 
         // add more awaitables
         add_(std::forward<Awts>(awts)...);
@@ -133,12 +138,10 @@ private:
     inline void add_() { }
 
     // a root awaiter coroutine which awaits all the awaitables
-    static inline hce::co<void> root_awaiter_(
-            hce::channel<hce::awaitable::interface*> awaiters)
-    {
+    static inline hce::co<void> root_awaiter_(channel_t* awaiters) {
         hce::awaitable::interface* i = nullptr;
 
-        while(co_await awaiters.recv(i)) {
+        while(co_await awaiters->recv(i)) {
             // join with the awaitable
             co_await hce::awt<void>(i);
         }
@@ -146,8 +149,9 @@ private:
         co_return;
     }
 
-    // communication with root awaiter coroutine
-    hce::channel<hce::awaitable::interface*> root_ch_;
+    // Communication with root awaiter coroutine. A unique_ptr so the scope 
+    // object can be moveable.
+    hce::unique_ptr<channel_t> root_ch_;
 
     // root awaitable
     hce::awt<void> root_awt_;

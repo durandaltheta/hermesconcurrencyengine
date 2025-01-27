@@ -18,7 +18,6 @@
 
 #include "loguru.hpp"
 #include "utility.hpp"
-#include "memory.hpp"
 #include "chrono.hpp"
 
 /**
@@ -877,7 +876,16 @@ inline std::ostream& operator<<(std::ostream& out, const std::coroutine_handle<P
 
 namespace hce {
 namespace config {
-namespace logger {
+namespace logging {
+
+/**
+ @brief the process wide default_log_level
+
+ Set to compiler define HCELOGLEVEL. Threads inherit this log level.
+
+ @return the thread local log level
+ */
+int default_log_level();
 
 /**
  Declaration of user replacable log initialization function 
@@ -885,7 +893,7 @@ namespace logger {
  This method is called when logging is being initialized, and is responsible for
  calling any necessary `loguru::` namespace functions such as `loguru::init()`..
  */
-extern void initialize();
+void initialize();
 
 }
 }
@@ -900,15 +908,6 @@ extern void initialize();
  determine at compile time if logging statements need to be written.
  */
 struct logger {
-    /**
-     @brief the process wide default_log_level
-
-     Set to compiler define HCELOGLEVEL. Threads inherit this log level.
-
-     @return the thread local log level
-     */
-    static int default_log_level();
-
     /**
      @brief threads inherit the default_log_level()
      @return the current thread local log level
@@ -926,7 +925,7 @@ struct logger {
     static void thread_log_level(int level);
 
     template <typename... As>
-    static inline void constructor(printable* p, 
+    static inline void constructor(const printable* p, 
                                    int verbosity, 
                                    const char* file, 
                                    int line, 
@@ -948,7 +947,7 @@ struct logger {
         }
     }
 
-    static inline void destructor(printable* p, 
+    static inline void destructor(const printable* p, 
                                   int verbosity, 
                                   const char* file, 
                                   int line) {
@@ -966,7 +965,7 @@ struct logger {
     }
 
     template <typename... As>
-    static inline void method_enter(printable* p, 
+    static inline void method_enter(const printable* p, 
                                     int verbosity, 
                                     const char* file, 
                                     int line, 
@@ -989,7 +988,7 @@ struct logger {
     }
 
     template <typename... As>
-    static inline void method_body(printable* p, 
+    static inline void method_body(const printable* p, 
                                    int verbosity, 
                                    const char* file, 
                                    int line, 

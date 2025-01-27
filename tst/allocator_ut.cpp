@@ -3,7 +3,7 @@
 #include <string>
 #include <list>
 
-#include "pool_allocator.hpp"
+#include "alloc.hpp"
 
 #include <gtest/gtest.h>
 #include "test_helpers.hpp"

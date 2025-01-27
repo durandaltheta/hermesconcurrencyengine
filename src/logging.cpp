@@ -1,13 +1,8 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
 #include "logging.hpp"
-
-int hce::logger::default_log_level() { 
-    return loguru::current_verbosity_cutoff(); 
-}
-
 int& hce::logger::tl_loglevel() {
-    thread_local int level = hce::logger::default_log_level();
+    thread_local int level = hce::config::logging::default_log_level();
     return level;
 }
 

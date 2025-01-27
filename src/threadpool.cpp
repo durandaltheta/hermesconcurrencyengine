@@ -5,73 +5,9 @@
 #include "threadpool.hpp"
 #include "lifecycle.hpp"
 
-hce::threadpool* hce::threadpool::instance_ = nullptr;
-
-std::string hce::threadpool::content() const { 
-    std::stringstream ss;
-    auto it = schedulers_.cbegin();
-    auto end = schedulers_.cend();
-
-    ss << **it;
-    ++it;
-
-    while(it!=end) {
-        ss << ", " << **it;
-        ++it;
-    }
-
-    return ss.str(); 
-}
+hce::threadpool::service* hce::threadpool::service::instance_ = nullptr;
     
-hce::threadpool& hce::threadpool::get() {
-    return *(hce::threadpool::instance_);
-}
-    
-hce::threadpool::threadpool() :
-    // initialize const vector
-    schedulers_([]() -> std::vector<std::shared_ptr<hce::scheduler>> { 
-        // acquire the selected worker count from compiler define
-        size_t worker_count = hce::config::threadpool::count();
-
-        if(worker_count == 0) {
-            // try to match worker_count to CPU count
-            worker_count = std::thread::hardware_concurrency(); 
-
-            // enforce a minimum of 1 worker threads
-            if(worker_count == 0) { 
-                worker_count = 1; 
-            }
-        }
-
-        // construct the initial vector given worker size
-        std::vector<std::shared_ptr<hce::scheduler>> schedulers(worker_count);
-
-        // first scheduler is always the default global scheduler
-        schedulers[0] = hce::scheduler::global();
-
-        // construct the rest of the schedulers
-        for(size_t i=1; i<schedulers.size(); ++i) {
-            // get an hce::scheduler::lifecycle
-            auto lf = hce::scheduler::make(
-                hce::config::threadpool::scheduler_config());
-
-            // assign the scheduler to the vector
-            schedulers[i] = lf->scheduler();
-
-            // register the worker lifecycle
-            hce::scheduler::lifecycle::manager::instance().registration(
-                std::move(lf));
-        }
-
-        // return the completed vector
-        return schedulers;
-    }())
-{ 
-    // set the threadpool's algorithm
-    algorithm_ = hce::config::threadpool::algorithm();
-}
-    
-hce::scheduler& hce::threadpool::lightest() {
+hce::scheduler& hce::threadpool::service::lightest() {
     /*
      A thread_local index is used to determine which scheduler to check first 
      during scheduler() selection. This value rotates through available indexes 
@@ -86,7 +22,7 @@ hce::scheduler& hce::threadpool::lightest() {
      a bottleneck in scenarios with *many* worker threads executing in parallel.
      */
     thread_local size_t tl_rotatable_start_index = 0;
-    const auto& schedulers = hce::threadpool::get().schedulers();
+    const auto& schedulers = hce::threadpool::service::get().schedulers();
     const size_t starting_index = tl_rotatable_start_index;
     const size_t worker_count = schedulers.size();
 

@@ -22,76 +22,76 @@ void context_construct_capacity_T() {
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "unbuffered spinlock");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        auto ctx = std::make_shared<hce::unbuffered<T,hce::spinlock>>();
-        ch.context(ctx);
+        auto ctx = std::make_shared<hce::channel::unbuffered<T,hce::spinlock>>();
+        ch.context() = ctx;
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unbuffered<T,hce::spinlock>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unbuffered<T,hce::spinlock>));
         ASSERT_EQ(ctx, ch.context());
 
         ch.construct(0);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unbuffered<T,hce::spinlock>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unbuffered<T,hce::spinlock>));
         ASSERT_NE(ctx, ch.context());
         ASSERT_EQ(0,ch.size());
 
         auto ctx2 = ch.context();
         ch.template construct<hce::spinlock>(0);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unbuffered<T,hce::spinlock>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unbuffered<T,hce::spinlock>));
         ASSERT_NE(ctx, ch.context());
         ASSERT_NE(ctx2, ch.context());
     }
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "unbuffered lockfree");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        auto ctx = std::make_shared<hce::unbuffered<T,hce::lockfree>>();
-        ch.context(ctx);
+        auto ctx = std::make_shared<hce::channel::unbuffered<T,hce::lockfree>>();
+        ch.context() = ctx;
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unbuffered<T,hce::lockfree>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unbuffered<T,hce::lockfree>));
         ASSERT_EQ(ctx, ch.context());
         ASSERT_EQ(0,ch.size());
 
         ch.template construct<hce::lockfree>(0);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unbuffered<T,hce::lockfree>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unbuffered<T,hce::lockfree>));
         ASSERT_NE(ctx, ch.context());
     }
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "unbuffered std::mutex");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        auto ctx = std::make_shared<hce::unbuffered<T,std::mutex>>();
-        ch.context(ctx);
+        auto ctx = std::make_shared<hce::channel::unbuffered<T,std::mutex>>();
+        ch.context() = ctx;
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unbuffered<T,std::mutex>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unbuffered<T,std::mutex>));
         ASSERT_EQ(ctx, ch.context());
         ASSERT_EQ(0,ch.size());
 
         ch.template construct<std::mutex>(0);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unbuffered<T,std::mutex>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unbuffered<T,std::mutex>));
         ASSERT_NE(ctx, ch.context());
     }
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "buffered spinlock size 1");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        auto ctx = std::make_shared<hce::buffered<T,hce::spinlock>>(1);
-        ch.context(ctx);
+        auto ctx = std::make_shared<hce::channel::buffered<T,hce::spinlock>>(1);
+        ch.context() = ctx;
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::spinlock>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::buffered<T,hce::spinlock>));
         ASSERT_EQ(ctx, ch.context());
 
         ch.template construct<hce::spinlock>(1);
-        ASSERT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::spinlock>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::buffered<T,hce::spinlock>));
         ASSERT_NE(ctx, ch.context());
         ASSERT_EQ(1,ch.size());
 
         auto ctx2 = ch.context();
         ch.template construct<hce::spinlock>(1337);
-        ASSERT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::spinlock>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::buffered<T,hce::spinlock>));
         ASSERT_NE(ctx, ch.context());
         ASSERT_NE(ctx2, ch.context());
         ASSERT_EQ(1337,ch.size());
@@ -99,64 +99,64 @@ void context_construct_capacity_T() {
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "buffered lockfree size 1");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        auto ctx = std::make_shared<hce::buffered<T,hce::lockfree>>(1);
-        ch.context(ctx);
+        auto ctx = std::make_shared<hce::channel::buffered<T,hce::lockfree>>(1);
+        ch.context() = ctx;
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::lockfree>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::buffered<T,hce::lockfree>));
         ASSERT_EQ(ctx, ch.context());
 
         ch.template construct<hce::lockfree>(1);
-        ASSERT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::lockfree>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::buffered<T,hce::lockfree>));
         ASSERT_NE(ctx, ch.context());
         ASSERT_EQ(1,ch.size());
 
         ch.template construct<hce::lockfree>(1337);
-        ASSERT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::lockfree>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::buffered<T,hce::lockfree>));
         ASSERT_NE(ctx, ch.context());
         ASSERT_EQ(1337,ch.size());
     }
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "buffered std::mutex size 1");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        auto ctx = std::make_shared<hce::buffered<T,std::mutex>>(1);
-        ch.context(ctx);
+        auto ctx = std::make_shared<hce::channel::buffered<T,std::mutex>>(1);
+        ch.context() = ctx;
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::buffered<T,std::mutex>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::buffered<T,std::mutex>));
         ASSERT_EQ(ctx, ch.context());
 
         ch.template construct<std::mutex>(1);
-        ASSERT_EQ(ch.type_info(), typeid(hce::buffered<T,std::mutex>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::buffered<T,std::mutex>));
         ASSERT_NE(ctx, ch.context());
         ASSERT_EQ(1,ch.size());
 
         ch.template construct<std::mutex>(1337);
-        ASSERT_EQ(ch.type_info(), typeid(hce::buffered<T,std::mutex>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::buffered<T,std::mutex>));
         ASSERT_NE(ctx, ch.context());
         ASSERT_EQ(1337,ch.size());
     }
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "unlimited spinlock size 1");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        auto ctx = std::make_shared<hce::unlimited<T,hce::spinlock>>(-1);
-        ch.context(ctx);
+        auto ctx = std::make_shared<hce::channel::unlimited<T,hce::spinlock>>(-1);
+        ch.context() = ctx;
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unlimited<T,hce::spinlock>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unlimited<T,hce::spinlock>));
         ASSERT_EQ(ctx, ch.context());
 
         ch.template construct<hce::spinlock>(-1);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unlimited<T,hce::spinlock>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unlimited<T,hce::spinlock>));
         ASSERT_NE(ctx, ch.context());
         ASSERT_EQ(-1,ch.size());
 
         auto ctx2 = ch.context();
         ch.template construct<hce::spinlock>(-1337);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unlimited<T,hce::spinlock>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unlimited<T,hce::spinlock>));
         ASSERT_NE(ctx, ch.context());
         ASSERT_NE(ctx2, ch.context());
         ASSERT_EQ(-1,ch.size());
@@ -164,42 +164,42 @@ void context_construct_capacity_T() {
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "unlimited lockfree size 1");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        auto ctx = std::make_shared<hce::unlimited<T,hce::lockfree>>(-1);
-        ch.context(ctx);
+        auto ctx = std::make_shared<hce::channel::unlimited<T,hce::lockfree>>(-1);
+        ch.context() = ctx;
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unlimited<T,hce::lockfree>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unlimited<T,hce::lockfree>));
         ASSERT_EQ(ctx, ch.context());
 
         ch.template construct<hce::lockfree>(-1);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unlimited<T,hce::lockfree>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unlimited<T,hce::lockfree>));
         ASSERT_NE(ctx, ch.context());
         ASSERT_EQ(-1,ch.size());
 
         ch.template construct<hce::lockfree>(-1337);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unlimited<T,hce::lockfree>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unlimited<T,hce::lockfree>));
         ASSERT_NE(ctx, ch.context());
         ASSERT_EQ(-1,ch.size());
     }
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "unlimited std::mutex size 1");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        auto ctx = std::make_shared<hce::unlimited<T,std::mutex>>(-1);
-        ch.context(ctx);
+        auto ctx = std::make_shared<hce::channel::unlimited<T,std::mutex>>(-1);
+        ch.context() = ctx;
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unlimited<T,std::mutex>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unlimited<T,std::mutex>));
         ASSERT_EQ(ctx, ch.context());
 
         ch.template construct<std::mutex>(-1);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unlimited<T,std::mutex>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unlimited<T,std::mutex>));
         ASSERT_NE(ctx, ch.context());
         ASSERT_EQ(-1,ch.size());
 
         ch.template construct<std::mutex>(-1337);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unlimited<T,std::mutex>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unlimited<T,std::mutex>));
         ASSERT_NE(ctx, ch.context());
         ASSERT_EQ(-1,ch.size());
     }
@@ -229,138 +229,138 @@ void make_capacity_T() {
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "unbuffered spinlock");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        ch = hce::channel<T>::make();
+        ch = hce::chan<T>::make();
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unbuffered<T,hce::spinlock>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unbuffered<T,hce::spinlock>));
 
-        ch = hce::channel<T>::template make<hce::spinlock>();
+        ch = hce::chan<T>::template make<hce::spinlock>();
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unbuffered<T,hce::spinlock>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unbuffered<T,hce::spinlock>));
         ASSERT_EQ(ch.size(),0);
 
-        ch = hce::channel<T>::template make<hce::spinlock>(0);
+        ch = hce::chan<T>::template make<hce::spinlock>(0);
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unbuffered<T,hce::spinlock>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unbuffered<T,hce::spinlock>));
         ASSERT_EQ(ch.size(),0);
     }
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "unbuffered lockfree");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        ch = hce::channel<T>::template make<hce::lockfree>();
+        ch = hce::chan<T>::template make<hce::lockfree>();
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unbuffered<T,hce::lockfree>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unbuffered<T,hce::lockfree>));
 
-        ch = hce::channel<T>::template make<hce::lockfree>(0);
+        ch = hce::chan<T>::template make<hce::lockfree>(0);
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unbuffered<T,hce::lockfree>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unbuffered<T,hce::lockfree>));
     }
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "unbuffered std::mutex");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        ch = hce::channel<T>::template make<std::mutex>();
+        ch = hce::chan<T>::template make<std::mutex>();
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unbuffered<T,std::mutex>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unbuffered<T,std::mutex>));
         ASSERT_EQ(ch.size(),0);
         
-        ch = hce::channel<T>::template make<std::mutex>(0);
+        ch = hce::chan<T>::template make<std::mutex>(0);
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unbuffered<T,std::mutex>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unbuffered<T,std::mutex>));
         ASSERT_EQ(ch.size(),0);
     }
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "buffered spinlock size 1");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        ch = hce::channel<T>::template make<hce::spinlock>(1);
+        ch = hce::chan<T>::template make<hce::spinlock>(1);
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::spinlock>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::buffered<T,hce::spinlock>));
         ASSERT_EQ(ch.size(),1);
 
-        ch = hce::channel<T>::template make<hce::spinlock>(1337);
+        ch = hce::chan<T>::template make<hce::spinlock>(1337);
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::spinlock>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::buffered<T,hce::spinlock>));
         ASSERT_EQ(ch.size(),1337);
     }
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "buffered lockfree size 1");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        ch = hce::channel<T>::template make<hce::lockfree>(1);
+        ch = hce::chan<T>::template make<hce::lockfree>(1);
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::lockfree>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::buffered<T,hce::lockfree>));
         ASSERT_EQ(ch.size(),1);
 
-        ch = hce::channel<T>::template make<hce::lockfree>(1337);
+        ch = hce::chan<T>::template make<hce::lockfree>(1337);
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::buffered<T,hce::lockfree>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::buffered<T,hce::lockfree>));
         ASSERT_EQ(ch.size(),1337);
     }
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "buffered std::mutex size 1");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        ch = hce::channel<T>::template make<std::mutex>(1);
+        ch = hce::chan<T>::template make<std::mutex>(1);
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::buffered<T,std::mutex>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::buffered<T,std::mutex>));
         ASSERT_EQ(ch.size(),1);
 
-        ch = hce::channel<T>::template make<std::mutex>(1337);
+        ch = hce::chan<T>::template make<std::mutex>(1337);
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::buffered<T,std::mutex>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::buffered<T,std::mutex>));
         ASSERT_EQ(ch.size(),1337);
     }
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "unlimited spinlock size 1");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        ch = hce::channel<T>::template make<hce::spinlock>(-1);
+        ch = hce::chan<T>::template make<hce::spinlock>(-1);
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unlimited<T,hce::spinlock>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unlimited<T,hce::spinlock>));
         ASSERT_EQ(ch.size(),-1);
 
-        ch = hce::channel<T>::template make<hce::spinlock>(-1337);
+        ch = hce::chan<T>::template make<hce::spinlock>(-1337);
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unlimited<T,hce::spinlock>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unlimited<T,hce::spinlock>));
         ASSERT_EQ(ch.size(),-1);
     }
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "unlimited lockfree size 1");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        ch = hce::channel<T>::template make<hce::lockfree>(-1);
+        ch = hce::chan<T>::template make<hce::lockfree>(-1);
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unlimited<T,hce::lockfree>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unlimited<T,hce::lockfree>));
         ASSERT_EQ(ch.size(),-1);
 
-        ch = hce::channel<T>::template make<hce::lockfree>(-1337);
+        ch = hce::chan<T>::template make<hce::lockfree>(-1337);
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unlimited<T,hce::lockfree>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unlimited<T,hce::lockfree>));
         ASSERT_EQ(ch.size(),-1);
     }
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "unlimited std::mutex size 1");
-        hce::channel<T> ch; 
+        hce::chan<T> ch; 
         ASSERT_FALSE(ch);
-        ch = hce::channel<T>::template make<std::mutex>(-1);
+        ch = hce::chan<T>::template make<std::mutex>(-1);
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unlimited<T,std::mutex>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unlimited<T,std::mutex>));
         ASSERT_EQ(ch.size(),-1);
 
-        ch = hce::channel<T>::template make<std::mutex>(-1337);
+        ch = hce::chan<T>::template make<std::mutex>(-1337);
         ASSERT_TRUE(ch);
-        ASSERT_EQ(ch.type_info(), typeid(hce::unlimited<T,std::mutex>));
+        ASSERT_EQ(ch.type_info(), typeid(hce::channel::unlimited<T,std::mutex>));
         ASSERT_EQ(ch.size(),-1);
     }
 }
@@ -384,7 +384,7 @@ namespace test {
 namespace channel {
 
 template <typename T>
-hce::co<void> co_store_recv_till_close_return_void(hce::channel<T> ch, test::queue<T>& q) {
+hce::co<void> co_store_recv_till_close_return_void(hce::chan<T> ch, test::queue<T>& q) {
     T t;
 
     while(co_await ch.recv(t)) { 
@@ -393,7 +393,7 @@ hce::co<void> co_store_recv_till_close_return_void(hce::channel<T> ch, test::que
 }
 
 template <typename T>
-hce::co<void> co_send_count_and_close_return_void(hce::channel<T> ch, size_t count) {
+hce::co<void> co_send_count_and_close_return_void(hce::chan<T> ch, size_t count) {
     for(; count>0; --count) {
         co_await ch.send((T)test::init<T>(count));
     }
@@ -408,10 +408,10 @@ size_t send_recv_close_T(const size_t count) {
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "thread to thread");
-        auto test = [&](hce::channel<T> ch) {
+        auto test = [&](hce::chan<T> ch) {
             test::queue<T> q;
 
-            std::thread thd([](hce::channel<T> ch, test::queue<T>& q){
+            std::thread thd([](hce::chan<T> ch, test::queue<T>& q){
                 T t;
                 while(ch.recv(t)) { 
                     q.push(std::move(t)); 
@@ -432,21 +432,21 @@ size_t send_recv_close_T(const size_t count) {
             ++success_count;
         };
 
-        test(hce::channel<T>::make());
-        test(hce::channel<T>::make(1));
-        test(hce::channel<T>::make(count));
-        test(hce::channel<T>::make(-1));
+        test(hce::chan<T>::make());
+        test(hce::chan<T>::make(1));
+        test(hce::chan<T>::make(count));
+        test(hce::chan<T>::make(-1));
 
         // std::mutex
-        test(hce::channel<T>::template make<std::mutex>());
-        test(hce::channel<T>::template make<std::mutex>(1));
-        test(hce::channel<T>::template make<std::mutex>(count));
-        test(hce::channel<T>::template make<std::mutex>(-1));
+        test(hce::chan<T>::template make<std::mutex>());
+        test(hce::chan<T>::template make<std::mutex>(1));
+        test(hce::chan<T>::template make<std::mutex>(count));
+        test(hce::chan<T>::template make<std::mutex>(-1));
     }
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "thread to coroutine");
-        auto test = [&](hce::channel<T> ch) {
+        auto test = [&](hce::chan<T> ch) {
             test::queue<T> q;
             auto lf = hce::scheduler::make();
             std::shared_ptr<hce::scheduler> sch = lf->scheduler();
@@ -465,21 +465,21 @@ size_t send_recv_close_T(const size_t count) {
             ++success_count;
         };
 
-        test(hce::channel<T>::make());
-        test(hce::channel<T>::make(1));
-        test(hce::channel<T>::make(count));
-        test(hce::channel<T>::make(-1));
+        test(hce::chan<T>::make());
+        test(hce::chan<T>::make(1));
+        test(hce::chan<T>::make(count));
+        test(hce::chan<T>::make(-1));
 
         // std::mutex
-        test(hce::channel<T>::template make<std::mutex>());
-        test(hce::channel<T>::template make<std::mutex>(1));
-        test(hce::channel<T>::template make<std::mutex>(count));
-        test(hce::channel<T>::template make<std::mutex>(-1));
+        test(hce::chan<T>::template make<std::mutex>());
+        test(hce::chan<T>::template make<std::mutex>(1));
+        test(hce::chan<T>::template make<std::mutex>(count));
+        test(hce::chan<T>::template make<std::mutex>(-1));
     }
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "coroutine to thread");
-        auto test = [&](hce::channel<T> ch){
+        auto test = [&](hce::chan<T> ch){
             auto lf = hce::scheduler::make();
             std::shared_ptr<hce::scheduler> sch = lf->scheduler();
             auto awt = sch->schedule(test::channel::co_send_count_and_close_return_void(ch,count));
@@ -494,21 +494,21 @@ size_t send_recv_close_T(const size_t count) {
             ++success_count;
         };
 
-        test(hce::channel<T>::make());
-        test(hce::channel<T>::make(1));
-        test(hce::channel<T>::make(count));
-        test(hce::channel<T>::make(-1));
+        test(hce::chan<T>::make());
+        test(hce::chan<T>::make(1));
+        test(hce::chan<T>::make(count));
+        test(hce::chan<T>::make(-1));
 
         // std::mutex
-        test(hce::channel<T>::template make<std::mutex>());
-        test(hce::channel<T>::template make<std::mutex>(1));
-        test(hce::channel<T>::template make<std::mutex>(count));
-        test(hce::channel<T>::template make<std::mutex>(-1));
+        test(hce::chan<T>::template make<std::mutex>());
+        test(hce::chan<T>::template make<std::mutex>(1));
+        test(hce::chan<T>::template make<std::mutex>(count));
+        test(hce::chan<T>::template make<std::mutex>(-1));
     }
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "coroutine to coroutine");
-        auto test = [&](hce::channel<T> ch){
+        auto test = [&](hce::chan<T> ch){
             test::queue<T> q;
             auto lf = hce::scheduler::make();
             std::shared_ptr<hce::scheduler> sch = lf->scheduler();
@@ -522,29 +522,29 @@ size_t send_recv_close_T(const size_t count) {
             ++success_count;
         };
 
-        test(hce::channel<T>::make());
-        test(hce::channel<T>::make(1));
-        test(hce::channel<T>::make(count));
-        test(hce::channel<T>::make(-1));
+        test(hce::chan<T>::make());
+        test(hce::chan<T>::make(1));
+        test(hce::chan<T>::make(count));
+        test(hce::chan<T>::make(-1));
 
         // lockfree 
-        test(hce::channel<T>::template make<hce::lockfree>());
-        test(hce::channel<T>::template make<hce::lockfree>(1));
-        test(hce::channel<T>::template make<hce::lockfree>(count));
-        test(hce::channel<T>::template make<hce::lockfree>(-1));
+        test(hce::chan<T>::template make<hce::lockfree>());
+        test(hce::chan<T>::template make<hce::lockfree>(1));
+        test(hce::chan<T>::template make<hce::lockfree>(count));
+        test(hce::chan<T>::template make<hce::lockfree>(-1));
 
         // std::mutex
-        test(hce::channel<T>::template make<std::mutex>());
-        test(hce::channel<T>::template make<std::mutex>(1));
-        test(hce::channel<T>::template make<std::mutex>(count));
-        test(hce::channel<T>::template make<std::mutex>(-1));
+        test(hce::chan<T>::template make<std::mutex>());
+        test(hce::chan<T>::template make<std::mutex>(1));
+        test(hce::chan<T>::template make<std::mutex>(count));
+        test(hce::chan<T>::template make<std::mutex>(-1));
     }
             
     return success_count;
 }
 
 template <typename T>
-hce::co<void> co_store_recv_interrupt_with_close_return_void(hce::channel<T> ch, test::queue<T>& q) {
+hce::co<void> co_store_recv_interrupt_with_close_return_void(hce::chan<T> ch, test::queue<T>& q) {
     q.push((T)test::init<T>(0));
 
     T t;
@@ -556,7 +556,7 @@ hce::co<void> co_store_recv_interrupt_with_close_return_void(hce::channel<T> ch,
 }
 
 template <typename T>
-hce::co<void> co_send_count_interrupt_with_close_return_void(hce::channel<T> ch) {
+hce::co<void> co_send_count_interrupt_with_close_return_void(hce::chan<T> ch) {
     ch.close();
     co_return;
 }
@@ -568,10 +568,10 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "thread to thread");
-        auto test = [&](hce::channel<T> ch) {
+        auto test = [&](hce::chan<T> ch) {
             test::queue<T> q;
 
-            std::thread thd([](hce::channel<T> ch, test::queue<T>& q){
+            std::thread thd([](hce::chan<T> ch, test::queue<T>& q){
                 T t;
                 q.push((T)test::init<T>(0));
 
@@ -592,38 +592,38 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
         };
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::make());
+            test(hce::chan<T>::make());
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::make(1));
+            test(hce::chan<T>::make(1));
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::make(count));
+            test(hce::chan<T>::make(count));
         }
 
         ++success_count;
 
         // std::mutex
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::template make<std::mutex>());
+            test(hce::chan<T>::template make<std::mutex>());
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::template make<std::mutex>(1));
+            test(hce::chan<T>::template make<std::mutex>(1));
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::template make<std::mutex>(count));
+            test(hce::chan<T>::template make<std::mutex>(count));
         }
 
         ++success_count;
@@ -631,7 +631,7 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "thread to coroutine");
-        auto test = [&](hce::channel<T> ch) {
+        auto test = [&](hce::chan<T> ch) {
             test::queue<T> q;
             auto lf = hce::scheduler::make();
             std::shared_ptr<hce::scheduler> sch = lf->scheduler();
@@ -644,38 +644,38 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
         };
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::make());
+            test(hce::chan<T>::make());
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::make(1));
+            test(hce::chan<T>::make(1));
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::make(count));
+            test(hce::chan<T>::make(count));
         }
 
         ++success_count;
 
         // std::mutex
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::template make<std::mutex>());
+            test(hce::chan<T>::template make<std::mutex>());
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::template make<std::mutex>(1));
+            test(hce::chan<T>::template make<std::mutex>(1));
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::template make<std::mutex>(count));
+            test(hce::chan<T>::template make<std::mutex>(count));
         }
 
         ++success_count;
@@ -683,7 +683,7 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "coroutine to thread");
-        auto test = [&](hce::channel<T> ch){
+        auto test = [&](hce::chan<T> ch){
             auto lf = hce::scheduler::make();
             std::shared_ptr<hce::scheduler> sch = lf->scheduler();
             auto awt = sch->schedule(test::channel::co_send_count_interrupt_with_close_return_void(ch));
@@ -693,38 +693,38 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
         };
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::make());
+            test(hce::chan<T>::make());
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::make(1));
+            test(hce::chan<T>::make(1));
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::make(count));
+            test(hce::chan<T>::make(count));
         }
 
         ++success_count;
 
         // std::mutex
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::template make<std::mutex>());
+            test(hce::chan<T>::template make<std::mutex>());
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::template make<std::mutex>(1));
+            test(hce::chan<T>::template make<std::mutex>(1));
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::template make<std::mutex>(count));
+            test(hce::chan<T>::template make<std::mutex>(count));
         }
 
         ++success_count;
@@ -732,7 +732,7 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
 
     {
         HCE_INFO_FUNCTION_BODY(fname, "coroutine to coroutine");
-        auto test = [&](hce::channel<T> ch){
+        auto test = [&](hce::chan<T> ch){
             test::queue<T> q;
             auto lf = hce::scheduler::make();
             std::shared_ptr<hce::scheduler> sch = lf->scheduler();
@@ -744,57 +744,57 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
         };
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::make());
+            test(hce::chan<T>::make());
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::make(1));
+            test(hce::chan<T>::make(1));
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::make(count));
+            test(hce::chan<T>::make(count));
         }
 
         ++success_count;
 
         // lockfree 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::template make<hce::lockfree>());
+            test(hce::chan<T>::template make<hce::lockfree>());
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::template make<hce::lockfree>(1));
+            test(hce::chan<T>::template make<hce::lockfree>(1));
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::template make<hce::lockfree>(count));
+            test(hce::chan<T>::template make<hce::lockfree>(count));
         }
 
         ++success_count;
 
         // std::mutex
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::template make<std::mutex>());
+            test(hce::chan<T>::template make<std::mutex>());
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::template make<std::mutex>(1));
+            test(hce::chan<T>::template make<std::mutex>(1));
         }
 
         ++success_count;
 
         for(size_t i=count; i>0; --i) {
-            test(hce::channel<T>::template make<std::mutex>(count));
+            test(hce::chan<T>::template make<std::mutex>(count));
         }
 
         ++success_count;

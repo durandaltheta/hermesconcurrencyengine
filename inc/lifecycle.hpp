@@ -7,6 +7,9 @@
 #include <string>
 #include <sstream>
 #include <exception>
+#include <mutex>
+#include <thread>
+#include <map>
 
 #include "loguru.hpp"
 #include "logging.hpp"
@@ -20,23 +23,69 @@
 namespace hce {
 
 /**
- @brief RAII management object for this framework
+ @brief RAII configuration and management object for this framework
 
- The instance of this object constructs, allocations and maintains all 
- process-wide singleton services and objects.
+ The instance of this object configures the framework and constructs, allocates 
+ and maintains all singleton services and thread memory caches.
  */
 struct lifecycle : public printable {
-    /**
-     Configuration object for the framework 
+private:
+    struct config_init;
 
-     This object can be passed to hce::lifecycle::initialize() to configure the 
-     framework at runtime. Default values are determined by compiler defines.
+public:
+    struct cannot_register_cache_without_lifecycle : public std::exception { 
+        inline const char* what() const noexcept { 
+            return "hce::lifecycle does not exist, cannot create hce::memory::cache";
+        }
+    };
+
+    struct cache_already_registered : public std::exception {
+        cache_already_registered(const std::thread::id& key) :
+            estr([&]() -> std::string {
+                std::stringstream ss;
+                ss << "failed to register hce::memory::cache in the hce::lifecycle because key["
+                   << key
+                   << "] is already in use";
+                return ss.str();
+            }())
+        { }
+
+        inline const char* what() const noexcept { return estr.c_str(); }
+
+    private:
+        const std::string estr;
+    };
+
+    /**
+     @brief configuration for the framework 
+
+     The user can customize these options at runtime and pass the result to 
+     `hce::lifecycle::initialize()` to set the process-wide configuration.
+     Reads to process-wide configuration values are lockless.
+
+     Default values are determined by compiler defines (see below). 
      */
     struct config {
+        struct scheduler;
+        struct threadpool;
+
         struct logging {
             logging();
 
-            int loglevel; //< runtime log level
+            /**
+             @brief runtime default log level
+
+             Defaults set by compiler define(s):
+             HCELOGLEVEL
+             */
+            int loglevel; 
+
+            /// return the process-wide config
+            static inline const logging& get() { return logging::global_; }
+
+        private:
+            static logging global_;
+            friend config_init;
         };
 
         /**
@@ -46,86 +95,267 @@ struct lifecycle : public printable {
         struct memory {
             memory();
 
-            hce::config::memory::cache::info* system; //< pointer to object describing the system cache
-            hce::config::memory::cache::info* global; //< pointer to object describing the global scheduler cache
-            hce::config::memory::cache::info* scheduler; //< pointer to object describing the default scheduler cache 
-            size_t pool_allocator_default_block_limit; //< pool_allocator's default block limit
+            /**
+             @brief function pointer to process-wide memory cache index function 
+
+             This is defaulted to a valid implementation.
+
+             This function is used for indexing block sizes for all caches. 
+             Therefore the implementation of this function determines how block 
+             sizes are distributed amongst cache buckets.
+             */
+            hce::config::memory::cache::info::indexer_function indexer;
+
+            /**
+             @brief pointer to object describing the system thread memory cache 
+
+             This is defaulted to a valid implementation.
+
+             Defaults set by compiler define(s):
+             HCEMEMORYCACHEBUCKETCOUNT 
+             HCEMEMORYCACHEINDEXTYPE
+             HCEMEMORYCACHESYSTEMBUCKETBYTELIMIT
+             */
+            hce::config::memory::cache::info* system; 
+
+            /**
+             @brief pointer to object describing the global scheduler memory cache
+
+             This is defaulted to a valid implementation.
+
+             Defaults set by compiler define(s):
+             HCEMEMORYCACHEBUCKETCOUNT 
+             HCEMEMORYCACHEINDEXTYPE
+             HCEMEMORYCACHEGLOBALBUCKETBYTELIMIT
+             */
+            hce::config::memory::cache::info* global; 
+
+            /**
+             @brief pointer to object describing the default scheduler memory cache
+
+             This is defaulted to a valid implementation.
+
+             Defaults set by compiler define(s):
+             HCEMEMORYCACHEBUCKETCOUNT 
+             HCEMEMORYCACHEINDEXTYPE
+             HCEMEMORYCACHESCHEDULERBUCKETBYTELIMIT
+             */
+            hce::config::memory::cache::info* scheduler; 
+
+            /// return the process-wide config
+            static inline const memory& get() { return memory::global_; }
+
+        private:
+            static memory global_;
+            friend hce::config::scheduler::config;
+            friend hce::lifecycle::config::scheduler;
+            friend hce::lifecycle::config::threadpool;
+            friend config_init;
+        };
+
+        struct allocator {
+            allocator();
+
+            /**
+             @brief pool_allocator's default block limit 
+
+             This value sets the default limit for pool allocator's reusable 
+             cached memory count.
+
+             Defaults set by compiler define(s):
+             HCEPOOLALLOCATORDEFAULTBLOCKLIMIT
+             */
+            size_t pool_allocator_default_block_limit; 
+
+            /// return the process-wide config
+            static inline const allocator& get() { return allocator::global_; }
+
+        private:
+            static allocator global_;
+            friend config_init;
         };
 
         struct scheduler {
-            scheduler();
+            scheduler(const memory&);
 
-            size_t default_resource_limit;
-            hce::scheduler::config global; //< global scheduler config
-            hce::scheduler::config standard; //< default scheduler config
+            /**
+             @brief global scheduler config
+
+             This is defaulted to a valid implementation.
+
+             Defaults set by compiler define(s):
+             HCEGLOBALSCHEDULERCOROUTINERESOURCELIMIT
+             */
+            hce::config::scheduler::config global_config; 
+
+            /// return the process-wide config
+            static inline const scheduler& get() { return scheduler::global_; }
+
+        private:
+            static scheduler global_;
+            friend config_init;
         };
 
         struct threadpool {
-            threadpool();
+            threadpool(const memory&);
 
-            size_t count; //< count of worker schedulers in the threadpool
-            hce::scheduler::config config; //< worker scheduler config 
-            hce::config::threadpool::algorithm_function_ptr algorithm; //< worker selection function ptr
+            /**
+             @brief count of worker schedulers in the threadpool 
+
+             0: attempt to match scheduler count to the count of runtime detected CPU cores
+             n: launch n-1 additional schedulers (the first index is always the global scheduler)
+
+             The actual count of schedulers in the threadpool is guaranteed to be >=1.
+
+             Defaults set by compiler define(s):
+             HCETHREADPOOLSCHEDULERCOUNT
+             */
+            size_t count; 
+
+            /**
+             @brief threadpool scheduler config
+
+             This is defaulted to a valid implementation.
+
+             Defaults set by compiler define(s):
+             HCETHREADPOOLCOROUTINERESOURCELIMIT
+             */
+            hce::config::scheduler::config worker_config; 
+
+            /**
+             @brief threadpool worker selector algorithm
+
+             This is defaulted to a valid implementation if none is provided.
+             */
+            hce::config::threadpool::algorithm_function_ptr algorithm; 
+
+            /// return the process-wide config
+            static inline const threadpool& get() { return threadpool::global_; }
+
+        private:
+            static threadpool global_;
+            friend config_init;
         };
 
         struct blocking {
             blocking();
 
-            size_t process_worker_resource_limit; //< reusable block workers count shared by the process
-            size_t global_scheduler_worker_resource_limit; //< reusable block workers count for the global scheduler
-            size_t default_scheduler_worker_resource_limit; //< reusable block workers count for default scheduers
+            /**
+             @brief reusable block workers count shared by the process
+
+             Defaults set by compiler define(s):
+             HCEPROCESSREUSABLEBLOCKWORKERPROCESSLIMIT
+             */
+            size_t reusable_block_worker_cache_size;
+
+            /// return the process-wide config
+            static inline const blocking& get() { return blocking::global_; }
+
+        private:
+            static blocking global_;
+            friend config_init;
         };
 
         struct timer {
             timer();
 
+            int priority;
+
+            /**
+             @brief threshold used by default timeout algorithm for when to busy-wait
+
+             If the difference between the current time and the nearest timer 
+             timeout is under this threshold, the timer thread will busy-wait 
+             until timeout for increased precision.
+
+             Defaults set by compiler define(s):
+             HCETIMERBUSYWAITMICROSECONDTHRESHOLD
+             */
             hce::chrono::duration busy_wait_threshold;
+
+            /**
+             @brief threshold used by default timeout algorithm for the early-wakeup duration
+
+             How this value is used is determined by the timeout algorithm.
+
+             Defaults set by compiler define(s):
+             HCETIMEREARLYWAKEUPMICROSECONDTHRESHOLD
+             */
             hce::chrono::duration early_wakeup_threshold;
+
+            /**
+             @brief threshold used by default timeout algorithm for when to begin early-wakeups for long running timers
+
+             How this value is used is determined by the timeout algorithm.
+
+             Defaults set by compiler define(s):
+             HCETIMEREARLYWAKEUPMICROSECONDLONGTHRESHOLD
+             */
             hce::chrono::duration early_wakeup_long_threshold;
-            hce::timer::service::algorithm_function_ptr algorithm;
+
+            /**
+             @brief timer service timeout algorithm
+
+             Algorithm for calculating early timeouts for the timer service.
+             The timer service will override the result of this algorithm if 
+             the returned timeout exceeds the timeout of the nearest timer 
+             timeout.
+
+             This is defaulted to a valid implementation if none is provided.
+             */
+            hce::config::timer::algorithm_function_ptr algorithm;
+
+            /// return the process-wide config
+            static inline const timer& get() { return timer::global_; }
+
+        private:
+            static timer global_;
+            friend config_init;
         };
+
+        config() : sch(mem), tp(mem) {}
 
         logging log;
         memory mem;
+        allocator alloc;
         scheduler sch;
         threadpool tp;
         blocking blk;
         timer tmr;
     };
 
-    ~lifecycle() { HCE_INFO_DESTRUCTOR(); }
+    ~lifecycle() { 
+        HCE_INFO_DESTRUCTOR(); 
+    }
 
     /**
-     @brief allocate, construct and start the hce framework 
+     @brief set the hce framework's global configuration and allocate, construct and start the framework 
 
-     The returned lifecycle object starts the hce framework and manages its memory.
-     When the returned lifecycle object goes out scope the hce framework will be 
-     shutdown and destroyed. 
+     Argument `hce::lifecycle::config` configures the process-wide framework 
+     configuration, which is utilized by all `hce::config::` namespace 
+     operations. Access to the process-wide configuration is lockless.
 
-     All other features rely on this object staying in existence. All launched
-     operations must complete and join before this object can safely go out of 
-     existence.
+     The returned lifecycle object starts the hce framework and manages its 
+     memory. When the returned lifecycle object goes out scope the hce framework 
+     will be shutdown and destroyed. 
+
+     All other features rely on this object staying in existence. Therefore, all 
+     launched operations (*INCLUDING* all `hce::memory::` based deallocations) 
+     must complete and join before this object can safely go out of existence. 
+     Failure to do this can cause memory exceptions or deadlock.
 
      There can only be one lifecycle in existence at a time. If this is called 
-     again while the first one still exists, the process will exit.
+     again while the first one still exists, the process will exit. It is also 
+     not recommended to continually create and destroy lifecycles, instead to 
+     keep one in existence until process exit. Recommended design is to hold 
+     this pointer on the `main()` thread's stack at a point before any `hce::`
+     operations are launched.
 
+     @param c optional framework configuration
      @return a lifecycle object managing the memory of the hce framework
      */
-    static inline std::unique_ptr<hce::lifecycle> initialize(config c) {
-        if(lifecycle::instance_) [[unlikely]] {
-            HCE_FATAL_FUNCTION_BODY("hce::lifecyle::initialize()","lifecycle already exists, cannot proceed. Process exiting...");
-            std::terminate();
-        } else [[likely]] {
-            return std::unique_ptr<hce::lifecycle>(new lifecycle(c));
-        }
-    }
-   
-    /**
-     @brief allocate, construct and start the hce framework with default values
-     */
-    static inline std::unique_ptr<hce::lifecycle> initialize() {
-        config c;
-        return initialize(c);
+    static inline std::unique_ptr<hce::lifecycle> initialize(config c = {}) {
+        return std::unique_ptr<hce::lifecycle>(new lifecycle(c));
     }
 
     /*
@@ -135,115 +365,165 @@ struct lifecycle : public printable {
 
      @return the process wide lifecycle
      */
-    static inline hce::lifecycle& get() {
-        if(lifecycle::instance_) [[likely]] {
-            return *(lifecycle::instance_);
-        } else {
-            HCE_FATAL_FUNCTION_BODY("hce::lifecyle::get()", "lifecycle does not exist, either hce::lifecycle::initialize() was not called or returned hce::lifecycle pointer has been destroyed. Process exiting...");
-            std::terminate();
-        }
-    }
+    static inline hce::lifecycle& get() { return *(lifecycle::instance_); }
 
     static inline std::string info_name() { return "hce::lifecycle"; }
     inline std::string name() const { return lifecycle::info_name(); }
 
-    /// return the hce framework's configuration
-    inline const config& configuration() const { return config_; }
-
 private:
-    // RAII object for setting and unsetting references to pointers
-    template <typename T>
-    struct scoped_ptr_ref {
-        scoped_ptr_ref(T*& tref, T* value) : tref_(tref), old_(tref_) {
-            // set the new value
-            tref_ = value;
+    /*
+     RAII object for constructing and erasing `thread_local` memory caches. 
+     Instances of this object are handled by `hce::memory::cache::get()`, which 
+     is why `hce::memory::cache` is a `friend`.
+     */
+    struct scoped_cache {
+        scoped_cache() : 
+            key_(std::this_thread::get_id()),
+            // allocate the memory cache with the configured info
+            cache_(
+                new hce::memory::cache(
+                    hce::config::memory::cache::info::get()))
+        { 
+
+            // stash the allocated pointer in case of exception
+            std::unique_ptr<hce::memory::cache> cache(cache_);
+
+            // acquire the process-wide lifecycle lock
+            std::lock_guard<hce::spinlock> lk(lifecycle::slk_);
+
+            if(hce::lifecycle::instance_) [[likely]] {
+                hce::lifecycle::instance_->insert_cache_(key_, std::move(cache));
+            } else [[unlikely]] {
+                throw cannot_register_cache_without_lifecycle();
+            }
         }
 
-        ~scoped_ptr_ref() {
-            // reset to the old value
-            tref_ = old_;
+        ~scoped_cache() {
+            // acquire the process-wide lifecycle lock
+            std::lock_guard<hce::spinlock> lk(lifecycle::slk_);
+
+            /*
+             It is not an error if the lifecycle pointer is not set, it is 
+             possible for a thread to go out of scope after the lifecycle 
+             instance does (IE, the main thread). If that scenario occurs, the 
+             cache has already been destroyed and it is safe to continue.
+             */
+            if(hce::lifecycle::instance_) [[likely]] {
+                hce::lifecycle::instance_->erase_cache_(key_);
+            }
         }
+
+        inline hce::memory::cache& cache() { return *cache_; }
 
     private:
-        T*& tref_; // the pointer reference
-        T* old_; // the cached original pointer value
+        const std::thread::id key_;
+        hce::memory::cache* cache_;
     };
 
-    // use the configuration to initialize logging
-    struct logging_init {
-        logging_init(const config& c) {
-            std::stringstream ss;
-            ss << "-v" << c.log.loglevel;
-            std::string process("hce");
-            std::string verbosity = ss.str();
+    struct self_init {
+        // sets the global instance pointer.
+        self_init(lifecycle* self) {
+            // acquire the global lock during initialization and destruction
+            std::lock_guard<hce::spinlock> lk(lifecycle::slk_);
 
-            // Create raw char pointers for argc/argv
-            const char* argv[] = {process.c_str(), verbosity.c_str(), nullptr};
-            int argc = 2; // Number of actual arguments (excluding the nullptr)
+            if(lifecycle::instance_) [[unlikely]] {
+                HCE_FATAL_FUNCTION_BODY("hce::lifecyle::initialize()","hce::lifecycle already exists, cannot proceed. Process exiting...");
+                std::terminate();
+            } else [[likely]] {
+                lifecycle::instance_ = self;
+            }
+        }
 
-            loguru::Options opt;
-            opt.main_thread_name = nullptr;
-            opt.signal_options = loguru::SignalOptions::none();
-            loguru::init(argc, const_cast<char**>(argv), opt);
+        ~self_init() {
+            std::lock_guard<hce::spinlock> lk(lifecycle::slk_);
+            lifecycle::instance_ = nullptr;
         }
     };
 
-    // use the configuration to initialize memory
-    struct memory_init {
-        memory_init(const config& c);
+    // initialize config with RAII
+    struct config_init {
+        config_init(const config& c) {
+            // overwrite global configurations with provided configurations
+            lifecycle::config::logging::global_ = c.log;
+            lifecycle::config::memory::global_ = c.mem;
+            lifecycle::config::allocator::global_ = c.alloc;
+            lifecycle::config::scheduler::global_ = c.sch;
+            lifecycle::config::threadpool::global_ = c.tp;
+            lifecycle::config::blocking::global_ = c.blk;
+            lifecycle::config::timer::global_ = c.tmr;
+        }
     };
 
-    lifecycle(config c) :
-        logging_init_(c),
-        memory_init_(c),
-        config_(c),
-        sc_self_(hce::lifecycle::instance_, this),
-        sc_main_cache_(hce::memory::cache::main_cache_, &main_cache_),
-        sc_manager_(hce::scheduler::lifecycle::manager::instance_, &manager_),
-        sc_global_(
-            hce::scheduler::global_, 
-            [&]() -> hce::scheduler* {
-                // set the global request flag before constructing the global scheduler
-                auto lf = hce::scheduler::make_(config_.sch.global, true);
-                hce::scheduler* sch = &(lf->scheduler());
-                manager_.registration(std::move(lf));
-                return sch;
-            }()),
-        sc_threadpool_(hce::threadpool::instance_, &threadpool_),
-        sc_blocking_service_(hce::blocking::service::instance_, &blocking_service_),
-        sc_timer_service_(hce::timer::service::instance_, &timer_service_)
+    // initialize logging with RAII
+    struct logging_init {
+        logging_init();
+    };
+
+    lifecycle(const config& c) :
+        self_init_(this), 
+        config_init_(c),
+        logging_init_()
     {
         HCE_INFO_CONSTRUCTOR();
     }
 
-    static hce::lifecycle* instance_;
+    inline void insert_cache_(const std::thread::id& key,
+                              std::unique_ptr<hce::memory::cache>&& cache) 
+    {
+        auto it = memory_caches_.find(key);
 
-    static hce::chrono::time_point timeout_algorithm(
-        const hce::chrono::time_point& now, 
-        const hce::chrono::time_point& requested_timeout);
+        if(it != memory_caches_.end()) [[unlikely]] {
+            /*
+             This a guard against unintended design changes. The expected design 
+             is that each thread will create and maintain at most one 
+             hce::memory::cache via a `scoped_cache` instance.
+             */
+            throw cache_already_registered(key);
+        }
+           
+        memory_caches_[key] = std::move(cache);
+    }
+    
+    inline void erase_cache_(const std::thread::id& key) {
+        auto it = memory_caches_.find(key);
 
+        if(it != memory_caches_.end()) [[likely]] {
+            memory_caches_.erase(it);
+        }
+    }
+
+    static hce::spinlock slk_; // used to synchronize access to instance_
+    static lifecycle* instance_; // the pointer to the global lifecycle instance  
+
+    // set the process-wide lifecycle pointer
+    self_init self_init_;
+
+    // overwrite the global config with the given config
+    config_init config_init_;
+    
+    // initialize logging for this library
     logging_init logging_init_;
-    memory_init memory_init_;
 
-    config config_;
-    scoped_ptr_ref<hce::lifecycle> sc_self_;
+    /*
+     The map of memory caches. These are constructed and erased dynamically by 
+     `thread_local` instances of `scoped_cache` in `hce::memory::cache::get()` 
+     calls. When an `hce::memory::cache` is destroyed all memory it was caching 
+     is also freed.
 
-    hce::memory::cache main_cache_;
-    scoped_ptr_ref<hce::memory::cache> sc_main_cache_;
+     It is important that these caches be destroyed after all dependencies but 
+     before process exit, hence their management here. 
+     */
+    std::map<std::thread::id,std::unique_ptr<hce::memory::cache>> memory_caches_;
 
-    hce::scheduler::lifecycle::manager manager_;
-    scoped_ptr_ref<hce::scheduler::lifecycle::manager> sc_manager_;
-
-    scoped_ptr_ref<hce::scheduler> sc_global_;
-
-    hce::threadpool threadpool_;
-    scoped_ptr_ref<hce::threadpool> sc_threadpool_;
-
+    // the various services, in order of dependencies
+    hce::scheduler::lifecycle::service scheduler_lifecycle_service_;
+    hce::scheduler::global::service scheduler_global_service_;
+    hce::threadpool::service threadpool_service_;
     hce::blocking::service blocking_service_;
-    scoped_ptr_ref<hce::blocking::service> sc_blocking_service_;
-
     hce::timer::service timer_service_;
-    scoped_ptr_ref<hce::timer::service> sc_timer_service_;
+
+    // needs to acquire `thread_local` `scoped_cache` instances.
+    friend hce::memory::cache;
 };
 
 /**

@@ -12,8 +12,8 @@ hce::co<void> my_coroutine(hce::channel<int> ch) {
 }
 
 int main() {
-    auto lf = hce::initialize(); // start the framework and stash RAII management object
-    auto ch = hce::channel<int>::make();
+    auto lifecycle = hce::initialize(); // start the framework and stash RAII management object
+    auto ch = hce::chan<int>::make();
     auto awt = hce::schedule(my_coroutine(ch));
     ch.send(1);
     ch.send(2);

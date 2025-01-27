@@ -13,18 +13,20 @@
 #include <sched.h>
 #endif
 
+#include "base.hpp"
 #include "logging.hpp"
 
 namespace hce {
+namespace thread {
 
 /**
  @brief attempt to set a thread's priority in a system agnostic way 
  */
-inline bool set_thread_priority(std::thread& thr, int priority) {
+inline bool set_priority(std::thread& thr, int priority) {
 #if defined(_WIN32) || defined(_WIN64)
     HANDLE handle = static_cast<HANDLE>(thr.native_handle());
     bool success = SetThreadPriority(handle, priority) != 0;
-    HCE_ERROR_GUARD(!success, HCE_ERROR_FUNCTION_BODY("set_thread_priority", "Failed to set thread scheduling policy on Window: SetThreadPriority() returned 0"));
+    HCE_ERROR_GUARD(!success, HCE_ERROR_FUNCTION_BODY("hce::thread::set_priority", "Failed to set thread scheduling policy on Window: SetThreadPriority() returned 0"));
     return success;
 #elif defined(_POSIX_VERSION)
     pthread_t native = thr.native_handle();
@@ -32,7 +34,7 @@ inline bool set_thread_priority(std::thread& thr, int priority) {
     int policy;
 
     if (pthread_getschedparam(native, &policy, &param) != 0) {
-        HCE_ERROR_FUNCTION_BODY("set_thread_priority", "Failed to get thread scheduling policy on POSIX: Unable to get thread scheduling parameters");
+        HCE_ERROR_FUNCTION_BODY("hce::thread::set_priority", "Failed to get thread scheduling policy on POSIX: Unable to get thread scheduling parameters");
         return false; 
     }
 
@@ -41,17 +43,18 @@ inline bool set_thread_priority(std::thread& thr, int priority) {
         param.sched_priority = priority; // Valid range: implementation-defined.
         bool success = pthread_setschedparam(native, policy, &param) == 0;
 
-        HCE_ERROR_GUARD(!success, HCE_ERROR_FUNCTION_BODY("set_thread_priority", "Failed to get thread scheduling policy on POSIX: Unable to set scheduler parameters"));
+        HCE_ERROR_GUARD(!success, HCE_ERROR_FUNCTION_BODY("hce::thread::set_priority", "Failed to get thread scheduling policy on POSIX: Unable to set scheduler parameters"));
 
         return success;
     }
 
-    HCE_INFO_FUNCTION_BODY("set_thread_priority", "Count not set thread scheduling policy on POSIX: Unsupported policy for non-superuser adjustment");
+    HCE_INFO_FUNCTION_BODY("hce::thread::set_priority", "Count not set thread scheduling policy on POSIX: Unsupported policy for non-superuser adjustment");
     return false;
 #else
-    HCE_WARNING_FUNCTION_BODY("set_thread_priority", "Failed to set thread scheduling policy: Unsupported platform");
+    HCE_WARNING_FUNCTION_BODY("hce::thread::set_priority", "Failed to set thread scheduling policy: Unsupported platform");
     return false;
 #endif
+}
 }
 
 }

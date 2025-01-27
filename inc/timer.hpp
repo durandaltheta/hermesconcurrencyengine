@@ -12,7 +12,7 @@
 
 #include "base.hpp"
 #include "utility.hpp"
-#include "memory.hpp"
+#include "alloc.hpp"
 #include "logging.hpp"
 #include "thread.hpp"
 #include "atomic.hpp"
@@ -25,7 +25,6 @@
 namespace hce {
 namespace config {
 namespace timer {
-namespace service {
 
 /**
  Get the platform specific thread priority to pass to hce::set_thread_priority() 
@@ -79,7 +78,27 @@ hce::chrono::duration early_wakeup_threshold();
  */
 hce::chrono::duration early_wakeup_long_threshold();
 
-}
+typedef hce::chrono::time_point (*algorithm_function_ptr)(
+    const hce::chrono::time_point& now, 
+    const hce::chrono::time_point& requested_timeout);
+
+/**
+  @brief the algorithm for determining how long the timer service should wait for until the next timeout
+
+  If the returned time_point is greater than the requested_timeout, the 
+  requested_timeout will be taken instead.
+
+  An timer will not actually timeout until it's timeout is reached. This 
+  operation is for putting the entire *timer service* thread to sleep.
+
+  This operation allows for manipulation of timeouts to improve overall timeout 
+  precision. Factors which influence timeout precision generally are often 
+  non-trivial and non-deterministic, such as OS and power configurations.
+
+  @return an algorithm to calculate service timeouts 
+ */
+algorithm_function_ptr timeout_algorithm();
+
 }
 }
 
@@ -89,15 +108,11 @@ namespace timer {
  @brief an object capable of starting, cancelling, and handling timer timeouts 
  */
 struct service : public hce::printable {
-    typedef hce::chrono::time_point (*algorithm_function_ptr)(
-        const hce::chrono::time_point& now, 
-        const hce::chrono::time_point& requested_timeout);
-
-    static inline std::string info_name() { return "hce::timer::service"; }
+    static inline std::string info_name() { return "hce::"; }
     inline std::string name() const { return service::info_name(); }
 
     /// access the process-wide timer service
-    static service& get();
+    static inline service& get() { return *(service::instance_); }
 
     /**
      @brief start a timer 
@@ -131,11 +146,13 @@ struct service : public hce::printable {
         {
             std::lock_guard<hce::spinlock> lk(lk_);
 
-            for(auto& t : timers_) {
-                if(sid == t->sid) {
-                    HCE_LOW_METHOD_BODY("running","timer found");
-                    result = true;
-                    break;
+            if(running_) [[likely]] {
+                for(auto& t : timers_) {
+                    if(sid == t->sid) {
+                        HCE_LOW_METHOD_BODY("running","timer found");
+                        result = true;
+                        break;
+                    }
                 }
             }
         }
@@ -158,23 +175,25 @@ struct service : public hce::printable {
 
             std::unique_lock<hce::spinlock> lk(lk_);
 
-            auto it = timers_.begin();
-            auto end = timers_.end();
+            if(running_) [[likely]] {
+                auto it = timers_.begin();
+                auto end = timers_.end();
 
-            while(it != end) [[likely]] {
-                // search through the timers for a matching sid
-                if((*it)->sid == sid) [[unlikely]] {
-                    t.reset(*it);
-                    timers_.erase(it);
-                    notify_();
-                    lk.unlock();
-                   
-                    // do operations outside lock which don't require it
-                    result = true;
-                    t->awt->resume((void*)0); // cancel awaitable
+                while(it != end) [[likely]] {
+                    // search through the timers for a matching sid
+                    if((*it)->sid == sid) [[unlikely]] {
+                        t.reset(*it);
+                        timers_.erase(it);
+                        notify_();
+                        lk.unlock();
+                       
+                        // do operations outside lock which don't require it
+                        result = true;
+                        t->awt->resume((void*)0); // cancel awaitable
 
-                    HCE_LOW_METHOD_BODY("cancel","cancelled timer with ",sid);
-                    break;
+                        HCE_LOW_METHOD_BODY("cancel","cancelled timer with ",sid);
+                        break;
+                    }
                 }
             }
         } 
@@ -275,18 +294,39 @@ private:
         hce::timer::service::awaitable* awt;
     };
 
-    service();
+    /*
+     The timer service thread doesn't start right away, because it's not a 
+     thread that's guaranteed to be needed by user code. Instead, thread 
+     launching is lazy. This is especially fine because the bottleneck in timer 
+     code will never be a boolean check.
+     */
+    service() :
+        running_(false),
+        waiting_(false),
+        micro_runtime_ticks_(0),
+        micro_busywait_ticks_(0),
+        busy_wait_threshold_(hce::config::timer::busy_wait_threshold()),
+        timeout_algorithm_(hce::config::timer::timeout_algorithm())
+    {
+        service::instance_ = this;
+        HCE_HIGH_CONSTRUCTOR();
+    }
 
     ~service() {
         HCE_HIGH_DESTRUCTOR();
 
-        {
-            std::lock_guard<hce::spinlock> lk(lk_);
-            running_ = false; 
-            notify_();
-        }
+        service::instance_ = nullptr;
 
-        thd_.join();
+        {
+            std::unique_lock<hce::spinlock> lk(lk_);
+
+            if(running_) {
+                running_ = false; 
+                notify_();
+                lk.unlock();
+                thd_.join();
+            }
+        }
 
         // properly cancel and cleanup timers
         while(timers_.size()) {
@@ -319,7 +359,9 @@ private:
 
    
     // sid must be set at this point
-    hce::awt<bool> start_(hce::sid& sid, const hce::chrono::time_point& timeout)
+    inline hce::awt<bool> start_(
+            hce::sid& sid, 
+            const hce::chrono::time_point& timeout)
     {
         HCE_TRACE_METHOD_ENTER("start_",sid,timeout);
 
@@ -332,6 +374,21 @@ private:
 
         {
             std::lock_guard<hce::spinlock> lk(lk_);
+
+            if(!running_) [[unlikely]] {
+                // launch the timer service thread if it was never started
+                running_ = true;
+
+                thd_ = std::thread([](service* ts) { 
+                    HCE_HIGH_FUNCTION_ENTER("hce::timer::service::thread");
+                    ts->run(); 
+                    HCE_HIGH_FUNCTION_BODY("hce::timer::service::thread","exit");
+                }, this);
+
+                hce::thread::set_priority(
+                    thd_, 
+                    hce::config::timer::thread_priority());
+            }
 
             timers_.push_back(t);
             timers_.sort([](timer* lhs, timer* rhs) {
@@ -482,7 +539,7 @@ private:
     std::condition_variable_any cv_;
     std::list<timer*,hce::allocator<timer*>> timers_;
     std::thread thd_;
-    algorithm_function_ptr timeout_algorithm_;
+    hce::config::timer::algorithm_function_ptr timeout_algorithm_;
 
     friend hce::lifecycle;
 };
@@ -539,31 +596,6 @@ inline bool cancel(const hce::sid& sid) {
     return result;
 }
 
-}
-
-namespace config {
-namespace timer {
-namespace service {
-
-/**
-  @brief the algorithm for determining how long the timer service should wait for until the next timeout
-
-  If the returned time_point is greater than the requested_timeout, the 
-  requested_timeout will be taken instead.
-
-  An timer will not actually timeout until it's timeout is reached. This 
-  operation is for putting the entire *timer service* thread to sleep.
-
-  This operation allows for manipulation of timeouts to improve overall timeout 
-  precision. Factors which influence timeout precision generally are often 
-  non-trivial and non-deterministic, such as OS and power configurations.
-
-  @return an algorithm to calculate service timeouts 
- */
-hce::timer::service::algorithm_function_ptr timeout_algorithm();
-
-}
-}
 }
 
 /**

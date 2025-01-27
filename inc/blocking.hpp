@@ -9,7 +9,7 @@
 
 #include "base.hpp"
 #include "utility.hpp"
-#include "memory.hpp"
+#include "alloc.hpp"
 #include "logging.hpp"
 #include "atomic.hpp"
 #include "circular_buffer.hpp"
@@ -18,33 +18,21 @@
 #include "scheduler.hpp"
 
 namespace hce {
-namespace blocking {
 namespace config {
+namespace blocking {
 
 /**
  @brief the count of reusable worker blocking threads shared by the process 
 
  Can be increased if `hce::block()` calls are made frequently to avoid having to 
- launch new system threads by reusing old ones.
-
- In almost every case modifying this value is the proper way to improve 
- `hce::block()` call throughput. The remaining values are relevant in edgecases 
- where the user code must execute `hce::block()` calls very frequently from a 
- very large number of threads.
+ launch new system threads by reusing old ones. 
  */
-size_t process_worker_resource_limit();
-
-/**
- @brief the count of reusable worker blocking threads for the global scheduler
- */
-size_t global_scheduler_worker_resource_limit();
-
-/**
- @brief the count of reusable worker blocking threads for default schedulers
- */
-size_t default_scheduler_worker_resource_limit();
+size_t reusable_block_worker_cache_size();
 
 }
+}
+
+namespace blocking {
 
 namespace detail {
 
@@ -189,70 +177,35 @@ struct service : public hce::printable {
     /**
      @return the process-wide blocking service
      */
-    static service& get();
+    static inline service& get() { return *(service::instance_); }
 
     /**
      This value is determined by:
-     hce::blocking::config::process_worker_resource_limit()
+     hce::config::blocking::reusable_block_worker_cache_size()
 
      This value represents the process-wide limit of reusable worker threads 
      maintained by this `service` object. This value only represents the count 
-     of threads this mechanism will *persist*, as many worker threads as 
-     necessary will be spawned and destroyed.
+     of threads this mechanism will *persist* between calls to `block()`. As 
+     many worker threads as necessary will be spawned and destroyed.
 
-     Worker threads utilized by the `block()` mechanism can be reused by the 
-     scheduler, potentially increasing program efficiency when blocking calls 
-     need to be regularly made.
-
-     @return the minimum count of `block()` worker threads the scheduler will persist
+     @return the maximum count of `block()` worker threads the service will persist
      */
-    inline size_t worker_resource_limit() const { 
-        HCE_LOW_METHOD_BODY("worker_resource_limit",workers_.size());
-        return workers_.size();
-    }
-    
-    /**
-     This value is determined by either, depending on whether the thread is the 
-     running the hce::scheduler::global() scheduler or another scheduler:
-     hce::blocking::config::global_scheduler_process_worker_resource_limit()
-     hce::blocking::config::default_scheduler_process_worker_resource_limit()
-
-     If this is called by a non-scheduler thread, it will return 0.
-
-     This value represents the cache size of reusable block workers for *only* 
-     the calling thread. It is a distinct value from the process-wide worker 
-     resource limit provided by `worker_resource_limit()`.
-
-     @return the resource limit of reusable block workers for the calling thread
-     */
-    inline size_t thread_local_worker_resource_limit() const { 
-        size_t sz = service::tl_worker_cache_().size();
-        HCE_LOW_METHOD_BODY("worker_resource_limit",sz);
-        return sz;
+    inline size_t worker_cache_size() const { 
+        HCE_LOW_METHOD_BODY("worker_cache_size",worker_cache_.size());
+        return worker_cache_.size();
     }
 
     /**
-     @return the process total count of worker threads spawned for blocking operations in the entire process
+     @return the total count of worker threads spawned for blocking operations in the entire process
      */
     inline size_t worker_count() const {
         size_t c;
 
         {
             std::lock_guard<hce::spinlock> lk(lk_);
-            c = worker_active_count_ + workers_.used();
+            c = worker_active_count_ + worker_cache_.used();
         }
 
-        HCE_LOW_METHOD_BODY("worker_count",c);
-        return c; 
-    }
-
-    /**
-     This value includes cached (waiting) workers.
-
-     @return the count of worker threads spawned for blocking operations held by this thread
-     */
-    inline size_t thread_local_worker_count() const {
-        size_t c = tl_worker_cache_().worker_count();
         HCE_LOW_METHOD_BODY("worker_count",c);
         return c; 
     }
@@ -260,21 +213,13 @@ struct service : public hce::printable {
     /**
      @brief shutdown, join, destruct and deallocate all workers in the process-wide cache 
      */
-    inline void clear_workers() {
+    inline void clear_worker_cache() {
         HCE_LOW_METHOD_ENTER("clear");
 
         std::lock_guard<spinlock> lk(lk_);
-        while(workers_.used()) {
-            workers_.pop();
+        while(worker_cache_.used()) {
+            worker_cache_.pop();
         }
-    }
-
-    /**
-     @brief shutdown, join, destruct and deallocate all workers in the thread local cache
-     */
-    inline void thread_local_clear_workers() {
-        HCE_LOW_METHOD_ENTER("thread_local_clear");
-        tl_worker_cache_().clear();
     }
 
     /**
@@ -294,20 +239,20 @@ struct service : public hce::printable {
      T result = co_await hce::blocking::block(my_function_returning_T, arg1, arg2);
      ```
 
-     If the caller of `block()` immediately awaits the result then the given 
-     Callable can access values owned by the coroutine's body (or values on a 
-     thread's stack if called outside of a coroutine) by reference, because the 
-     caller of `block()` will be blocked while awaiting.
-
-     The user Callable will execute on a dedicated thread, and won't have direct 
-     access to the caller's local scheduler or coroutine. IE, 
-     `hce::scheduler::in()` and `hce::coroutine::in()` will return `false`. 
-     Access to the source scheduler will have to be explicitly given by user 
-     code by passing in the local scheduler's shared_ptr to the blocking code.
-
      If the caller is already executing in a thread managed by another call to 
      `block()`, or if called outside of an `hce` coroutine, the Callable will be 
      executed immediately on the *current* thread.
+
+     Otherwise the user Callable will execute on a dedicated thread, and won't 
+     have direct access to the caller's local scheduler or coroutine. IE, 
+     `hce::scheduler::in()` and `hce::coroutine::in()` will return `false`. 
+     Access to the source scheduler will have to be manually given by user code 
+     somehow.
+
+     If the caller of `block()` immediately awaits the result then the given 
+     Callable can safely access values owned by the coroutine's body (or values 
+     on a thread's stack if called outside of a coroutine) by reference, because 
+     the caller of `block()` will be blocked while awaiting.
 
      @param cb a function, Functor, lambda or std::function
      @param as arguments to cb
@@ -328,7 +273,7 @@ struct service : public hce::printable {
     }
 
 private:
-    // block workers receive operations over a queue and execute them
+    // block worker thread 
     struct worker : public printable {
         worker() : thd_(worker::run_, &operations_) { 
             HCE_LOW_CONSTRUCTOR();
@@ -346,6 +291,7 @@ private:
 
         inline std::string name() const { return worker::info_name(); }
 
+        // schedule an operation 
         inline void schedule(std::unique_ptr<hce::thunk>&& operation) { 
             operations_.push_back(std::move(operation));
         }
@@ -369,101 +315,12 @@ private:
         //
         // However, it's fine that the object itself use the 
         // `pool_allocator` as its allocator, because list node memory will 
-        // be reused inside the object to matter which thread.
+        // be managed and reused inside the object no matter which thread 
+        // allocates the initial memory.
         hce::synchronized_list<std::unique_ptr<hce::thunk>> operations_;
 
         // operating system thread
         std::thread thd_;
-    };
-
-    // The thread_local worker cache object, acting as a buffer between the 
-    // blocking::service's members and user code.
-    struct cache : public printable {
-        cache() :
-            workers_([]() -> size_t {
-                if(hce::scheduler::in()) {
-                    if(hce::scheduler::local() == hce::scheduler::global()) {
-                        return hce::blocking::config::global_scheduler_worker_resource_limit();
-                    } else {
-                        return hce::blocking::config::default_scheduler_worker_resource_limit();
-                    }
-                } else {
-                    // non-scheduler threads don't utilize the cache, so size
-                    // is 0
-                    return 0;
-                }
-            }())
-        { 
-            HCE_MED_CONSTRUCTOR();
-        }
-
-        ~cache() {
-            HCE_MED_DESTRUCTOR();
-
-            while(workers_.used()) {
-                hce::blocking::service::get().checkin_worker_(
-                    std::move(workers_.front()));
-                workers_.pop();
-            }
-        }
-
-        static inline std::string info_name() { 
-            return "hce::blocking::service::cache"; 
-        }
-
-        inline std::string name() const { return cache::info_name(); }
-
-        // the size of the cache
-        inline size_t size() const { return workers_.size(); }
-
-        // count of workers checked out by the thread
-        inline size_t worker_count() const {
-            size_t c = worker_active_count_ + workers_.used();
-            HCE_TRACE_METHOD_BODY("worker_count",c);
-            return c;
-        }
-
-        // checkout a worker from the thread local cache, falling back to the 
-        // process-wide service if necessary
-        inline std::unique_ptr<worker> checkout() {
-            HCE_TRACE_METHOD_ENTER("checkout");
-            std::unique_ptr<worker> w;
-            ++worker_active_count_;
-
-            if(workers_.used()) [[likely]] {
-                w = std::move(workers_.front());
-                workers_.pop();
-            } else [[unlikely]] {
-                w = service::get().checkout_worker_();
-            }
-
-            return w;
-        }
-
-        // checkin a worker to the thread local cache, falling back to the 
-        // process-wide service if necessary
-        inline void checkin(std::unique_ptr<worker>&& w) {
-            HCE_TRACE_METHOD_ENTER("checkin");
-            --worker_active_count_;
-
-            if(workers_.full()) [[unlikely]] {
-                service::get().checkin_worker_(std::move(w));
-            } else [[likely]] {
-                workers_.push(std::move(w));
-            }
-        }
-       
-        inline void clear() {
-            HCE_TRACE_METHOD_ENTER("clear");
-
-            while(workers_.used()) {
-                workers_.pop();
-            }
-        }
- 
-    private:
-        size_t worker_active_count_;
-        hce::circular_buffer<std::unique_ptr<worker>> workers_;
     };
 
     // awaitable implementation for returning an immediately available value
@@ -477,9 +334,13 @@ private:
             hce::scheduler::reschedule<
                 hce::blocking::detail::sync_partial<T>>(
                     std::forward<As>(as)...)
-        { }
+        { 
+            HCE_MED_CONSTRUCTOR();
+        }
 
-        virtual ~sync() { }
+        virtual ~sync() { 
+            HCE_MED_DESTRUCTOR();
+        }
         
         static inline std::string info_name() { 
             return type::templatize<T>("hce::blocking::service::sync"); 
@@ -491,20 +352,22 @@ private:
     // awaitable implementation for returning an asynchronously available value
     template <typename T>
     struct async : public 
-           scheduler::reschedule<
-            hce::blocking::detail::async_partial<T>>
+           scheduler::reschedule<hce::blocking::detail::async_partial<T>>
     {
         async() : 
-            scheduler::reschedule<
-                hce::blocking::detail::async_partial<T>>(),
+            scheduler::reschedule<hce::blocking::detail::async_partial<T>>(),
             // on construction get a worker
-            wkr_(tl_worker_cache_().checkout())
-        { }
+            wkr_(service::get().checkout_worker_())
+        { 
+            HCE_MED_CONSTRUCTOR();
+        }
 
         virtual ~async() {
+            HCE_MED_DESTRUCTOR();
+
             // return the worker to its scheduler
             if(wkr_) [[likely]] { 
-                tl_worker_cache_().checkin(std::move(wkr_)); 
+                service::get().checkin_worker_(std::move(wkr_));
             }
         }
         
@@ -523,15 +386,16 @@ private:
 
     service() :
         worker_active_count_(0),
-        workers_(blocking::config::process_worker_resource_limit())
+        worker_cache_(config::blocking::reusable_block_worker_cache_size())
     { 
+        service::instance_ = this;
         HCE_HIGH_CONSTRUCTOR();
     }
 
-    ~service() { HCE_HIGH_DESTRUCTOR(); }
- 
-    // a thread_local worker cache 
-    static cache& tl_worker_cache_();
+    ~service() { 
+        HCE_HIGH_DESTRUCTOR(); 
+        service::instance_ = nullptr;
+    }
 
     // retrieve a worker thread from the service to execute blocking operations on
     inline std::unique_ptr<worker> checkout_worker_() {
@@ -542,7 +406,8 @@ private:
         ++worker_active_count_; // update checked out thread count
         
         // check if we have any workers in reserve
-        if(workers_.empty()) [[unlikely]] {
+        if(worker_cache_.empty()) [[unlikely]] {
+            // need to start a new worker thread but don't need to hold the lock 
             lk.unlock();
 
             // as a fallback generate a new worker thread 
@@ -550,8 +415,8 @@ private:
             HCE_TRACE_METHOD_BODY("checkout_worker_","allocated ",w.get());
         } else [[likely]] {
             // get the first available worker
-            w = std::move(workers_.front());
-            workers_.pop();
+            w = std::move(worker_cache_.front());
+            worker_cache_.pop();
             lk.unlock();
 
             HCE_TRACE_METHOD_BODY("checkout_worker_","reused ",w.get());
@@ -565,11 +430,11 @@ private:
         std::lock_guard<spinlock> lk(lk_);
         --worker_active_count_; // update checked out thread count
         
-        if(workers_.full()) {
+        if(worker_cache_.full()) {
             HCE_TRACE_METHOD_BODY("checkin_worker_","discarded ",w.get());
         } else { 
             HCE_TRACE_METHOD_BODY("checkin_worker_","cached ",w.get());
-            workers_.push(std::move(w)); // reuse worker
+            worker_cache_.push(std::move(w)); // reuse worker
         }
     }
 
@@ -586,7 +451,7 @@ private:
             
             hce::thunk* th = new hce::thunk;
 
-            hce::memory::construct_thunk_ptr(
+            hce::alloc::construct_thunk_ptr(
                 th,
                 [ai,
                  cb=std::forward<Callable>(cb),
@@ -621,7 +486,7 @@ private:
 
             hce::thunk* th = new hce::thunk;
 
-            hce::memory::construct_thunk_ptr(
+            hce::alloc::construct_thunk_ptr(
                 th, 
                 [ai,
                  cb=std::forward<Callable>(cb),
@@ -652,7 +517,7 @@ private:
      finishes, and the thread_local worker cache is full, the worker thread that 
      executed the operation will be placed in this queue if there is room. 
      */
-    hce::circular_buffer<std::unique_ptr<worker>> workers_;
+    hce::circular_buffer<std::unique_ptr<worker>> worker_cache_;
 
     friend hce::lifecycle;
 };

@@ -148,12 +148,15 @@ private:
     std::string t_;
 };
 
-struct CustomObject {
+struct CustomObject : public hce::printable {
     CustomObject() : i_(0) {}
     CustomObject(const CustomObject&) = default;
     CustomObject(CustomObject&&) = default;
 
     CustomObject(int i) : i_(i) {}
+
+    static inline std::string info_name() { return "test::CustomObject"; }
+    inline std::string name() const { return CustomObject::info_name(); }
 
     CustomObject& operator=(const CustomObject&) = default;
     CustomObject& operator=(CustomObject&&) = default;

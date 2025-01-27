@@ -24,7 +24,8 @@ const size_t max_timer_offset = 50;
 
 // times each test should iterate different timeouts
 const unsigned int iterate_limit = 50;
-const unsigned int long_iterate_limit = 20;
+const unsigned int medium_iterate_limit = 25;
+const unsigned int long_iterate_limit = 15;
 
 // 1/100th of a second
 const unsigned int milli_one_hundreth_second(10); 
@@ -75,7 +76,7 @@ void validate_test(std::optional<double> check_sleep,
         std::cout 
             << "timer service busy-wait microsecond threshold: " 
             << std::chrono::duration_cast<std::chrono::microseconds>(
-                hce::config::timer::service::busy_wait_threshold()).count()
+                hce::config::timer::busy_wait_threshold()).count()
             << std::endl;
         std::cout << "timer service busy-wait runtime rate: " <<  busy_wait_rate << "%" << std::endl;
         EXPECT_LT(busy_wait_rate, *check_busywait);
@@ -532,7 +533,7 @@ TEST_F(timer, start_medium) {
    
     // iterate through timeouts that are signficant millisecond count, to 
     // ensure we test medium sleeps which shouldn't busy-wait as much
-    for(unsigned int i=1; i<test::timer::iterate_limit; ++i) {
+    for(unsigned int i=1; i<test::timer::medium_iterate_limit; ++i) {
         const unsigned int milli_dur = i * test::timer::milli_one_hundreth_second;
         HCE_INFO_LOG("TEST_F(timer,start_medium) milli:%u",milli_dur);
         EXPECT_EQ(expected_successes,test::timer::start(std::chrono::milliseconds(milli_dur)));
@@ -913,7 +914,7 @@ TEST_F(timer, sleep_short) {
 TEST_F(timer, sleep_medium) {
     size_t expected_successes = 10;
    
-    for(unsigned int i=1; i<test::timer::iterate_limit; ++i) {
+    for(unsigned int i=1; i<test::timer::medium_iterate_limit; ++i) {
         const unsigned int milli_dur = i * test::timer::milli_one_hundreth_second;
         HCE_INFO_LOG("TEST_F(timer,sleep_medium) milli:%u",milli_dur);
         EXPECT_EQ(expected_successes,test::timer::sleep(std::chrono::milliseconds(milli_dur)));

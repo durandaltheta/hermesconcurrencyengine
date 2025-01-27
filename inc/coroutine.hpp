@@ -19,6 +19,7 @@
 #include "utility.hpp"
 #include "logging.hpp"
 #include "memory.hpp"
+#include "alloc.hpp"
 #include "chrono.hpp"
 
 namespace hce {
@@ -140,7 +141,7 @@ struct coroutine : public printable {
                     cleanup_list_->co(d);
                     node* old = cleanup_list_;
                     cleanup_list_ = cleanup_list_->next;
-                    hce::deallocate<node>(old);
+                    hce::deallocate(old);
                 } while(cleanup_list_);
             } else {
                 HCE_LOW_METHOD_BODY("cleanup", "no cleanup operation");
@@ -148,7 +149,7 @@ struct coroutine : public printable {
         }
 
     private:
-        /// object for creating a singly linked list of cleanup handlers
+        /// object for creating a simple singly linked list of cleanup handlers
         struct node {
             node* next; /// the next node in the cleanup handler list
             cleanup_operation co; /// the cleanup operation provided to install()
@@ -459,6 +460,7 @@ struct this_thread : public printable {
         auto tt = this_thread::get();
         HCE_TRACE_FUNCTION_BODY("hce::detail::coroutine::this_thread::block",tt);
         tt->block_(lk);
+        HCE_TRACE_FUNCTION_BODY("hce::detail::coroutine::this_thread::block",tt,", exit");
     }
     
     // unblock an arbitrary this_thread without lock synchronization
@@ -631,7 +633,7 @@ struct yield<void> : public detail::yield {
  higher level objects and utilities in this library should accomodate most user 
  needs without requiring the user to implement their own.
  */
-struct awaitable : public printable { 
+struct awaitable : public printable {
     struct await {
         /// determines how locking is accomplished by an awaiter of an awaitable
         enum policy {
@@ -658,7 +660,7 @@ struct awaitable : public printable {
      This object is quite complex. The easiest way to understand it is to 
      realize that various blocking operations need to have an object which 
      implement this interface, because this interface is responsible for 
-     implementating generic, safe blocking operations.
+     implementating generic and safe coroutine blocking operations.
 
      The pure virtual functions are used within *other* functions which can be 
      considered this object's "true" API.
@@ -759,24 +761,38 @@ struct awaitable : public printable {
             // still locked from await_ready()
             this->on_suspend();
 
-            // optimize for coroutines over threads
+            // If this handle is valid, we are in a coroutine. Optimize for 
+            // coroutine suspends over system threads
             if(h) [[likely]] {
                 HCE_TRACE_METHOD_BODY("await_suspend",h);
+
                 // assign the handle to our member
                 this->handle_ = h; 
+
                 // the current coroutine no longer manages the handle
                 coroutine::local().release(); 
-                // unlock the lock before coroutine::resume() returns to the 
-                // caller
-                this->unlock();
+
+                // Compiler now returns to the caller of coroutine::resume() 
+                // when this function returns
             } else [[unlikely]] {
+                // Behavior of system thread in this function is VERY different 
+                // than in coroutines. We block here on a condition_variable 
+                // until resume() is called, where-as in a coroutine it takes
+                // control of the coroutine handle and suspends.
+
                 // block the calling thread using traditional mechanisms
                 this->tt_ = detail::coroutine::this_thread::get(); 
-                HCE_TRACE_METHOD_BODY("await_suspend","tt_:",(void*)tt_);
+
+                HCE_TRACE_METHOD_BODY("await_suspend","tt_:",(void*)(this->tt_));
 
                 // allow condition_variable::wait() to unlock `this`
                 detail::coroutine::this_thread::block(*this);
+
+                // we are now re-locked and resumed
             }
+
+            // in both cases we need to exit this function unlocked
+            this->unlock();
         }
 
         /**
@@ -802,7 +818,7 @@ struct awaitable : public printable {
 
             // optimize for coroutines over threads
             if(this->handle_) [[likely]] { 
-                HCE_TRACE_METHOD_BODY("resume","destination");
+                HCE_TRACE_METHOD_BODY("resume","to_destination");
                 // unblock the suspended coroutine and push the handle to its 
                 // destination. Make sure that handle_ is unset before passing 
                 // to destination. There are certain cases where the the 
@@ -811,7 +827,7 @@ struct awaitable : public printable {
                 auto h = this->handle_;
                 this->handle_ = std::coroutine_handle<>();
                 if(rp != resume::policy::no_lock) { this->unlock(); }
-                this->destination(h);
+                this->to_destination(h);
             } else [[unlikely]] {
                 if(this->tt_) [[unlikely]] { 
                     HCE_TRACE_METHOD_BODY("resume","unblock");
@@ -857,7 +873,7 @@ struct awaitable : public printable {
 
          The lock is unlocked during this call.
          */
-        virtual void destination(std::coroutine_handle<>) = 0;
+        virtual void to_destination(std::coroutine_handle<>) = 0;
 
         /**
          @brief returns whether the operation can resume immediately or not 
@@ -869,6 +885,10 @@ struct awaitable : public printable {
 
         /**
          @brief operation which needs to execute immediately prior to suspension
+
+         At this point the lock will be held and hce::coroutine::in() will 
+         return `false` because the awaitable has taken responsibility for 
+         the coroutine handle.
          */
         virtual void on_suspend() = 0;
 
@@ -945,11 +965,15 @@ struct awaitable : public printable {
         bool locked_; // track locked state
     };
 
-    awaitable(){}
+    awaitable() : impl_(nullptr) {
+        HCE_TRACE_CONSTRUCTOR();
+    }
+
     awaitable(const awaitable&) = delete;
     awaitable(awaitable&& rhs) = default;
     
     ~awaitable() { 
+        HCE_TRACE_DESTRUCTOR();
         wait(); 
     }
 
@@ -976,7 +1000,10 @@ struct awaitable : public printable {
     /// return the underlying implementation
     interface& implementation() { return *impl_; }
 
+    /// destroy the implementation 
     inline void reset() { impl_.reset(); }
+
+    /// destroy the implementation and assign a new one
     inline void reset(interface* i) { impl_.reset(i); }
 
     /// release control of the underlying implementation pointer
@@ -1052,7 +1079,8 @@ protected:
 private:
     struct interface_deleter {
         inline void operator()(interface* ptr) const noexcept {
-            ptr->operator delete(ptr);  // Call custom delete for your class
+            ptr->~interface(); // call destructor
+            ptr->operator delete(ptr);  // call custom delete 
         }
     };
 
@@ -1171,6 +1199,10 @@ struct awt : public awaitable {
  ```
  my_operation();
  ```
+
+ This object has the unique ability to safely wrap implementations of other 
+ allocated `awt<T>::interface` implementations, with the caveat that the return 
+ value `T` will not be extracted.
  */
 template <>
 struct awt<void> : public awaitable {

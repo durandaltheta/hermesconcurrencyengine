@@ -30,8 +30,8 @@ void allocate_deallocate_T(){
 }
 
 TEST(memory, system_cache_info) {
-    test::memory::cache_info_check(
-        hce::config::memory::cache::info::thread::type::system);
+    hce::lifecycle::config c;
+    test::memory::cache_info_check("system", c.mem.system);
 }
 
 TEST(memory, system_cache_allocate_deallocate) {

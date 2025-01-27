@@ -5,38 +5,13 @@
 
 hce::timer::service* hce::timer::service::instance_ = nullptr;
 
-hce::timer::service& hce::timer::service::get() {
-    return *(hce::timer::service::instance_);
-}
-
-hce::timer::service::service() : 
-    running_(true),
-    waiting_(false),
-    micro_runtime_ticks_(0),
-    micro_busywait_ticks_(0),
-    busy_wait_threshold_(hce::config::timer::service::busy_wait_threshold()),
-    timeout_algorithm_(hce::config::timer::service::timeout_algorithm())
-{
-    thd_ = std::thread([](service* ts) { 
-        HCE_HIGH_FUNCTION_ENTER("hce::timer::service::thread");
-        ts->run(); 
-        HCE_HIGH_FUNCTION_BODY("hce::timer::service::thread","exit");
-    }, this);
-
-    hce::set_thread_priority(
-        thd_, 
-        hce::config::timer::service::thread_priority());
-
-    HCE_HIGH_CONSTRUCTOR();
-}
-
 hce::chrono::time_point hce::timer::service::default_timeout_algorithm(
         const hce::chrono::time_point& now, 
         const hce::chrono::time_point& requested_timeout)
 {
-    static const auto btw = hce::config::timer::service::busy_wait_threshold();
-    static const auto ewt = hce::config::timer::service::early_wakeup_threshold();
-    static const auto ewlt = hce::config::timer::service::early_wakeup_long_threshold();
+    static const auto btw = hce::config::timer::busy_wait_threshold();
+    static const auto ewt = hce::config::timer::early_wakeup_threshold();
+    static const auto ewlt = hce::config::timer::early_wakeup_long_threshold();
     auto timeout = requested_timeout;
     auto requested_timeout_dur = requested_timeout - now;
 

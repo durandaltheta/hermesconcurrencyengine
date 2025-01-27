@@ -9,7 +9,7 @@
 
 // local
 #include "logging.hpp"
-#include "memory.hpp"
+#include "alloc.hpp"
 
 namespace hce {
 
@@ -79,7 +79,7 @@ struct circular_buffer : public printable {
             while(used()) [[likely]] { pop(); }
 
             // free buffer
-            hce::deallocate<T>(buffer_);
+            hce::deallocate(buffer_);
         }
     }
    

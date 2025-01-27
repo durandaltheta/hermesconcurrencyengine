@@ -1,0 +1,420 @@
+#!/usr/bin/python3
+import argparse
+import sys
+import os
+from datetime import datetime, timedelta 
+import tempfile
+import subprocess
+import traceback
+
+SCRIPT_PATH = os.path.abspath(__file__)
+SCRIPT_NAME = os.path.basename(SCRIPT_PATH)
+PROJECT_ROOT = os.path.dirname(SCRIPT_PATH)
+LOGFILEPATH=os.path.join(PROJECT_ROOT,'validate.log')
+LOGFILE = None
+NO_TIMING = False
+RUNINFOS = []
+
+class strings:
+    def section():
+        return '---------------------------------------------------------------------------------'
+
+    def separator():
+        return '[----------] '
+    
+    def build():
+        return '[ BUILD    ] '
+
+    def run():
+        return '[ RUN      ] '
+
+    def ok():
+        return '[       OK ] '
+
+    def failed():
+        return '[  FAILED  ] ' 
+
+    def exception():
+        return '[EXCEPTION ] '
+
+def log(s, newline=True):
+    global LOGFILE
+    if isinstance(s, str):
+        sys.stdout.write(s)
+        LOGFILE.write(s)
+
+        if newline:
+            sys.stdout.write('\n')
+            LOGFILE.write('\n')
+
+        sys.stdout.flush()
+
+def exscript(opname, lines, cwd=None, env=None):
+    def execute(cmd, cwd=None, env=None):
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, cwd=cwd, env=env)
+        stdout = ''
+
+        for line in process.stdout:
+            fmt_line=str(line, 'utf-8')
+            stdout+=fmt_line
+            log(fmt_line, newline=False)
+        
+        stub_stdout, stderr = process.communicate()
+        
+        return process.returncode, stderr, stdout
+
+    tmpfile = None
+    code = None
+    out = None
+    err = None
+   
+    try:
+        with tempfile.NamedTemporaryFile(mode='w+',delete=False) as file:
+            tmpfile = file.name
+            util_lines = [ \
+                    'run() {', \
+                    '    # Print the command to be executed', \
+                    f'    echo "[{opname} execute] $1"', \
+                    '    # Execute the command', \
+                    '    eval "$1"', \
+                    '    if [ $? -ne 0 ]; then', \
+                    f'        echo "[{opname} ERROR] command failed"', \
+                    '        exit 1', \
+                    '    fi', \
+                    '}', \
+                    '']
+            
+            for line in util_lines:
+                file.write(f'{line}\n')
+
+            for line in lines:
+                file.write(f'run "{line}"\n')
+
+        code, out, err = execute(['bash',tmpfile], cwd=cwd, env=env)
+    except Exception as e:
+        if tmpfile is not None:
+            os.remove(tmpfile)
+        raise
+
+    if tmpfile is not None:
+        os.remove(tmpfile)
+
+    return code, out, err
+
+class RunInfo:
+    name = None
+    success = None
+    runtime = None
+
+    def __init__(self, name: str, success: bool, time):
+        self.name = name
+        self.success = success
+        self.runtime = time
+
+    def stringify(self):
+        return f'<test:{self.name}, success:{self.success}, runtime:{self.runtime}>'
+
+    def __repr__(self):
+        return self.stringify()
+
+    def __str__(self):
+        return self.stringify()
+
+def process_exit(success):
+    global RUNINFOS
+    log(strings.section())
+    log('test run information:')
+
+    for r in RUNINFOS:
+        print(r)
+
+    log('')
+    
+    if success == True:
+        log('Test Validation Success')
+        sys.exit(0)
+    else:
+        log('Test Validation FAILURE')
+        sys.exit(1)
+
+class Toolchain:
+    GCC = '-DCMAKE_CXX_COMPILER=g++'
+    CLANG = '-DCMAKE_CXX_COMPILER=clang'
+
+    mapping = {
+        'gcc': GCC,
+        'clang': CLANG
+    }
+
+class BuildType:
+    RELEASE = '-DCMAKE_BUILD_TYPE=Release'
+    DEBUG = '-DCMAKE_BUILD_TYPE=Debug'
+
+class Timing:
+    DISABLED = '-DTIME_SENSITIVE_TESTS_ENABLED=False'
+    ENABLED = '-DTIME_SENSITIVE_TESTS_ENABLED=True'
+
+class Optimization:
+    LOW = '-Og -fno-inline'
+    HIGH = '-O3'
+
+class Log:
+    RELEASE = '-DHCELOGLEVEL=-1 -DHCELOGLIMIT=-1'
+    INFO = '-DHCELOGLEVEL=0 -DHCELOGLIMIT=0'
+    MAX = '-DHCELOGLEVEL=9 -DHCELOGLIMIT=9'
+
+class AddressSanitation:
+    DISABLED = ''
+    ENABLED = '-fsanitize=address'
+
+class Option:
+    value = None
+
+    def __init__(self, value=None):
+        self.value = value 
+
+    def __bool__(self):
+        if self.value is not None:
+            return True
+        else:
+            return False
+
+    def __str__(self):
+        return str(self.value)
+
+def validate_attr(attribute, attribute_name):
+    if attribute is None:
+        raise Exception(f'{attribute_name} is None')
+
+class Build:
+    name = Option()
+    toolchain = Option()
+    buildtype = Option()
+    timing = Option()
+    log = Option()
+    optimization = Option()
+    address_sanitation = Option()
+
+    def __init__(self, name: str, toolchain_name: str, buildtype: BuildType, timing: Timing, log: Log, optimization: Optimization, address_sanitation: AddressSanitation):
+        toolchain = None 
+        if toolchain_name in Toolchain.mapping:
+            toolchain = Toolchain.mapping[toolchain_name]
+
+        global SCRIPT_NAME
+        self.name = f'{SCRIPT_NAME}.{toolchain_name}.{name}'
+        self.toolchain = Option(toolchain)
+        self.buildtype = Option(buildtype)
+
+        global NO_TIMING
+        if NO_TIMING:
+            self.timing = Option(Timing.DISABLED)
+        else:
+            self.timing = Option(timing)
+
+        self.log = Option(log)
+        self.optimization = Option(optimization)
+        self.address_sanitation = Option(address_sanitation)
+
+    def commands(self):
+        return [ \
+            'cmake {} {} {} {} -DCMAKE_CXX_FLAGS=\\"{} {}\\" .'.format( \
+                str(self.toolchain), \
+                str(self.buildtype), \
+                str(self.timing), \
+                str(self.log), \
+                str(self.optimization), \
+                str(self.address_sanitation)), \
+            'make -j hce_ut']
+
+    @staticmethod
+    def validate(attribute, attribute_name):
+        if attribute is None:
+            raise Exception(f'Option {attribute_name} is None')
+
+    def __call__(self, env=os.environ):
+        validate_attr(self.name, 'name')
+        validate_attr(self.toolchain, 'toolchain')
+        validate_attr(self.buildtype, 'buildtype')
+        validate_attr(self.timing, 'timing')
+        validate_attr(self.log, 'log')
+        validate_attr(self.optimization, 'optimization')
+        validate_attr(self.address_sanitation, 'address_sanitation')
+        global PROJECT_ROOT 
+        code, _, _ = exscript(self.name, self.commands(), cwd=PROJECT_ROOT, env=env)
+
+        if code != 0:
+            raise Exception(f'Build {self.name} failed, return code:{code}')
+            
+        log(strings.ok())
+
+class Test:
+    name = Option()
+
+    def __init__(self, build: Build):
+        self.build = build
+        self.name = build.name
+    
+    def __call__(self, env=os.environ):
+        validate_attr(self.name, 'name')
+        start = datetime.now()
+        success = False
+
+        try:
+            log(strings.build() + str(self.name))
+            self.build(env=env)
+            commands = list()
+            commands.append('./tst/hce_ut')
+
+            log(strings.separator())
+            log(strings.run() + str(self.name))
+            global PROJECT_ROOT 
+            code, _, _ = exscript(self.name, commands, cwd=PROJECT_ROOT, env=env)
+
+            if code != 0:
+                raise Exception(f'Test {self.name} failed, return code:{code}')
+
+            log(strings.ok())
+            success = True
+        except Exception as e:
+            traceback.print_exc()
+            log(strings.failed())
+            log(strings.exception() + str(e))
+            success = False
+
+        now = datetime.now()
+        global RUNINFOS
+        RUNINFOS.append(RunInfo(self.build.name, success, now - start))
+
+# Really put the framework through its paces by introducing runtime timing 
+# discrepancies with various loglevels and loglimits. 
+# 
+# This operation is to tease out timing issues, and it is unknown high or low 
+# optimization would trigger them.
+def jitterTest(name, toolchain, debug, optimization):
+    for loglimit in range(-1, 10):
+        for loglevel in range(-1, 10):
+            test = Test(Build(name, toolchain, debug, Timing.DISABLED, f'-DHCELOGLEVEL={loglevel} -DHCELOGLIMIT={loglimit}', optimization, AddressSanitation.DISABLED))
+            test() # rebuild and execute test
+
+def jitterTestGccDebug():
+    jitterTest('GCCJITTERDEBUG', Toolchain.GCC, BuildType.DEBUG, Optimization.LOW)
+
+def jitterTestClangDebug():
+    jitterTest('CLANGJITTERDEBUG', Toolchain.CLANG, BuildType.DEBUG, Optimization.LOW)
+
+class Tests:
+    basic = None
+    log = None
+    mem = None 
+    jitter = None
+    release = None
+    tests = None 
+
+    def __init__(self, toolchain_name=''):
+        self.basic = Test(Build('basic', toolchain_name, BuildType.DEBUG, Timing.ENABLED, Log.INFO, Optimization.LOW, AddressSanitation.DISABLED))
+        self.log = Test(Build('log', toolchain_name, BuildType.DEBUG, Timing.DISABLED, Log.MAX, Optimization.LOW, AddressSanitation.DISABLED))
+        self.mem = Test(Build('mem', toolchain_name, BuildType.DEBUG, Timing.ENABLED, Log.INFO, Optimization.LOW, AddressSanitation.ENABLED))
+
+        def jitterTestDebug():
+            jitterTest('jitter', toolchain_name, BuildType.DEBUG, Optimization.LOW)
+
+        self.jitter = jitterTestDebug 
+        self.release = Test(Build('release', toolchain_name, BuildType.RELEASE, Timing.ENABLED, Log.RELEASE, Optimization.HIGH, AddressSanitation.DISABLED))
+
+        self.tests = {
+            'basic': self.basic,
+            'log': self.log,
+            'mem': self.mem,
+            'jitter': self.jitter,
+            'release': self.release
+        }
+
+    def ALL(self):
+        # Create a function that runs all tests in sequence
+        def run_all_tests():
+            for name, test in self.tests.items():
+                test.value()
+        return run_all_tests()  # Call the function here 
+
+    def names(self):
+        results = list()
+
+        for name, test in self.tests.items():
+            results.append(name)
+
+        results.append('ALL')
+
+        return results
+
+def parse_args():
+    parser = argparse.ArgumentParser('A validation script for running HCE project unit tests.')
+
+    # Top-level parser with required compiler argument
+    subparsers = parser.add_subparsers(dest="compiler", required=True)
+
+    # GCC subparser
+    gcc_parser = subparsers.add_parser("gcc", help="Options for GCC compiler")
+    gcc_parser.add_argument("test", choices=Tests().names(), help="Select a test to run")
+    gcc_parser.add_argument("--no-timing", action='store_true', help="Enforce no timing tests")
+
+    # Clang subparser
+    clang_parser = subparsers.add_parser("clang", help="Options for Clang compiler")
+    clang_parser.add_argument("test", choices=Tests().names(), help="Select a test to run")
+    clang_parser.add_argument("--no-timing", action='store_true', help="Enforce no timing tests")
+
+    args = parser.parse_args()
+
+    if args.no_timing:
+        global NO_TIMING
+        NO_TIMING = True
+
+    return args
+
+def main():
+    def inner():
+        args = parse_args()
+        test = Tests(args.compiler).tests[args.test]
+        log(strings.section())
+        test()
+
+        global RUNINFOS
+        log(strings.section())
+        log('Test Report')
+        log(strings.separator())
+        success = True
+
+        for r in RUNINFOS:
+            success = success and r.success
+            print(r)
+
+        log('')
+        
+        if success == True:
+            log('HCE Test Validation SUCCESS')
+            return 0
+        else:
+            log('HCE Test Validation FAILURE')
+            return 1
+
+    # setup the logfile so log() can function
+    global LOGFILEPATH
+    code = 0
+
+    try:
+        # remove old logs 
+        os.remove(LOGFILEPATH)
+    except FileNotFoundError:
+        # silent continuation if the file doesn't exist
+        pass  
+
+    with open(LOGFILEPATH, 'a') as logfile:
+        global LOGFILE 
+        LOGFILE = logfile 
+        global SCRIPT_NAME
+        log(f'logfile:{LOGFILEPATH}')
+        code = inner()
+
+    sys.exit(code)
+
+if __name__ == '__main__':
+    main()

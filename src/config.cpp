@@ -1,8 +1,15 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
 /*
- This file contains the various `::config::` `extern` implementations necessary 
- for determining framework defaults. They are typically compiler define driven.
+ This file contains the various `hce::config::` implementations necessary for 
+ setting runtime framework values. 
+
+ They are typically accessors to the `hce::lifecycle::config` objects returned 
+ from a runtime call to `hce::lifecycle::config::SPECIFICDOMAIN::get()`. Said 
+ objects are declared after other objects in the framework, because the 
+ `hce::lifecycle` manages the memory for all services and singletons in this 
+ framework. Therefore these functions are declared early for each feature to be 
+ able to indirectly access what they need to configure themselves.
  */
 #include <cstring>
 #include <bit>
@@ -22,86 +29,65 @@
 #include "threadpool.hpp"
 #include "lifecycle.hpp"
 
-hce::chrono::duration hce::config::timer::service::busy_wait_threshold() {
-    return hce::lifecycle::get().configuration().tmr.busy_wait_threshold;
+thread_local hce::config::memory::cache::info* this_thread_memory_cache_info_ = 
+    hce::lifecycle::config::memory::get().system;
+
+int hce::config::logging::default_log_level() { 
+    return hce::lifecycle::config::logging::get().loglevel;
 }
 
-hce::chrono::duration hce::config::timer::service::early_wakeup_threshold() {
-    return hce::lifecycle::get().configuration().tmr.early_wakeup_threshold;
+hce::config::memory::cache::info& hce::config::memory::cache::info::get() {
+    return *(this_thread_memory_cache_info_);
 }
 
-hce::chrono::duration hce::config::timer::service::early_wakeup_long_threshold() {
-    return hce::lifecycle::get().configuration().tmr.early_wakeup_long_threshold;
+void hce::config::memory::cache::info::set(hce::config::memory::cache::info& i) {
+    this_thread_memory_cache_info_ = &i;
+}
+
+hce::config::memory::cache::info::indexer_function hce::config::memory::cache::info::indexer() {
+    return hce::lifecycle::config::memory::get().indexer;
 }
 
 size_t hce::config::pool_allocator::default_block_limit() {
-    return hce::lifecycle::get().configuration().mem.pool_allocator_default_block_limit;
+    return hce::lifecycle::config::allocator::get().pool_allocator_default_block_limit;
 }
 
-size_t hce::config::scheduler::default_resource_limit() {
-    return hce::lifecycle::get().configuration().sch.default_resource_limit;
-}
-
-hce::scheduler::config hce::config::global::scheduler_config() {
-    return hce::lifecycle::get().configuration().sch.global;
-}
-
-size_t hce::blocking::config::process_worker_resource_limit() {
-    return hce::lifecycle::get().configuration().blk.process_worker_resource_limit;
-}
-
-size_t hce::blocking::config::global_scheduler_worker_resource_limit() {
-    return hce::lifecycle::get().configuration().blk.global_scheduler_worker_resource_limit;
-}
-
-size_t hce::blocking::config::default_scheduler_worker_resource_limit() {
-    return hce::lifecycle::get().configuration().blk.default_scheduler_worker_resource_limit;
+hce::config::scheduler::config hce::config::scheduler::global::config() {
+    return hce::lifecycle::config::scheduler::get().global_config;
 }
 
 size_t hce::config::threadpool::count() {
-    return hce::lifecycle::get().configuration().tp.count;
+    return hce::lifecycle::config::threadpool::get().count;
 }
 
-hce::scheduler::config hce::config::threadpool::scheduler_config() {
-    return hce::lifecycle::get().configuration().tp.config;
+hce::config::scheduler::config hce::config::threadpool::config() {
+    return hce::lifecycle::config::threadpool::get().worker_config;
 }
 
 hce::config::threadpool::algorithm_function_ptr hce::config::threadpool::algorithm() {
-    return hce::lifecycle::get().configuration().tp.algorithm;
+    return hce::lifecycle::config::threadpool::get().algorithm;
 }
 
-size_t hce::config::channel::resource_limit() {
-    if(hce::scheduler::in()) {
-        return hce::scheduler::local().coroutine_resource_limit();
-    } else {
-        return hce::config::pool_allocator::default_block_limit();
-    }
+size_t hce::config::blocking::reusable_block_worker_cache_size() {
+    return hce::lifecycle::config::blocking::get().reusable_block_worker_cache_size;
 }
 
-#ifdef _WIN32
-int hce::config::timer::service::thread_priority() {
-    return THREAD_PRIORITY_ABOVE_NORMAL;
+int hce::config::timer::thread_priority() {
+    return hce::lifecycle::config::timer::get().priority;
 }
-#elif defined(_POSIX_VERSION)
-int hce::config::timer::service::thread_priority() {
-    static int priority = []{
-        // Calculate the priority range
-        int min_priority = sched_get_priority_min(SCHED_OTHER);
-        int max_priority = sched_get_priority_max(SCHED_OTHER);
 
-        // Calculate an intelligent high priority (somewhere near the maximum), 
-        // 80% of max priority
-        return min_priority + (max_priority - min_priority) * 0.8;  
-    }();
-
-    return priority;
+hce::chrono::duration hce::config::timer::busy_wait_threshold() {
+    return hce::lifecycle::config::timer::get().busy_wait_threshold;
 }
-#else 
-int hce::config::timer::service::thread_priority() {
-    return 0;
-}
-#endif 
 
-hce::timer::service::algorithm_function_ptr hce::config::timer::service::timeout_algorithm() {
-    return hce::lifecycle::get().configuration().tmr.algorithm;
+hce::chrono::duration hce::config::timer::early_wakeup_threshold() {
+    return hce::lifecycle::config::timer::get().early_wakeup_threshold;
+}
+
+hce::chrono::duration hce::config::timer::early_wakeup_long_threshold() {
+    return hce::lifecycle::config::timer::get().early_wakeup_long_threshold;
+}
+
+hce::config::timer::algorithm_function_ptr hce::config::timer::timeout_algorithm() {
+    return hce::lifecycle::config::timer::get().algorithm;
 }

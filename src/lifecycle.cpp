@@ -18,8 +18,8 @@
 #define HCELOGLEVEL 9
 #endif 
     
-#ifndef HCETHREADLOCALMEMORYBUCKETCOUNT
-#define HCETHREADLOCALMEMORYBUCKETCOUNT 13
+#ifndef HCEMEMORYCACHEBUCKETCOUNT
+#define HCEMEMORYCACHEBUCKETCOUNT 13
 #endif 
 
 /*
@@ -47,8 +47,8 @@
  
  4096 == sizeof(void*) * 64 on 64 bit systems
  */
-#ifndef HCESYSTEMMEMORYBUCKETBYTELIMIT
-#define HCESYSTEMMEMORYBUCKETBYTELIMIT sizeof(void*) * 64
+#ifndef HCEMEMORYCACHESYSTEMBUCKETBYTELIMIT
+#define HCEMEMORYCACHESYSTEMBUCKETBYTELIMIT sizeof(void*) * 64
 #endif
 
 /*
@@ -62,15 +62,15 @@
 
  131072 == sizeof(void*) * 2048 on 64 bit systems
  */
-#ifndef HCEGLOBALMEMORYBUCKETBYTELIMIT
-#define HCEGLOBALMEMORYBUCKETBYTELIMIT sizeof(void*) * 2048
+#ifndef HCEMEMORYCACHEGLOBALBUCKETBYTELIMIT
+#define HCEMEMORYCACHEGLOBALBUCKETBYTELIMIT sizeof(void*) * 2048
 #endif
 
 /*
  65536 == sizeof(void*) * 1024 on 64 bit systems
  */
-#ifndef HCESCHEDULERMEMORYBUCKETBYTELIMIT
-#define HCESCHEDULERMEMORYBUCKETBYTELIMIT sizeof(void*) * 1024
+#ifndef HCEMEMORYCACHESCHEDULERBUCKETBYTELIMIT
+#define HCEMEMORYCACHESCHEDULERBUCKETBYTELIMIT sizeof(void*) * 1024
 #endif
 
 // the default block limit in a pool_allocator
@@ -79,28 +79,28 @@
 #endif
 
 // the default coroutine resource limit in a scheduler
-#ifndef HCESCHEDULERDEFAULTCOROUTINERESOURCELIMIT
-#define HCESCHEDULERDEFAULTCOROUTINERESOURCELIMIT HCEPOOLALLOCATORDEFAULTBLOCKLIMIT
+#ifndef HCEREUSABLECOROUTINEHANDLEDEFAULTSCHEDULERLIMIT
+#define HCEREUSABLECOROUTINEHANDLEDEFAULTSCHEDULERLIMIT HCEPOOLALLOCATORDEFAULTBLOCKLIMIT
 #endif 
 
 // the limit of reusable coroutine resources for in the global scheduler
-#ifndef HCEGLOBALSCHEDULERCOROUTINERESOURCELIMIT
-#define HCEGLOBALSCHEDULERCOROUTINERESOURCELIMIT HCESCHEDULERDEFAULTCOROUTINERESOURCELIMIT
+#ifndef HCEREUSABLECOROUTINEHANDLEGLOBALSCHEDULERLIMIT
+#define HCEREUSABLECOROUTINEHANDLEGLOBALSCHEDULERLIMIT HCEREUSABLECOROUTINEHANDLEDEFAULTSCHEDULERLIMIT
 #endif 
 
 // the limit of reusable block workers shared among the entire process
-#ifndef HCEPROCESSBLOCKWORKERRESOURCELIMIT 
-#define HCEPROCESSBLOCKWORKERRESOURCELIMIT 1
+#ifndef HCEPROCESSREUSABLEBLOCKWORKERPROCESSLIMIT
+#define HCEPROCESSREUSABLEBLOCKWORKERPROCESSLIMIT 1
 #endif
 
 // the limit of reusable block workers for the global scheduler cache
-#ifndef HCEGLOBALSCHEDULERBLOCKWORKERRESOURCELIMIT
-#define HCEGLOBALSCHEDULERBLOCKWORKERRESOURCELIMIT 1
+#ifndef HCEREUSABLEBLOCKWORKERGLOBALSCHEDULERLIMIT
+#define HCEREUSABLEBLOCKWORKERGLOBALSCHEDULERLIMIT 1
 #endif 
 
 // the default limit of reusable block workers for scheduler caches
-#ifndef HCEDEFAULTSCHEDULERBLOCKWORKERRESOURCELIMIT
-#define HCEDEFAULTSCHEDULERBLOCKWORKERRESOURCELIMIT 0
+#ifndef HCEREUSABLEBLOCKWORKERDEFAULTSCHEDULERLIMIT
+#define HCEREUSABLEBLOCKWORKERDEFAULTSCHEDULERLIMIT 0
 #endif 
 
 /*
@@ -114,97 +114,46 @@
 #endif
 
 // the limit of reusable coroutine resources for in threadpool schedulers
-#ifndef HCETHREADPOOLCOROUTINERESOURCELIMIT
-#define HCETHREADPOOLCOROUTINERESOURCELIMIT HCESCHEDULERDEFAULTCOROUTINERESOURCELIMIT
+#ifndef HCEREUSABLECOROUTINEHANDLETHREADPOOLLIMIT
+#define HCEREUSABLECOROUTINEHANDLETHREADPOOLLIMIT HCEREUSABLECOROUTINEHANDLEDEFAULTSCHEDULERLIMIT
 #endif 
 
-#ifndef HCETIMERSERVICEBUSYWAITMICROSECONDTHRESHOLD
-#define HCETIMERSERVICEBUSYWAITMICROSECONDTHRESHOLD 5000
+#ifndef HCETIMERBUSYWAITMICROSECONDTHRESHOLD
+#define HCETIMERBUSYWAITMICROSECONDTHRESHOLD 5000
 #endif
 
-#ifndef HCETIMERSERVICEEARLYWAKEUPMICROSECONDTHRESHOLD
-#define HCETIMERSERVICEEARLYWAKEUPMICROSECONDTHRESHOLD 10000
+#ifndef HCETIMEREARLYWAKEUPMICROSECONDTHRESHOLD
+#define HCETIMEREARLYWAKEUPMICROSECONDTHRESHOLD 10000
 #endif
 
-#ifndef HCETIMERSERVICEEARLYWAKEUPMICROSECONDLONGTHRESHOLD
-#define HCETIMERSERVICEEARLYWAKEUPMICROSECONDLONGTHRESHOLD 250000
+#ifndef HCETIMEREARLYWAKEUPMICROSECONDLONGTHRESHOLD
+#define HCETIMEREARLYWAKEUPMICROSECONDLONGTHRESHOLD 250000
 #endif
 
+hce::spinlock hce::lifecycle::slk_;
 hce::lifecycle* hce::lifecycle::instance_ = nullptr;
+
+// define all the global (process-wide) configs
+hce::lifecycle::config::logging hce::lifecycle::config::logging::global_;
+hce::lifecycle::config::memory hce::lifecycle::config::memory::global_;
+hce::lifecycle::config::allocator hce::lifecycle::config::allocator::global_;
+hce::lifecycle::config::scheduler hce::lifecycle::config::scheduler::global_(
+    hce::lifecycle::config::memory::global_);
+hce::lifecycle::config::threadpool hce::lifecycle::config::threadpool::global_(
+    hce::lifecycle::config::memory::global_);
+hce::lifecycle::config::blocking hce::lifecycle::config::blocking::global_;
+hce::lifecycle::config::timer hce::lifecycle::config::timer::global_;
 
 hce::lifecycle::config::logging::logging() :
     loglevel(HCELOGLEVEL)
 { }
 
-hce::lifecycle::config::memory::memory() :
-    system(nullptr),
-    global(nullptr),
-    scheduler(nullptr),
-    pool_allocator_default_block_limit(HCEPOOLALLOCATORDEFAULTBLOCKLIMIT)
-{ }
-
-hce::lifecycle::config::scheduler::scheduler() :
-    default_resource_limit(HCESCHEDULERDEFAULTCOROUTINERESOURCELIMIT),
-    global([]() -> hce::scheduler::config {
-        hce::scheduler::config c;
-        c.log_level = hce::logger::default_log_level();
-        c.coroutine_resource_limit = HCEGLOBALSCHEDULERCOROUTINERESOURCELIMIT;
-        return c;
-    }()),
-    standard([]() -> hce::scheduler::config {
-        hce::scheduler::config c;
-        c.log_level = hce::logger::default_log_level();
-        c.coroutine_resource_limit = HCETHREADPOOLCOROUTINERESOURCELIMIT;
-        return c;
-    }())
-{ }
-
-hce::lifecycle::config::threadpool::threadpool() :
-    count(HCETHREADPOOLSCHEDULERCOUNT),
-    config([]() -> hce::scheduler::config {
-        hce::scheduler::config c;
-        c.log_level = hce::logger::default_log_level();
-        c.coroutine_resource_limit = HCETHREADPOOLCOROUTINERESOURCELIMIT;
-        return c;
-    }()),
-    algorithm(&(hce::threadpool::lightest))
-{ }
-
-hce::lifecycle::config::blocking::blocking() :
-     process_worker_resource_limit(HCEPROCESSBLOCKWORKERRESOURCELIMIT),
-     global_scheduler_worker_resource_limit(HCEGLOBALSCHEDULERBLOCKWORKERRESOURCELIMIT),
-     default_scheduler_worker_resource_limit(HCEDEFAULTSCHEDULERBLOCKWORKERRESOURCELIMIT)
-{ }
-
-hce::lifecycle::config::timer::timer() :
-    busy_wait_threshold(
-        std::chrono::microseconds(
-            HCETIMERSERVICEBUSYWAITMICROSECONDTHRESHOLD)),
-    early_wakeup_threshold(
-        std::chrono::microseconds(
-            HCETIMERSERVICEEARLYWAKEUPMICROSECONDTHRESHOLD)),
-    early_wakeup_long_threshold(
-        std::chrono::microseconds(
-            HCETIMERSERVICEEARLYWAKEUPMICROSECONDLONGTHRESHOLD)),
-    algorithm(&(hce::timer::service::default_timeout_algorithm))
-{ }
-
 // provides default memory cache info implementations and necessary globals
-struct info_impl {
-    static hce::config::memory::cache::info& get() {
-        // get the runtime thread type
-        auto type = hce::config::memory::cache::info::thread::get_type();
-
-        // select the proper implementation based on the thread type
-        return type == hce::config::memory::cache::info::thread::type::system 
-            ? *system_info_
-            : type == hce::config::memory::cache::info::thread::type::global
-                ? *global_info_
-                : *scheduler_info_;
-    }
-
-    struct info_impl_ : public hce::config::memory::cache::info {
-        info_impl_(const std::size_t bucket_count, const std::size_t byte_limit) { 
+struct info {
+    struct impl : public hce::config::memory::cache::info {
+        impl(const char* name, const std::size_t bucket_count, const std::size_t byte_limit) :
+            name_(name)
+        { 
             // ensure the vector has enough memory for all the buckets via a
             // single allocation
             buckets_.reserve(bucket_count);
@@ -223,95 +172,151 @@ struct info_impl {
             }
         }
 
-        inline std::size_t count() const { return buckets_.size(); }
+        const char* name() const { return name_; }
 
-        inline hce::config::memory::cache::info::bucket& at(std::size_t idx) {
+        std::size_t count() const { return buckets_.size(); }
+
+        hce::config::memory::cache::info::bucket& at(std::size_t idx) {
             return buckets_[idx];
         }
 
-        inline hce::config::memory::cache::info::index_function indexer() {
-            return &info_impl_::index_function_;
-        }
-
     private:
-        static inline std::size_t index_function_(const std::size_t size) {
-            /*
-             Refers to buckets that hold block sizes that are powers of 2 
-             1, 2, 4, 8, 16, etc.
-
-             This function when given a block size will return an index which 
-             matches the vector returned from buckets() that can hold the block:
-             0, 1, 2, 3, 4, etc.
-             */
-
-            // std::bit_width(size) returns 1-based index of the highest set bit
-            int index = std::bit_width(size) - 1;
-
-            // If size is not a power of two, increment index
-            if ((size & (size - 1)) != 0) {
-                ++index;
-            }
-
-            return index;
-        }
-
+        const char* name_;
         std::vector<hce::config::memory::cache::info::bucket> buckets_;
     };
 
     // the number of buckets in a memory cache, each holding allocated bytes 
     // of some power of 2
-    static constexpr std::size_t bucket_count_ = HCETHREADLOCALMEMORYBUCKETCOUNT;
+    static constexpr std::size_t bucket_count_ = HCEMEMORYCACHEBUCKETCOUNT;
 
     // get the largest bucket block size, which is a power of 2
     static constexpr std::size_t largest_bucket_block_size_ = 
-        1 << (HCETHREADLOCALMEMORYBUCKETCOUNT - 1);
+        1 << (HCEMEMORYCACHEBUCKETCOUNT - 1);
 
-    static constexpr std::size_t system_byte_limit_ = HCESYSTEMMEMORYBUCKETBYTELIMIT;
-    static constexpr std::size_t global_byte_limit_ = HCEGLOBALMEMORYBUCKETBYTELIMIT;
-    static constexpr std::size_t scheduler_byte_limit_ = HCESCHEDULERMEMORYBUCKETBYTELIMIT;
+    static constexpr std::size_t system_byte_limit_ = HCEMEMORYCACHESYSTEMBUCKETBYTELIMIT;
+    static constexpr std::size_t global_byte_limit_ = HCEMEMORYCACHEGLOBALBUCKETBYTELIMIT;
+    static constexpr std::size_t scheduler_byte_limit_ = HCEMEMORYCACHESCHEDULERBUCKETBYTELIMIT;
 
-    static info_impl_ system_impl_;
-    static info_impl_ global_impl_;
-    static info_impl_ scheduler_impl_;
-    static hce::config::memory::cache::info* system_info_;
-    static hce::config::memory::cache::info* global_info_;
-    static hce::config::memory::cache::info* scheduler_info_;
+    static hce::config::memory::cache::info::index_t indexer(const std::size_t size) {
+        /*
+         Refers to buckets that hold block sizes that are powers of 2 
+         1, 2, 4, 8, 16, etc.
+
+         This function when given a block size will return an index which 
+         matches the vector returned from buckets() that can hold the block:
+         0, 1, 2, 3, 4, etc.
+         */
+
+        // std::bit_width(size) returns 1-based index of the highest set bit
+        hce::config::memory::cache::info::index_t index = std::bit_width(size) - 1;
+
+        // If size is not a power of two, increment index
+        if ((size & (size - 1)) != 0) {
+            ++index;
+        }
+
+        return index;
+    }
+
+    static impl system_impl_;
+    static impl global_impl_;
+    static impl scheduler_impl_;
 };
     
-info_impl::info_impl_ 
-info_impl::system_impl_(
-    info_impl::bucket_count_, 
-    info_impl::system_byte_limit_);
+info::impl info::system_impl_("system", info::bucket_count_, info::system_byte_limit_);
+info::impl info::global_impl_("global", info::bucket_count_, info::global_byte_limit_);
+info::impl info::scheduler_impl_("scheduler", info::bucket_count_, info::scheduler_byte_limit_);
 
-info_impl::info_impl_ 
-info_impl::global_impl_(
-    info_impl::bucket_count_, 
-    info_impl::global_byte_limit_);
+hce::config::scheduler::config::config() :
+    loglevel(HCELOGLEVEL),
+    reusable_coroutine_handle_limit(HCEREUSABLECOROUTINEHANDLEDEFAULTSCHEDULERLIMIT),
+    // pull directly from the global memory config
+    cache_info(hce::lifecycle::config::memory::global_.scheduler) 
+{ }
 
-info_impl::info_impl_ 
-info_impl::scheduler_impl_(
-    info_impl::bucket_count_, 
-    info_impl::scheduler_byte_limit_);
+hce::lifecycle::config::memory::memory() :
+    indexer(&(info::indexer)),
+    system(&(info::system_impl_)),
+    global(&(info::global_impl_)),
+    scheduler(&(info::scheduler_impl_))
+{ }
 
-hce::config::memory::cache::info* info_impl::system_info_ = &(info_impl::system_impl_);
-hce::config::memory::cache::info* info_impl::global_info_ = &(info_impl::global_impl_);
-hce::config::memory::cache::info* info_impl::scheduler_info_ = &(info_impl::scheduler_impl_);
+hce::lifecycle::config::allocator::allocator() :
+    pool_allocator_default_block_limit(HCEPOOLALLOCATORDEFAULTBLOCKLIMIT)
+{ }
 
-hce::config::memory::cache::info& hce::config::memory::cache::info::get() {
-    return info_impl::get();
-}
+hce::lifecycle::config::scheduler::scheduler(const hce::lifecycle::config::memory& m) :
+    global_config([&]() -> hce::config::scheduler::config {
+        hce::config::scheduler::config c;
+        c.loglevel = HCELOGLEVEL;
+        c.reusable_coroutine_handle_limit = HCEREUSABLECOROUTINEHANDLEGLOBALSCHEDULERLIMIT;
+        c.cache_info = m.global;
+        return c;
+    }())
+{ }
 
-// allow for custom memory::cache configurations to be used
-hce::lifecycle::memory_init::memory_init(const hce::lifecycle::config& c) {
-    if(c.mem.system) {
-        info_impl::system_info_ = c.mem.system;
-    }
+hce::lifecycle::config::threadpool::threadpool(const hce::lifecycle::config::memory& m) :
+    count(HCETHREADPOOLSCHEDULERCOUNT),
+    worker_config([&m]() -> hce::config::scheduler::config {
+        hce::config::scheduler::config c;
+        c.loglevel = HCELOGLEVEL;
+        c.reusable_coroutine_handle_limit = HCEREUSABLECOROUTINEHANDLETHREADPOOLLIMIT;
+        c.cache_info = m.scheduler;
+        return c;
+    }()),
+    algorithm(&(hce::threadpool::service::lightest))
+{ }
 
-    if(c.mem.global) {
-        info_impl::global_info_ = c.mem.global;
-    }
+hce::lifecycle::config::blocking::blocking() :
+     reusable_block_worker_cache_size(HCEREUSABLEBLOCKWORKERCACHESIZE)
+{ }
 
-    if(c.mem.scheduler) { 
-        info_impl::system_info_ = c.mem.system;
-    }
+hce::lifecycle::config::timer::timer() :
+    priority([]() -> int {
+#ifdef _WIN32
+            return THREAD_PRIORITY_ABOVE_NORMAL;
+#elif defined(_POSIX_VERSION)
+            // Calculate the priority range
+            int min_priority = sched_get_priority_min(SCHED_OTHER);
+            int max_priority = sched_get_priority_max(SCHED_OTHER);
+
+            // Calculate an intelligent high priority (somewhere near the maximum), 
+            // 80% of max priority
+            return min_priority + (max_priority - min_priority) * 0.8;  
+#else 
+            return 0;
+#endif 
+    }()),
+    busy_wait_threshold(
+        std::chrono::microseconds(
+            HCETIMERBUSYWAITMICROSECONDTHRESHOLD)),
+    early_wakeup_threshold(
+        std::chrono::microseconds(
+            HCETIMEREARLYWAKEUPMICROSECONDTHRESHOLD)),
+    early_wakeup_long_threshold(
+        std::chrono::microseconds(
+            HCETIMEREARLYWAKEUPMICROSECONDLONGTHRESHOLD)),
+    algorithm(&(hce::timer::service::default_timeout_algorithm))
+{ }
+
+hce::lifecycle::logging_init::logging_init() {
+    struct do_once {
+        do_once() {
+            std::stringstream ss;
+            ss << "-v" << hce::config::logging::default_log_level();
+            std::string process("hce");
+            std::string verbosity = ss.str();
+
+            // Create raw char pointers for argc/argv
+            const char* argv[] = {process.c_str(), verbosity.c_str(), nullptr};
+            int argc = 2; // Number of actual arguments (excluding the nullptr)
+
+            loguru::Options opt;
+            opt.main_thread_name = nullptr;
+            opt.signal_options = loguru::SignalOptions::none();
+            loguru::init(argc, const_cast<char**>(argv), opt);
+        }
+    };
+
+    static do_once d; // static so init only happens once
 }

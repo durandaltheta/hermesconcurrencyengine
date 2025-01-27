@@ -9,7 +9,7 @@
 
 #include "utility.hpp"
 #include "logging.hpp"
-#include "pool_allocator.hpp"
+#include "alloc.hpp"
 
 namespace hce {
 
@@ -33,20 +33,17 @@ namespace hce {
  - lazy allocated value construction
 
  Design Limitations:
- - can only iterate from front to back (singly linked)
  - can only read and pop from head (singly linked)
  - no iterator support
  - no support for arbitrary insertion or erasure
  - no support for sorting capabilities
 
- This is preferred by this project over `std::deque<T>` because it doesn't have 
- fast concatenation which directly impacts the processing loop of 
+ This is preferred by this project over `std::deque<T>` because that object 
+ doesn't have fast concatenation which directly impacts the processing loop of 
  hce::scheduler.
 
  The allocator for this object is an `hce::pool_allocator`, limiting the 
- synchronization cost of frequent allocations/deallocations. `block_limit` can 
- be specified during construction to set the maximum count of elements the 
- allocator can cache for reuse.
+ synchronization cost of frequent allocations/deallocations. 
  */
 template <typename T, typename Allocator = hce::pool_allocator<T>>
 struct list : public printable {

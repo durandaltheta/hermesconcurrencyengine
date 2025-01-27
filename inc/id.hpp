@@ -9,7 +9,7 @@
 #include <sstream>
 
 #include "logging.hpp"
-#include "memory.hpp"
+#include "alloc.hpp"
 
 namespace hce {
 

@@ -3,23 +3,29 @@
 #ifndef __HCE_COROUTINE_ENGINE_TEST_MEMORY_HELPERS__
 #define __HCE_COROUTINE_ENGINE_TEST_MEMORY_HELPERS__
 #include <vector>
+#include <string>
 
 #include "logging.hpp"
 #include "memory.hpp"
 #include "coroutine.hpp"
+#include "lifecycle.hpp"
 
 namespace test {
 namespace memory {
 
 inline void cache_info_check(
-        hce::config::memory::cache::info::thread::type expected_type)
+        const char* expected_name, 
+        const hce::config::memory::cache::info* expected_impl)
 {
-    HCE_INFO_FUNCTION_ENTER("test::memory::cache_info_check_co", expected_type);
+    HCE_INFO_FUNCTION_ENTER("test::memory::cache_info_check_co", expected_impl);
     auto& info = hce::config::memory::cache::info::get();
-    auto actual_type = hce::config::memory::cache::info::thread::get_type();
+    auto* actual_impl = &(info);
 
-    EXPECT_EQ(expected_type, actual_type);
-    EXPECT_EQ(HCETHREADLOCALMEMORYBUCKETCOUNT, info.count());
+    std::string expected_name_str(expected_name);
+    std::string actual_name_str(info.name());
+    EXPECT_EQ(expected_name_str, actual_name_str);
+    EXPECT_EQ(expected_impl, actual_impl);
+    EXPECT_EQ(HCEMEMORYCACHEBUCKETCOUNT, info.count());
 
     for(size_t i=0; i<info.count(); ++i) { 
         auto& bucket = info.at(i);
@@ -40,19 +46,20 @@ inline void cache_info_check(
 }
 
 inline hce::co<void> cache_info_check_co(
-        hce::config::memory::cache::info::thread::type expected_type) 
+        const char* expected_name,
+        const hce::config::memory::cache::info* expected_impl)
 {
-    cache_info_check(expected_type);
+    cache_info_check(expected_name, expected_impl);
     co_return;
 }
 
 inline void cache_allocate_deallocate() {
     auto& cache = hce::memory::cache::get();
 
-    EXPECT_EQ(HCETHREADLOCALMEMORYBUCKETCOUNT, cache.count());
+    EXPECT_EQ(HCEMEMORYCACHEBUCKETCOUNT, cache.count());
 
     // ensure caching works for each bucket
-    for(size_t i=0; i < HCETHREADLOCALMEMORYBUCKETCOUNT; ++i) {
+    for(size_t i=0; i < HCEMEMORYCACHEBUCKETCOUNT; ++i) {
         const size_t cur_bucket_block_size = 1 << i;
         const size_t prev_bucket_block_size = i ? 1 << (i-1) : 0;
             

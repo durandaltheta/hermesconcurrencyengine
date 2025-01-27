@@ -62,7 +62,7 @@ void concurrent_simple_communication_op(
             awts.reserve(repeat);
 
             for(std::uint64_t c=0; c<repeat; ++c) {
-                hce::channel<int> ch0, ch1;
+                hce::chan<int> ch0, ch1;
                 ch0.construct<LOCK>(0);
                 ch1.construct<LOCK>(0);
                 awts.push_back(hce::threadpool::schedule(ops::com0(ch0,ch1,recv_total)));
@@ -75,8 +75,8 @@ void concurrent_simple_communication_op(
         }
 
         static inline hce::co<void> com0(
-                hce::channel<int> ch0,
-                hce::channel<int> ch1,
+                hce::chan<int> ch0,
+                hce::chan<int> ch1,
                 std::uint64_t recv_total) {
             auto awt = hce::schedule(ops::com1(ch0,ch1,recv_total));
             int message;
@@ -90,8 +90,8 @@ void concurrent_simple_communication_op(
         }
 
         static inline hce::co<void> com1(
-                hce::channel<int> ch0,
-                hce::channel<int> ch1,
+                hce::chan<int> ch0,
+                hce::chan<int> ch1,
                 std::uint64_t recv_total) {
             int message;
 

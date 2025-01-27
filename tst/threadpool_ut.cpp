@@ -247,25 +247,23 @@ TEST(threadpool, join_schedule) {
 }
 
 TEST(threadpool, cache_info) {
-    auto& tp_schs = hce::threadpool::get().schedulers();
+    auto& tp_schs = hce::threadpool::service::get().schedulers();
 
     EXPECT_TRUE(tp_schs.size() > 0);
 
-    std::vector<hce::awt<void>> awts;
-
-    awts.push_back(tp_schs[0]->schedule(
-        test::memory::cache_info_check_co(
-            hce::config::memory::cache::info::thread::type::global)));
+    hce::lifecycle::config c;
+    tp_schs[0]->schedule(test::memory::cache_info_check_co("global", c.mem.global));
 
     for(size_t i=1; i<tp_schs.size(); ++i) {
-        awts.push_back(tp_schs[i]->schedule(
+        tp_schs[i]->schedule(
             test::memory::cache_info_check_co(
-                hce::config::memory::cache::info::thread::type::scheduler)));
+                "scheduler", 
+                c.mem.scheduler));
     }
 }
 
 TEST(threadpool, cache_allocate_deallocate) {
-    auto& tp_schs = hce::threadpool::get().schedulers();
+    auto& tp_schs = hce::threadpool::service::get().schedulers();
 
     EXPECT_TRUE(tp_schs.size() > 0);
 
