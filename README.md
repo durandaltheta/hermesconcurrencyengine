@@ -416,7 +416,7 @@ Coroutines and all other awaitable operations must be awaited be awaited by user
 
 The possible exception is if the user stores `hce::awt<T>` objects as global variables. It is technically possible to structure code to do this correctly but it *EXTREMELY DISCOURAGED* because the order of object destruction (IE, global `hce::scheduler::lifecycle`s) is very hard to guarantee. A much more reliable design is to store one or more root awaitables (or `hce::scope` multiple root awaitables) on the `main()` thread's stack so that it goes out of scope before `main()` returns.
 
-## Communication 
+## Communication
 This library allows communication between coroutines, threads, and any combination there-in using `hce::channel<T>`s. 
 
 `hce::channel<T>` is a specialized communication mechanism which works correctly for both `hce` coroutines (running in an `hce::scheduler`) and system threads. `T` is the type of data sent and received through channel. The default constructed `hce::channel<T>` with `hce::channel<T>::make()` is unbuffered (has no internal storage, data is transferred directly between pointer addresses), which is extremely lightweight and efficient for coroutine to coroutine communication, especially for coroutines running on the same `hce::scheduler` (the same system thread).
