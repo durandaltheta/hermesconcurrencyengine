@@ -1,10 +1,10 @@
 # Hermes Concurrency Engine
-C++20 Stackless Coroutine Concurrency Engine
+C++20 Stackless Coroutine Concurrency Engine 
 
 ## Rationale
-`c++20` coroutines are an extremely powerful and efficient mechanism for writing concurrent code. They are also one of the most difficult parts of the language to use correctly.
+`c++20` `coroutines` are an extremely powerful and efficient mechanism for writing concurrent code. They are also one of the most difficult parts of the language to use correctly.
 
-This framework is designed to make using and scheduling `c++20` coroutines easy and to make integration into existing codebases simple.
+This framework is designed to make using `c++20` `coroutines` in real code easy and to make integration into existing codebases simple.
 
 ### Example
 A simple example where a coroutine is constructed, scheduled, and communicated with asynchronously. 
@@ -23,19 +23,17 @@ hce::co<void> my_coroutine(hce::channel<int> ch) {
 }
 
 int main() {
-    auto lifecycle = hce::initialize(); // start the framework
     auto ch = hce::channel<int>::make();
-    auto awt = hce::schedule(my_coroutine(ch));
+    hce::schedule(my_coroutine(ch));
     ch.send(1);
     ch.send(2);
     ch.send(3);
     ch.close();
-    // awt destructs and blocks until my_coroutine returns
     return 0;
 }
 ```
 
-Usage and output (after building code examples with `make hce_ex`):
+Usage and output (after building with `make hce_ex`):
 ```
 $ ./ex/example_001
 received: 1
@@ -47,24 +45,21 @@ $
 ## License 
 This project utilizes the MIT license.
 
-## Building
+## Building the Library
 ### Prerequisites 
-WARNING: This project is currently only tested with `g++`.
-- `c++20` compiler toolchain (eg, `g++`, `clang`, etc.)  
+- `c++20` compiler toolchain (eg, `gcc`, `clang`, etc.) 
 - `cmake`
 
-Because usage of this library depends only on the `c++` language, in theory, it should be usable on different operating systems that support a `c++20` toolchain. 
+Because usage of this library depends only on the `c++` language, in theory, it should be usable on different operating systems. Actual testing on the target platform with `script/validate` is highly recommended to verify behavior.
 
 ### Build 
-A default build from within this repository can be built with:
+Set your environment variables (IE, `HCELOGLEVEL`, etc.) and execute:
 ```
 cmake .
 make hce
 ```
 
-`libhce.a` can then be statically linked against by user software. The project directories `inc/` and `loguru/` will need to be added somehow as user software include directories.
-
-See the [building primer](building.md) for additional building information.
+`hce.a` can then be statically linked against by user software. The directories `inc/` and `loguru/` will need to be added to user software include directories.
 
 ## Documentation
 ### Prerequisites 
@@ -72,88 +67,71 @@ See the [building primer](building.md) for additional building information.
 - `graphviz`
 
 ### Generate
-`doxygen` documentation can be generated locally for this library. Install `doxygen` and `graphviz` packages then run `doxygen` in the project root:
+`doxygen` documentation can be generated locally for this library. Install `doxygen` and `graphviz` packages then run `doxygen`:
 ```
+cd /path/to/your/mce/repo/checkout
 doxygen
 ```
-The generated `doc/` directory should contain both `html` and `rtf` generated documentation. For `html`, open `index.html` by a browser to view the documentation. The generated documentation will contain a *lot* more information than this readme, and is recommended for non-trivial usecases.
+The generated `doc/` directory should contain both `html` and `rtf` generated documentation. For `html`, open `index.html` by a browser to view the documentation. 
 
 ## Unit Tests
-### Prerequisites 
-- `c++20` compiler toolchain (eg, `gcc`, `clang`, etc.) 
+### Prerequisites
+- `python3`
 - `cmake`
+- `gcc` or `clang` compiler toolchain
 
-### Build 
+### Build and Run
+Build and execute tests with `validate` script from this repository's root directory (example with `gcc`):
 ```
-cmake .
-make hce_ut
-```
-
-Run with:
-```
-./tst/hce_ut
+./validate gcc basic
 ```
 
-Tests can run for some time, particularly when testing timers. To see what what is happening during tests ensure at least "INFO" loglevel is enabled:
+The `cmake` unit test target is `hce_ut`, and this can be built separately from the `validate` frontend with `cmake .; make -j hce_ut`. `validate` is very useful for quickly configuring the project in various ways to test different things.
+
+`validate` can be configured with either `gcc` or `clang`:
 ```
-cmake -DHCELOGLEVEL=0 -DHCELOGLIMIT=0 .
-make hce_ut
+./validate clang basic
 ```
 
-See the [testing primer](testing.md) for more information on validation.
+`validate` has a number of configurations it can build and execute tests:
+- `basic`: all unit tests (without compiler optimizations)
+- `log`: all unit tests with maximum debug logging enabled (without compiler optimizations)
+- `mem`: all unit tests with address sanitization enabled (without compiler optimizations) 
+- `jitter`: non-timing unit tests compiled and executed with many variations of loglevels to check for random timing errors (without compiler optimizations)
+- `release`: all unit tests with maximum compiler optimizations
+- `ALL`: build an execute each configuration sequentially
 
-## Integration
-See the [integration primer](integration.md) for tips on integrating this library into a codebase.
+`ALL` is useful for doing a broad sanity test to ensure everything is working before a public release.
 
-## HCE Coroutines
-`c++20` coroutines are specialized, lightweight "function-like" objects (Functors) generated by the compiler. A `c++20` coroutine behaves as a function that is capable of suspending (pausing execution) at various points, only to resume execution at some future point. The underlying mechanics of how this is accomplished are complex to understand and generally unnecessary to learn in order to use this library. 
+`validate` output is stored in a log in the project root named `validate.log`. 
 
-Coroutines are valuable because they are orders of magnitude faster to context switch (that is, change which one is actively executing) than the operating system equivalent of a "system thread" (POSIX `pthread`s and/or `c++` `std::thread`s). This makes executing code which needs to handle multiple simultaneous tasks (that may or may not execute on the same CPU core) written with coroutines potentially *MUCH* faster and more resource efficient (`coroutine`s are very lightweight) than the same done with only system threads.
+## Framework Valid Coroutines
+`c++20` coroutines are specialized object generated by the compiler. A `c++20` coroutine behaves as a function that is capable of suspending (pausing execution) at various points. The underlying mechanics of how this is accomplished are quite complex to understand. 
 
 It is enough for using this framework that each `hce` compatible coroutine must:
-
-1. The `hce` coroutine function must specify its return value is the object `hce::co<COROUTINE_RETURN_TYPE>`. `COROUTINE_RETURN_TYPE` is the type of the returned value by the `co_return` statement.
-
-```
-hce::co<int> my_coroutine_returning_int() {
-    co_return 3;
-}
-```
-
-`void` is a valid "return" type:
-```
-hce::co<void> my_coroutine_returning_void() {
-    co_return;
-}
-```
-
-2. utilize one or more of the following `c++20` `std::coroutine` keywords:
+1. utilize one or more of the following `c++20` `std::coroutine` keywords:
 ```
 co_return // coroutine specific 'return' statement
-co_await // used to safely block a coroutine on a returned awaitable object and get the result (if any) of the operation
+co_await // used to safely block a coroutine on a returned awaitable object
 ``` 
 
-NOTE: `awaitable` objects are returned from various functions in this framework with the type `hce::awt<AWAITABLE_RETURN_TYPE>`. They are used to suspend execution (block) coroutines until an operation completes, upon which the coroutine will resume execution. `AWAITABLE_RETURN_TYPE` is the type returned from the `co_await` statement:
+NOTE: `awaitable` objects are returned from various functions in this framework with the type `hce::awt<AWAITABLE_RETURN_TYPE`. `AWAITABLE_RETURN_TYPE` is the type returned from the awaitable when `co_awaited`:
 ```
 // given this function
-hce::awt<int> my_function_returning_an_int_awaitable();
+hce::awt<int> awaitable_function();
 
 // this coroutine co_awaits the result of function_returning_awt_int()
 hce::co<int> my_coroutine() {
-    int my_result = co_await my_function_returning_an_int_awaitable();
+    int my_result = co_await function_returning_awt_int();
     co_return my_result;
 }
 ```
 
-An `hce::awt<T>` can be directly converted to type `T` (or go out of scope) in a non-coroutine (IE, regular code) to block and get the result of an awaitable operation:
-```
-// given this function
-hce::awt<int> my_function_returning_an_int_awaitable();
+2. The `hce` coroutine function must specify its return value is the object `hce::co<COROUTINE_RETURN_TYPE>`. `COROUTINE_RETURN_TYPE` is the type of the returned value by the `co_return` statement.
 
-// this non-coroutine awaits the result of function_returning_awt_int()
-int my_regular_code() {
-    int my_result = my_function_returning_an_int_awaitable();
-    return my_result;
+```
+hce::co<int> my_coroutine_returning_int() {
+    co_return 3;
 }
 ```
 
@@ -189,7 +167,13 @@ hce::co<int> outer_frame() {
 }
 ```
 
-### Further Examples and Explanations
+When an `hce` coroutine is first invoked, it does not immediately run. Instead it constructs the `hce::co<T>` return object. This object can be passed to a `hce` scheduling operation, such as `hce::schedule()` and `hce::join()` so that it will actually execute.
+
+WARNING: `lambda` functions, as well as Functors (objects with implement the Call operator `()`), can be coroutines. HOWEVER, there are very specific rules on what data is available to the coroutine function when it executes. The shorthand is: do not use `lambda` captures or object members within a coroutine body, pass them in as arguments somehow. For Functors, ensure the coroutine is a `static` function. See https://en.cppreference.com/w/cpp/language/coroutines for complicated details.
+
+Generate `Doxygen` documentation to see more for `hce` coroutine creation.
+
+### Additional Examples
 ```
 #include <string> 
 #include <hce.hpp>
@@ -202,57 +186,19 @@ hce::co<int> int_return_coroutine() {
     co_return 5;
 }
 
-hce::co<std::string> string_return_coroutine_with_arguments(int arg1, std::string arg2) {
+hce::co<std::string> coroutine_with_arguments(int arg1, std::string arg2) {
     co_return std::to_string(arg1) + arg2;
 }
 ```
 
-When an `hce` coroutine is first invoked, it does not immediately run. Instead it constructs the `hce::co<T>` return object. This object can be passed to a `hce` scheduling operation, such as `hce::schedule()` so that it will actually execute.
-
-WARNING: `lambda` functions, as well as Functors (objects with implement the Call operator `()` implemented), can be coroutines. HOWEVER, there are very specific rules on what data is available to the coroutine function when it executes. The shorthand is: do not use `lambda` captures or Functor object members within a coroutine body, pass them in as function arguments. For Functors, ensure the coroutine is a `static` function. See [the en.cppreference.com coroutine documentation](https://en.cppreference.com/w/cpp/language/coroutines) for the complicated details.
-
-Generate `Doxygen` documentation to see more for `hce` coroutine creation.
-
-## Starting the Framework
-To initialize the framework user code is responsible for calling `hce::initialize()` and holding onto the resulting `std::unique_ptr`. The returned pointer should stay in scope until all other `hce` operations have completed and joined:
-```
-#include <hce/hce.hpp>
-
-int main() {
-    auto lifecycle = hce::initialize();
-    // ... user code...
-    return 0; // lf goes out of scope and the framework shuts down
-}
-```
-
-`hce::initialize()` can optionally accept a `hce::lifecycle::config` object which allows runtime customization of the `hce` framework:
-```
-#include <hce/hce.hpp>
-
-int main() {
-    hce::lifecycle::config cfg;
-    cfg.log.loglevel = 6;
-    auto lifecycle = hce::initialize(cfg);
-    // ... user code...
-    return 0;
-}
-```
-
-The default values in an `hce::lifecycle::config` are defined by `CMake` compiler defines. See [building primer](building.md) for additional information on these defines. The various `hce::config::` functions fetch their values from the `hce::lifecycle`'s `hce::lifecycle::config` object.
-
-Generate `Doxygen` documentation to see more for `hce::lifecycle::config` and `hce::config::` functions and the associated `HCE` compiler defines setting defaults.
-
-NOTE: One compiler define affects both this library AND user code, and is not configurable using the `hce::lifecycle::config` mechanism: `HCELOGLIMIT`. This value is a compile time constant only, and limits what debug logging code is compiled. See [logging primer](logging.md) for additional information.
-
 ## Scheduling
-This library includes high level, and very efficient, scheduling operations:
+This library includes high level scheduling operations:
 ```
-hce::awt<CO_RETURN_TYPE> hce::schedule(co): Schedule a coroutine for execute. Returned awaitable joins with the coroutine, blocking and returning the coroutine's return value (IE, `hce::co<CO_RETURN_TYPE>`).
-hce::awt<CALLABLE_RETURN_TYPE> hce::block(Callable, args...): Call a Callable (function, Functor or lambda) on a thread guaranteed to not be running an `hce::scheduler` or `hce::coroutine`. This allows said Callable to execute without blocking the calling coroutine's thread. The returned awaitable allows the coroutine to join with the result, returning `Callable`'s return value.
-hce::awt<void> hce::sleep(... duration args...): Block a coroutine for a period of time
-hce::awt<bool> hce::timer::start(hce::sid&, ... duration args...): Block a coroutine for a period of time on the global scheduler, cancellable with the referenced sid constructed by this call. The awaitable returns `true` if timer successfully timed out, otherwise is `false` if cancelled.
-bool hce::timer::running(const hce::sid&): Return `true` if the timer is running, else `false`
-bool hce::timer::cancel(const hce::sid&): Cancel running timer on the global scheduler early, return `true` if successful, else `false`
+hce::schedule(co, ...): Schedule one or more coroutines
+hce::join(co): Schedule and join with a coroutine, returning the coroutine return value
+hce::scope(co, ...): Schedule and join with one or more coroutines, ignoring return values
+hce::sleep(hce::duration): Block a coroutine for a period of time
+hce::block(Callable, args...): Call a function which may block the calling thread and join the coroutine with the result
 ```
 
 A simple example program:
@@ -267,8 +213,7 @@ hce::co<int> my_coroutine(int arg) {
 }
 
 int main() {
-    auto lifecycle = hce::initialize();
-    int my_result = hce::schedule(my_coroutine(14));
+    int my_result = hce::join(my_coroutine(14));
     std::cout << "main joined with my_coroutine and received " << my_result << std::endl;
     return 0;
 }
@@ -282,144 +227,12 @@ main joined with my_coroutine and received 15
 $
 ```
 
-Generate `Doxygen` documentation to see more for `hce::scheduler` creation, configuration and management. 
-
-## Joining
-All scheduled coroutines are joinable with the `hce::awt<T>` returned by `hce::schedule()` calls. `coroutine`s can `co_await` this object to block until the other `coroutine` completes. 
-
-NOTE: Though difficult to achieve, it is possible for a `coroutine` to hold its own `hce::awt<T>`. A `coroutine` `co_await`ing its own `hce::awt<T>` is an ERROR (and a confusing one).
-
-Similarly, non-coroutines can join with `hce::awt<T>`. Assigning an `hce::awt<T>` to a variable `T` will cause it to block the current thread and await the result, assigning the result to the variable. If an `hce::awt<T>` is destroyed without being awaited, it will await during its destructor:
-```
-#include <iostream>
-#include <hce.hpp> 
-
-hce::co<int> co1() {
-    co_return 12;
-}
-
-hce::co<int> co2() {
-    // co_await an awaitable in a coroutine, blocking it
-    co_return co_await hce::schedule(co1());
-}
-
-int main() {
-    auto lifecycle = hce::initialize();
-    // conversion of an hce::awt<T> blocks the thread in a non-coroutine
-    int result = hce::schedule(co2());
-    std::cout <<  "received " << result << std::endl;
-    return 0;
-}
-```
-
-Example output:
-```
-$ ./a.out 
-received 12
-$
-```
-
-Joining a returned `hce::awt<T>` can be delayed by storing the awaitable in a variable. This can be particularly useful in the `main()` or other code running outside of coroutines that doesn't need to block on the coroutine returning:
-```
-#include <iostream>
-#include <hce.hpp> 
-
-hce::co<void> co() {
-    // schedule more coroutines
-    co_await hce::schedule(/*... other coroutines ...*/);
-    // ... do things ...
-    co_return;
-}
-
-int main() {
-    auto lifecycle = hce::initialize();
-    auto awt = hce::schedule(co());
-    // ... do things ...
-    return 0; // destruction of awt finally blocks main()
-}
-```
-
-`coroutine`s can also store `hce::awt<T>`s in variables to delay joining:
-```
-#include <hce.hpp> 
-
-hce::co<void> co1() {
-    co_return;
-}
-
-hce::co<void> co2() {
-    auto awt = hce::schedule(co1());
-    // ... do other things ...
-    co_await awt; 
-    co_return;
-}
-
-int main() {
-    hce::schedule(co2());
-    return 0; }
-```
-
-### Scopes
-Multiple coroutines can be joined simultaneously using an `hce::scope`. `hce::scope`s can be constructed with zero or more `hce::awt<T>`s (of potentially different types `T`!). Additional `hce::awt<T>`s can be added later using `hce::scope::add()`. All added `hce::awt`s can be awaited by awaiting the result of `hce::scope::await()`:
-```
-#include <iostream>
-#include <string>
-#include <hce.hpp> 
-
-hce::co<void> co1() {
-    co_return;
-}
-
-hce::co<std::string> co2() {
-    co_return std:string("this string is ignored");
-}
-
-hce::co<void> synchronizing_co() {
-    co_return co_await hce::scope(hce::schedule(co1()), hce::schedule(co2())).await();
-}
-
-int main() {
-    auto lifecycle = hce::initialize();
-    // schedules synchronizing_co and blocks the main thread (when the returned 
-    // hce::awt<void> destructs) until synchronizing_co returns
-    hce::schedule(synchronizing_co());
-    return 0;
-}
-```
-
-If `hce::scope` destructs in a non-`coroutine` (IE, a standard thread) it will `await()` automatically (blocking the calling thread):
-```
-#include <iostream>
-#include <string>
-#include <hce.hpp> 
-
-hce::co<void> co1() {
-    co_return;
-}
-
-hce::co<std::string> co2() {
-    co_return std:string("this string is ignored");
-}
-
-int main() {
-    auto lifecycle = hce::initialize();
-    // automatically await()s on ~scope()
-    hce::scope(hce::schedule(co1()), hce::schedule(co2()));
-    return 0;
-}
-```
-
-### Detaching?
-Coroutine detaching is not supported. User code should await all operations before `main()` returns.
-
-Coroutines and all other awaitable operations must be awaited be awaited by user code and cannot be detached (unlike operating system threads). It is extremely difficult to properly handle `hce::scheduler` shutdowns with non-deterministic user code when there are no guarantees of structured operation completion. This design (mostly) forces the user to construct their program in such a way that the program cannot exit until they have awaited all launched operations. 
-
-The possible exception is if the user stores `hce::awt<T>` objects as global variables. It is technically possible to structure code to do this correctly but it *EXTREMELY DISCOURAGED* because the order of object destruction (IE, global `hce::scheduler::lifecycle`s) is very hard to guarantee. A much more reliable design is to store one or more root awaitables (or `hce::scope` multiple root awaitables) on the `main()` thread's stack so that it goes out of scope before `main()` returns.
+Generate `Doxygen` documentation to see more for `hce::scheduler` creation, configuration and management.
 
 ## Communication 
-This library allows communication between coroutines, threads, and any combination there-in using `hce::channel<T>`s. 
+This library allows communication between coroutines, threads, and any combination there-in using `hce::channel`s. `hce::channel<T>` can be templated to send any type `T`.
 
-`hce::channel<T>` is a specialized communication mechanism which works correctly for both `hce` coroutines (running in an `hce::scheduler`) and system threads. `T` is the type of data sent and received through channel. The default constructed `hce::channel<T>` with `hce::channel<T>::make()` is unbuffered (has no internal storage, data is transferred directly between pointer addresses), which is extremely lightweight and efficient for coroutine to coroutine communication, especially for coroutines running on the same `hce::scheduler` (the same system thread).
+`hce::channel` is a specialized communication mechanism which works correctly for both `hce` coroutines and system threads.
 
 A simple example program:
 ```
@@ -439,10 +252,10 @@ hce::co<void> my_coroutine(hce::channel<int> in_ch, hce::channel<int> out_ch) {
 }
 
 int main() {
-    auto lifecycle = hce::initialize();
     auto in_ch = hce::channel<int>::make();
     auto out_ch = hce::channel<int>::make();
-    auto awt = hce::schedule(my_coroutine(in_ch, out_ch));
+
+    hce::schedule(my_coroutine(in_ch, out_ch));
 
     // send a value to my_coroutine
     in_ch.send(16); // system threads do not call co_await 
@@ -452,7 +265,6 @@ int main() {
     out_ch.recv(my_result);
 
     std::cout << "main received " << my_result << std::endl;
-    // awt destructs and blocks until my_coroutine returns
     return 0;
 }
 ```
@@ -465,19 +277,12 @@ main joined with my_coroutine and received 17
 $
 ```
 
-`hce::channel`s with a buffered internal queue can also be constructed by passing a buffer size to `hce::channel<T>::make(int buffer_size)`. `hce::channel<T>`s with a buffer will not block on `send()` operations until the buffer becomes full. This can be used to optimize send operations from system threads (non-coroutines), where blocking the entire thread is a much more expensive operation.
-
-Meaning of `buffer_size`:
-`>0`: channel buffer of a specific maximum size (blocks on send if buffer is full)
-`0`: channel buffer of no size (direct point to point data transfer, blocks if no receiver)
-`<0`: channel buffer of unlimited size (never blocks on send)
-
-Generate `Doxygen` documentation to see more, specifically for `hce::channel<T>` unbuffered/buffered/unlimited channel construction and other API.
+Generate `Doxygen` documentation to see more, specifically for `hce::channel<T>` unbuffered/buffered creation and other API.
 
 ## Thread Blocking Calls
-Arbitrary functions which may block a calling coroutine (either for a long or indefinite amount of time) are unsafe to use directly by a coroutine because they will block the calling thread. Doing this will pause the processing of coroutines and in the worst case cause system deadlock. 
+Arbitrary functions which may block a calling coroutine are unsafe to use directly by a coroutine because they will block the calling thread. Doing this will stop the processing of coroutines and in the worst case cause system deadlock. 
 
-Instead, those functions can be executed with a call to `hce::block()` to safely block the coroutine without blocking the `hce::scheduler` owned system thread:
+Instead, those functions can be executed with a call to `hce::block()` to safely block the coroutine without blocking the system thread:
 
 A simple example program:
 ```
@@ -492,15 +297,13 @@ int my_blocking_function(int arg) {
 }
 
 hce::co<void> my_coroutine(int arg) {
-    std::cout << "my_coroutine received " << arg << std::endl;
     // wrapping my_blocking_function in hce::block() allows other coroutines to run
     int my_result = co_await hce::block(my_blocking_function, arg);
     co_return my_result;
 }
 
 int main() {
-    auto lifecycle = hce::initialize();
-    int my_result = hce::schedule(my_coroutine(3));
+    int my_result = hce::join(my_coroutine(3));
     std::cout << "main joined with my_coroutine and received " << my_result << std::endl;
     return 0;
 }
@@ -514,163 +317,142 @@ main joined with my_coroutine and received 4
 $
 ```
 
-`hce::block()` launches and manages system threads as necessary to guarantee operations execute on isolated threads. It is possible to configure an `hce::scheduler` to keep more block worker threads in existence to lower the cost for frequent `hce::block()` operations (see `struct hce::scheduler::config` and `hce::config::global_scheduler_config()` in the `Doxygen` documentation). The count of reusable block workers on the global `scheduler` defaults to 1.
-
-`hce::block()` attempts to be efficient about when it chooses to launch new threads. If it detects that a calling thread is already isolated (either the caller is not a coroutine executing in an `scheduler` OR the `block()` call is executing inside another `block()` call) then it will execute the blocking operation immediately, in-place. Otherwise a thread will be requested from the `scheduler`, which may be reused from an earlier `block()` call.
+`hce::block()` calls launch and self manage system threads to guarantee operations execute in an isolated manner. It is possible to configure an `hce::scheduler` to keep one or more block worker threads in existence to lower the cost for repeated `hce::block()` operations.
 
 Generate `Doxygen` documentation to see more for `hce::block()` and `hce::scheduler` configuration options.
 
 ## Thread Non-Blocking Calls
-Non-blocking calls can be utilized in coroutines by `co_await`ing `hce::yield<RETURN_TYPE>` objects to allow other coroutines to run. The `RETURN_TYPE` is the type returned by the `co_await` statement, and its `co_await`ed value is whatever `hce::yield` is constructed with.
 
-The simplest form of `hce::yield` is `hce::yield<void>`, which returns no value when `co_await`ed. For example, a coroutine can yield execution between attempts to ensure other coroutines can run:
+## Integration with Existing Code
+
+## Debug Logging
+This project utilizes the [emilk/loguru](https://github.com/emilk/loguru) project for debug logging, writing to stdout and stderr by default. Logging features are provided primarily for the development of this library, but work has been done to make it fairly robust and may be applicable for user development and production code debugging purposes.
+
+The `loguru` source code is included in this code repository and does not need to be downloaded. `loguru` is distributed with the permissive "unlicense" license.
+
+Most user accessible objects provided by this library are printable (writable to an `std::ostream` with `<<` and convertable to an `std::string` with `std::to_string()`).
+
+### loglevel definitions
+`HCELOGLIMIT`, `HCELOGLEVEL` and individual threads with `hce::printable::thread_log_level(int)`/`hce::scheduler::log_level(int)` can be set to the following values:
 ```
-// return true on success, else false
-bool some_operation_which_may_fail(int& result);
-
-hce::co<int> non_blocking_coroutine() {
-    int result = 0;
-
-    while(!some_operation_which_may_fail(result)) { 
-        co_await hce::yield<void>();
-    }
-
-    co_await hce::yield<void>(); 
-    co_return result;
-}
-```
-
-It is wise to make a habit of yielding even on success in case the entire `some_operation_which_may_fail()` operation needs to be scheduled in a loop allowing other coroutines to run. To illustrate the problem:
-```
-// return true on success, else false
-bool some_operation_which_may_fail(int& result, bool& cont);
-
-hce::co<int> non_blocking_coroutine() {
-    int result = 0;
-    bool cont = true;
-
-    while(cont) {
-        while(!some_operation_which_may_fail(result, cont)) { 
-            co_await hce::yield<void>();
-        }
-
-        // yield after success to allow other coroutines to run
-        co_await hce::yield<void>(); 
-    }
-
-    co_return result;
-}
+-3: FATAL will be logged
+-2: ERROR will be logged
+-1: WARNING will be logged (the framework default loglevel)
+0: INFO will be logged
+1: high criticality construction/destruction of objects
+2: high criticality method and function calls
+3: medium criticality construction/destruction of objects
+4: medium criticality method and function calls
+5: low criticality construction/destruction of objects
+6: low criticality method and function calls 
+7: minimal criticality construction/destruction of objects
+8: minimal criticality method and function calls
+9: trace criticality logging enabled
 ```
 
-However, using `hce::yield<RETURN_TYPE>` set to the `RETURN_TYPE` of the non-blocking operation allows for clean inline statements which automatically yields execution after every run:
+All logs for an object of a given criticality are not guaranteed to print at the specified loglevels, they should be taken as a general debugging guide. View the source code for what *exact* log macros are called in specific functions.
+
+#### High criticality
+- `hce::scheduler`
+- `hce::scheduler::lifecycle`
+- `hce::scheduler::lifecycle::manager`
+- `hce::scheduler::config`
+- `hce::scheduler::config::handlers`
+- `hce::schedule()` and `hce::scheduler::schedule()`
+- `hce::join()` and `hce::scheduler::join()`
+- `hce::scope()` and `hce::scheduler::scope()`
+
+This category contains framework management and scheduling utilities.
+
+#### Medium criticality
+- `hce::coroutine`
+- `hce::timer`
+- `hce::start()` and `hce::scheduler::start()`
+- `hce::running()` and `hce::scheduler::running()`
+- `hce::sleep()` and `hce::scheduler::sleep()`
+- `hce::cancel()` and `hce::scheduler::cancel()`
+- `hce::block()` and `hce::scheduler::block()`
+
+This category includes individual coroutine lifecycle and execution.
+
+#### Low criticality 
+- `hce::cleanup`
+- `hce::yield`
+- `hce::awaitable::interface` (the implementation of an `hce::awaitable`)
+- `hce::channel::interface` (the implementation of an `hce::channel`)
+- `hce::block()`
+
+This category includes "communication" operations.
+
+#### Minimal criticality
+- `hce::circular_buffer`
+- `hce::spinlock`
+- `hce::lockfree` 
+- `hce::mutex`
+- `hce::unique_lock<Lock>`
+- `hce::condition_variable`
+- `hce::condition_variable_any` 
+
+This category contains synchronization objects implemented by this library.
+
+#### Trace criticality
+All remaining API log statements (that has does not log with any lower loglevel) will print at this level. Output may be *extremely* verbose. It is expected this is only necessary in a few situations:
+- debugging of specific issues, potentially in combination with thread local log level management
+- introducing maximum processing jitter during calls to `script/validate` to increase the likelyhood of detecting race conditions in the unit tests
+
+### Library Compile Time Definitions 
+#### HCELOGLEVEL
+`HCELOGLEVEL` is utilized for specifying the *default* loglevel for all threads. Any log with an associated visibility value of higher than `HCELOGLEVEL` will not be printed (unless the loglevel for a particular thread is modified, see [Thread Local Logging](#thread-local-logging) below).
+
+The default loglevel can be retrieved at runtime with:
 ```
-bool some_operation_which_may_fail(int& result);
-
-hce::co<int> non_blocking_coroutine() {
-    int result = 0;
-
-    while(!(co_await hce::yield<bool>(some_operation_which_may_fail(result))) { }
-
-    co_return result;
-}
-```
-
-And a double loop example:
-```
-bool some_operation_which_may_fail(int& result);
-
-hce::co<int> non_blocking_coroutine() {
-    int result = 0;
-    bool cont = true;
-
-    while(cont) {
-        while(!(co_await hce::yield<bool>(some_operation_which_may_fail(result,cont))) { }
-    }
-
-    co_return result;
-}
-```
-
-## Chrono 
-This library utilizes `hce::chrono::time_point` and `hce::chrono::duration` objects for all timing API.
-
-`hce::chrono::time_point` is an inheritor of `std::chrono::steady_clock::time_point` and `hce::chrono::duration` is an inheritor of `std::chrono::steady_clock::duration`. Any arguments passed to their constructors behaves identically to constructing `std::chrono::steady_clock::time_point`/`std::chrono::steady_clock::duration`. This also means that `hce::chrono::` objects can be *constructed* with the equivalent `std::` variant:
-```
-hce::chrono::duration my_dur(std::chrono::steady_clock::milliseconds(35));
-```
-
-The current `hce::chrono::time_point` can be retrieved with `hce::chrono::now()`.
-
-Generate `Doxygen` documentation to see more information and additional conversion API.
-
-## Scheduler Access
-Coroutines run in `hce::scheduler` objects, which are themselves running on system threads. Access to the underlying `hce::scheduler` objects can be retrieved with the following static API:
-```
-hce::scheduler& hce::scheduler::global(): return the process wide, default scheduler
-bool hce::scheduler::in(): return true if the current thread is running a scheduler, else false
-hce::scheduler& hce::scheduler::local(): return the scheduler running on the current system thread
-hce::scheduler& hce::scheduler::get(): return a scheduler, preferring `local()` if available with `in()`, falling back to `global()`
-```
-
-Schedulers have various scheduling APIs similar to the static global scheduling API (the global API actually selects a scheduler and calls the equivalent API on a `scheduler`):
-```
-hce::awt<CO_RETURN_TYPE> hce::scheduler::schedule(co)
-```
-
-`hce::scheduler` objects are always allocated as `std::shared_ptr<hce::scheduler>`s. The `std::shared_ptr` of an `hce::scheduler` can be acquired by conversion:
-```
-// acquire the global scheduler shared_ptr from the global scheduler reference
-std::shared_ptr<hce::scheduler> my_shared_scheduler = hce::scheduler::global();
+int hce::printable::default_log_level();
 ```
 
-`scheduler` objects have various API for indicating current workload and state. It is also possible to create and launch user managed schedulers, though this is a task with some complicated considerations. Generate `Doxygen` documentation to see more.
+If the user used the default log initialization, this returned value will be equal to `HCELOGLEVEL`.
 
-## Threadpool Access
-This library provides a global `hce::threadpool` object running one or more `hce::scheduler` objects running on independent system threads, allowing coroutines to be scheduled on separate CPU cores. Coroutines don't need separate CPU cores to run efficiently and the global high level API (`hce::schedule()`) attempt to schedule on the current processor core. However, there may be cases where parallelism (instead of only concurrency) is beneficial to distribute CPU resources. 
+`HCELOGLIMIT` is a compiler define that is used when building *this library* (*not* user code!). As such, `HCELOGLEVEL` can be defined for the library as environment variables when building or set in their associated `cmake` variables in the toplevel `CMakeLists.txt`. However, these values may have to be additionally passed in as explicit compiler defines to user source compilation.
 
-`hce::threadpool`'s `static` scheduling API includes:
-```
-auto hce::threadpool::schedule(...): call schedule() on the result of algorithm() with arguments, returning the result 
+The default value for `HCELOGLEVEL` is `-1`, generally limiting logging to errors or critical messages. The valid range for `HCELOGLEVEL` is `-9` to `9`.
 
-hce::scheduler& hce::threadpool::algorithm(): return the scheduler returned by the configured threadpool algorithm
-```
+`HCELOGLEVEL` can be set lower than `HCELOGLIMIT` to prevent logging (though some extra runtime processing may occur if the `HCELOGLIMIT` is set higher than `HCELOGLEVEL` even if nothing is printed).
 
-`hce::threadpool::algorithm()` calls the `hce::config`ured threadpool scheduling algorithm returned by
-```
-hce::config::threadpool::algorithm_function_ptr hce::config::threadpool::algorithm();
-```
+If debugging becomes necessary, rebuild *this library* with `HCELOGLEVEL` defined at the appropriate level as an environment variable or set within the toplevel `CMakeLists.txt`.
 
-`algorithm_function_ptr` is defined as:
+#### HCECUSTOMLOGINIT
+If `HCECUSTOMLOGINIT` is defined at library compile time, then the library's default `loguru` initialization code will not be defined. 
+
+If `HCECUSTOMLOGINIT` is defined the user is responsible for externally linking the following function definition: 
 ```
-using algorithm_function_ptr = hce::scheduler& (*)();
+extern void hce_log_initialize(int hceloglevel);
 ```
 
-The default algorithm `hce::threadpool` attempts to schedule on an `hce::scheduler` with a light workload when its scheduling API is called. If the user wishes to acquire a scheduler with a custom algorithm, or write their own `hce::config::threadpool::algorithm()` implementation, the user can access the `const vector` of schedulers with the relevant `threadpool` API:
-```
-/**
- There is only ever one threadpool in existence.
+The argument `hceloglevel` will be set to the value of the `HCELOGLEVEL` definition compiled with this library.
 
- @return the reference to the process wide threadpool
- */
-static threadpool& hce::threadpool::get();
+It is expected that the user implementation of the above function will need to `#include "loguru.hpp"` somehow, link against the both compiled `loguru` and `hce` libraries and call `loguru::init()` with any desired arguments.
 
-/**
- @return a const reference to the managed vector of threadpool schedulers
- */
-const std::vector<std::shared_ptr<hce::scheduler>>& hce::threadpool::schedulers() const;
-```
+### User Code Compile Time Definitions 
+#### HCELOGLIMIT
+Objects in this library integrate compile-time controlled logging with compiler define `HCELOGLIMIT`, which defaults to `-1`. `HCELOGLIMIT` is only applicable when compiling *user code*, *not* compiling this library in isolation. Therefore, to control `HCELOGLIMIT`, pass it as a compiler define to the toolchain building your source code (IE, pass `-DHCELOGLIMIT=yourloglevel` to `g++`/`gcc`/`clang` somehow).
 
-It should be noted that this `vector` of `scheduler`s is only written to during `threadpool` initialization, and is safe to access without a lock.
+The default value for `HCELOGLIMIT` is `-1`, generally limiting logging to errors or critical messages. The valid range for `HCELOGLIMIT` is `-9` to `9`.
 
-The count of workers can be configured at library compile time with environment variable `HCETHREADPOOLSCHEDULERCOUNT`. If this value is undefined or 0 (the library default) then the framework will determine the count of worker threads (an attempt is made to match the count of worker threads with the count of CPU cores).
+Logging visibility is *hard* limited by `HCELOGLIMIT`. That is, if `HCELOGLIMIT` is set too low for something to print, it will *not* be possible for that statement to print (the relevant `C++` logging macro will be defined as an empty statement). Therefore, a simple way to solve any logging bugs or logging performance problems... is to set this `HCELOGLIMIT` to `-9` :-D (disables all logging). Of course, doing so may hide critical errors!
 
-If `HCETHREADPOOLSCHEDULERCOUNT` is set to 1, no threads beyond the default global scheduler (returned by `hce::scheduler::global()`) will be launched.
+Setting `HCELOGLIMIT` value correctly may be important for performance reasons, as no objects are constructed nor log level tests are ever executed for logging that is above the limit. It is generally recommended to keep this value low in production code (a level of <= to `3` may be tolerable in many production cases), though mileage may vary.
 
-If `HCETHREADPOOLSCHEDULERCOUNT` is set greater than 1, the additional count of threads beyond the first will be launched.
+If additional debugging becomes necessary, rebuild *user code* with `HCELOGLIMIT` defined at the required level. 
 
-Generate `Doxygen` documentation to see additional information and API. 
+### Runtime Log Control
+#### Thread Local Logging 
+Assuming the `HCELOGLIMIT` is specified high enough when compiled against user code, it is actually possible to modify the log level for a specific thread at runtime. This allows for user code to specify which threads should print more verbosely for debugging. Each thread's default log level is set to the compiled `HCELOGLEVEL` (unless the user has specified `HCECUSTOMLOGINIT` and implemented the default `loguru` loglevel differently).
 
-## Memory Design 
-This framework internally makes use of reusable memory allocations through several mechanisms. Sane defaults are attempted but the user may need to lower various values if too much memory is being consumed (or, theoretically, increase values if the usecase supports a very large number of coroutines).
+The following methods are provided for this:
+`static int hce::printable::thread_log_level()`: return the log level for the calling thread
+`static void hce::printable::thread_log_level(int)`: set the log level on the calling thread
+`hce::scheduler` object's loglevel can be configured during calls to `hce::scheduler::make()` by specifying the log level in the `hce::scheduler::config` argument.
 
-See the [memory primer](memory.md) for detailed information.
+An example debuggable non-production design might:
+- Compile user application with `HCELOGLIMIT` to the necessary level when compiling user code (for example, `6` to enable up to "low criticality" logging)
+- Compile `HCELOGLEVEL` to some low default level when compiling this library (maybe `2`, to only print "high" criticality logs, or `4` to print "medium" criticality logs) 
+- On threads where debugging becomes necessary, set the thread local logging level (calling `hce::printable::thread_log_level(6)` or `hce::scheduler::log_level(6)`) to make that thread print "low" criticality logs)
