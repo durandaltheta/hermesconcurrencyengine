@@ -4,7 +4,7 @@ C++20 Stackless Coroutine Concurrency Engine
 ## Rationale
 `c++20` `coroutines` are an extremely powerful and efficient mechanism for writing concurrent code. They are also one of the most difficult parts of the language to use correctly.
 
-This framework is designed to make using `c++20` `coroutines` in real code easy and to make integration into existing codebases simple.
+This framework is designed to make using `c++20` `coroutines` real code much easier and to make integration into existing codebases simple.
 
 ### Example
 A simple example where a coroutine is constructed, scheduled, and communicated with asynchronously. 
