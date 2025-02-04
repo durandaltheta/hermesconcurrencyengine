@@ -149,7 +149,7 @@ size_t schedule_T(std::function<hce::co<void>(test::queue<T>& q, T t)> Coroutine
 
             ++success_count;
         } catch(const std::exception& e) {
-            LOG_F(ERROR, e.what());
+            LOG_F(ERROR, "%s", e.what());
         }
     }
 
@@ -232,7 +232,7 @@ TEST(scheduler, schedule_and_thread_locals) {
             EXPECT_NE(sch.get(), recv);
             EXPECT_EQ(global_sch, recv);
         } catch(const std::exception& e) {
-            LOG_F(ERROR, e.what());
+            LOG_F(ERROR, "%s", e.what());
         }
     }
 }
@@ -275,7 +275,7 @@ size_t join_schedule_T() {
 
             ++success_count;
         } catch(const std::exception& e) {
-            LOG_F(ERROR, e.what());
+            LOG_F(ERROR, "%s", e.what());
         }
     } 
 
@@ -302,7 +302,7 @@ size_t join_schedule_T() {
 
             ++success_count;
         } catch(const std::exception& e) {
-            LOG_F(ERROR, e.what());
+            LOG_F(ERROR, "%s", e.what());
         }
     }
 
@@ -323,7 +323,7 @@ size_t join_schedule_T() {
 
             ++success_count;
         } catch(const std::exception& e) {
-            LOG_F(ERROR, e.what());
+            LOG_F(ERROR, "%s", e.what());
         }
     }
 

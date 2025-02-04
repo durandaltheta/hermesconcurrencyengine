@@ -65,7 +65,7 @@ size_t block_T() {
 
             ++success_count;
         } catch(const std::exception& e) {
-            LOG_F(ERROR, e.what());
+            LOG_F(ERROR, "%s", e.what());
         }
     }
 
@@ -112,7 +112,7 @@ size_t block_T() {
 
             ++success_count;
         } catch(const std::exception& e) {
-            LOG_F(ERROR, e.what());
+            LOG_F(ERROR, "%s", e.what());
         }
     }
 
@@ -154,7 +154,7 @@ size_t block_T() {
 
             ++success_count;
         } catch(const std::exception& e) {
-            LOG_F(ERROR, e.what());
+            LOG_F(ERROR, "%s", e.what());
         }
     }
 
@@ -201,7 +201,7 @@ size_t block_T() {
 
             ++success_count;
         } catch(const std::exception& e) {
-            LOG_F(ERROR, e.what());
+            LOG_F(ERROR, "%s", e.what());
         }
     }
 
@@ -259,7 +259,7 @@ size_t block_T() {
 
             ++success_count;
         } catch(const std::exception& e) {
-            LOG_F(ERROR, e.what());
+            LOG_F(ERROR, "%s", e.what());
         }
     }
 
@@ -317,7 +317,7 @@ size_t block_T() {
 
             ++success_count;
         } catch(const std::exception& e) {
-            LOG_F(ERROR, e.what());
+            LOG_F(ERROR, "%s", e.what());
         }
     }
 
@@ -374,7 +374,7 @@ size_t block_T() {
 
             ++success_count;
         } catch(const std::exception& e) {
-            LOG_F(ERROR, e.what());
+            LOG_F(ERROR, "%s", e.what());
         }
     }
 
@@ -432,7 +432,7 @@ size_t block_T() {
 
             ++success_count;
         } catch(const std::exception& e) {
-            LOG_F(ERROR, e.what());
+            LOG_F(ERROR, "%s", e.what());
         }
     }
 
@@ -516,7 +516,7 @@ size_t block_worker_cache_size_T(const size_t cache_size) {
 
             ++success_count;
         } catch(const std::exception& e) {
-            LOG_F(ERROR, e.what());
+            LOG_F(ERROR, "%s", e.what());
         }
     }
 

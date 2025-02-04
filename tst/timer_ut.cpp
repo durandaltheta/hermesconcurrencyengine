@@ -134,6 +134,11 @@ size_t start(As&&... as) {
     };
 
     struct data {
+        data(hce::awt<bool>&& a, const hce::sid& s) :
+            awt(std::move(a)),
+            sid(s)
+        { }
+
         hce::awt<bool> awt;
         hce::sid sid;
     };

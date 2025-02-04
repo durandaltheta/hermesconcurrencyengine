@@ -289,6 +289,14 @@ private:
 
     // internal timer object
     struct timer {
+        timer(const hce::sid& s, 
+              const hce::chrono::time_point& t, 
+              hce::timer::service::awaitable* a) :
+            sid(s),
+            timeout(t),
+            awt(a)
+        { }
+
         hce::sid sid;
         hce::chrono::time_point timeout;
         hce::timer::service::awaitable* awt;
@@ -312,7 +320,7 @@ private:
         HCE_HIGH_CONSTRUCTOR();
     }
 
-    ~service() {
+    virtual ~service() {
         HCE_HIGH_DESTRUCTOR();
 
         service::instance_ = nullptr;

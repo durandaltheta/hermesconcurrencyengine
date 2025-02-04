@@ -20,7 +20,7 @@ struct spinlock : public printable {
         lock_.clear(); 
     }
 
-    ~spinlock() { HCE_MIN_DESTRUCTOR(); }
+    virtual ~spinlock() { HCE_MIN_DESTRUCTOR(); }
 
     static inline std::string info_name() { return "hce::spinlock"; }
     inline std::string name() const { return spinlock::info_name(); }

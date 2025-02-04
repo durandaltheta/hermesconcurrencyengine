@@ -138,8 +138,8 @@ def process_exit(success):
         sys.exit(1)
 
 class Toolchain:
-    GCC = '-DCMAKE_CXX_COMPILER=g++'
-    CLANG = '-DCMAKE_CXX_COMPILER=clang'
+    GCC = '-DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++'
+    CLANG = '-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++'
 
     mapping = {
         'gcc': GCC,

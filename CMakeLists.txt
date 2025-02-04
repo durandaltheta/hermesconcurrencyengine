@@ -223,6 +223,15 @@ SetRemainingCompileDefines(
 )
 
 add_library(hce STATIC ${HCE_HEADER_FILES} ${HCE_SOURCE_FILES})
+
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+    set(STD_LIB "c++")
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set(STD_LIB "stdc++")
+endif()
+
+target_link_libraries(hce PRIVATE ${STD_LIB})
 target_include_directories(hce PUBLIC ${HCE_INCLUDE_DIR} ${LOGURU_DIR})
 target_compile_definitions(hce PRIVATE ${HCE_COMPILE_DEFINES})
 

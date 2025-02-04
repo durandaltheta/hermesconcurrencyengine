@@ -222,11 +222,11 @@ namespace alloc {
  */
 template <typename Callable, typename... Args>
 inline void construct_callable_ptr(
-        std::function<std::result_of_t<Callable(Args...)>()>* ft, 
+        std::function<std::invoke_result_t<Callable, Args...>()>* ft, 
         Callable&& callable, 
         Args&&... args) 
 {
-    using FunctionType = std::function<std::result_of_t<Callable(Args...)>()>;
+    using FunctionType = std::function<std::invoke_result_t<Callable, Args...>()>;
 
     new(ft) FunctionType(
         [callable = std::forward<Callable>(callable),
@@ -263,7 +263,7 @@ inline void construct_thunk_ptr(hce::thunk* th, Callable&& callable, Args&&... a
  */
 template <typename Callable, typename... Args>
 auto make_unique_callable(Callable&& callable, Args&&... args) {
-    using FunctionType = std::function<std::result_of_t<Callable(Args...)>()>;
+    using FunctionType = std::function<std::invoke_result_t<Callable, Args...>()>;
 
     FunctionType* ft = hce::allocate<FunctionType>(1);
 
@@ -406,7 +406,7 @@ struct pool_allocator : public printable {
         pool_ = std::move(rhs.pool_);
     }
 
-    ~pool_allocator() {
+    virtual ~pool_allocator() {
         HCE_MIN_DESTRUCTOR(); 
 
         // free all memory

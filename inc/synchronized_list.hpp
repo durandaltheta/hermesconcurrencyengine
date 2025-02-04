@@ -42,6 +42,10 @@ struct synchronized_list : public printable {
     synchronized_list(const synchronized_list<T>&) = delete;
     synchronized_list(synchronized_list<T>&&) = delete;
 
+    virtual ~synchronized_list() { 
+        HCE_MIN_DESTRUCTOR();
+    }
+
     static inline std::string info_name() { 
         return type::templatize<T>("hce::synchronized_list"); 
     }

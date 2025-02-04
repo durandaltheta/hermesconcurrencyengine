@@ -55,6 +55,11 @@ struct info {
      @brief describes an individual bucket in a cache
      */
     struct bucket {
+        bucket(const std::size_t b, const std::size_t l) :
+            block(b),
+            limit(l)
+        { }
+
         const std::size_t block; //< bucket element block size
         const std::size_t limit; //< maximum element count for the bucket
     };

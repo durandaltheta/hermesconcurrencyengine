@@ -185,7 +185,7 @@ private:
     service(const service&) = delete;
     service(service&&) = delete;
 
-    ~service(){ 
+    virtual ~service(){ 
         HCE_HIGH_DESTRUCTOR();
         service::instance_ = nullptr; 
     }

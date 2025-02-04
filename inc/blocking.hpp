@@ -279,7 +279,7 @@ private:
             HCE_LOW_CONSTRUCTOR();
         }
 
-        ~worker() { 
+        virtual ~worker() { 
             HCE_LOW_DESTRUCTOR(); 
             operations_.close();
             thd_.join();
@@ -392,7 +392,7 @@ private:
         HCE_HIGH_CONSTRUCTOR();
     }
 
-    ~service() { 
+    virtual ~service() { 
         HCE_HIGH_DESTRUCTOR(); 
         service::instance_ = nullptr;
     }

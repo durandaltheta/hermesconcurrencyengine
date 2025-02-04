@@ -388,7 +388,7 @@ inline std::string basename(std::string name) {
         name = name.substr(0, open_pos);
     }
 
-    return std::move(name);
+    return name;
 }
 
 /**
@@ -577,31 +577,9 @@ struct info<std::condition_variable,void> {
     static inline std::string name(){ return "std::condition_variable"; }
 };
 
-template <typename T>
-struct info<std::coroutine_handle<T>,void> {
-    static inline std::string name(){ 
-        return templatize<T>("std::coroutine_handle"); 
-    }
-};
-
 template <>
 struct info<std::condition_variable_any,void> {
     static inline std::string name(){ return "std::condition_variable_any"; }
-};
-
-template <typename T>
-struct info<std::unique_ptr<T>,void> {
-    static inline std::string name(){ return templatize<T>("std::unique_ptr"); }
-};
-
-template <typename T>
-struct info<std::shared_ptr<T>,void> {
-    static inline std::string name(){ return templatize<T>("std::shared_ptr"); }
-};
-
-template <typename T>
-struct info<std::weak_ptr<T>,void> {
-    static inline std::string name(){ return templatize<T>("std::weak_ptr"); }
 };
 
 template <std::intmax_t Num, std::intmax_t Denom>
@@ -613,23 +591,9 @@ struct info<std::ratio<Num,Denom>,void> {
     }
 };
 
-template <typename Rep, typename Period>
-struct info<std::chrono::duration<Rep,Period>,void> {
-    static inline std::string name(){ 
-        return templatize<Rep,Period>("std::chrono::duration");
-    }
-};
-
 template <>
 struct info<std::chrono::steady_clock,void> {
     static inline std::string name(){ return "std::chrono::steady_clock"; }
-};
-
-template <typename Clock, typename Duration>
-struct info<std::chrono::time_point<Clock,Duration>,void> {
-    static inline std::string name(){ 
-        return templatize<Clock,Duration>("std::chrono::time_point"); 
-    }
 };
 
 /**
@@ -728,6 +692,44 @@ inline std::string templatize(const std::string& s) {
     detail::templatize<T,Ts...>(ss);
     return ss.str();
 }
+
+// templatize dependent infos
+
+template <typename T>
+struct info<std::coroutine_handle<T>,void> {
+    static inline std::string name(){ 
+        return templatize<T>("std::coroutine_handle"); 
+    }
+};
+
+template <typename T>
+struct info<std::unique_ptr<T>,void> {
+    static inline std::string name(){ return templatize<T>("std::unique_ptr"); }
+};
+
+template <typename T>
+struct info<std::shared_ptr<T>,void> {
+    static inline std::string name(){ return templatize<T>("std::shared_ptr"); }
+};
+
+template <typename T>
+struct info<std::weak_ptr<T>,void> {
+    static inline std::string name(){ return templatize<T>("std::weak_ptr"); }
+};
+
+template <typename Rep, typename Period>
+struct info<std::chrono::duration<Rep,Period>,void> {
+    static inline std::string name(){ 
+        return templatize<Rep,Period>("std::chrono::duration");
+    }
+};
+
+template <typename Clock, typename Duration>
+struct info<std::chrono::time_point<Clock,Duration>,void> {
+    static inline std::string name(){ 
+        return templatize<Clock,Duration>("std::chrono::time_point"); 
+    }
+};
 
 }
 

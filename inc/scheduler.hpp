@@ -177,7 +177,7 @@ struct joiner :
     }
 
     inline std::string name() const { return joiner<T>::info_name(); }
-    inline void* address() { return address_; }
+    inline void* address() const { return address_; }
     inline bool on_ready() { return ready_; }
 
     inline void on_resume(void* m) { 
@@ -214,7 +214,7 @@ private:
         auto& joiner = *(static_cast<hce::detail::scheduler::joiner<T>*>(data.install));
 
         // acquire a reference to the promise
-        auto& promise = *(static_cast<hce::co<T>::promise_type*>(data.promise));
+        auto& promise = *(static_cast<typename hce::co<T>::promise_type*>(data.promise));
 
         // get a copy of the handle to see if the coroutine completed 
         auto handle = std::coroutine_handle<hce::co_promise_type<T>>::from_promise(promise);
@@ -266,7 +266,7 @@ struct joiner<void> :
     }
 
     inline std::string name() const { return joiner<void>::info_name(); }
-    inline void* address() { return address_; }
+    inline void* address() const { return address_; }
     inline bool on_ready() { return ready_; }
     inline void on_resume(void* m) { ready_ = true; }
 
@@ -399,7 +399,7 @@ struct scheduler : public printable {
             HCE_LOW_CONSTRUCTOR();
         }
 
-        ~migrater() { HCE_LOW_DESTRUCTOR(); }
+        virtual ~migrater() { HCE_LOW_DESTRUCTOR(); }
 
         static inline std::string info_name() { return "hce::scheduler::migrater"; }
         inline std::string name() const { return migrater::info_name(); }
@@ -460,7 +460,7 @@ struct scheduler : public printable {
 
         inline std::string name() const { return joiner<T>::info_name(); }
 
-        inline std::string content() {
+        inline std::string content() const {
             std::stringstream ss;
             ss << std::coroutine_handle<>::from_address(this->address());
             return ss.str();
@@ -480,7 +480,7 @@ struct scheduler : public printable {
                 HCE_HIGH_CONSTRUCTOR(); 
             }
 
-            ~service() { 
+            virtual ~service() { 
                 HCE_HIGH_DESTRUCTOR(); 
                 service::instance_ = nullptr;
             }
@@ -664,7 +664,7 @@ struct scheduler : public printable {
                 HCE_HIGH_CONSTRUCTOR();
             }
 
-            ~service() {
+            virtual ~service() {
                 HCE_HIGH_DESTRUCTOR();
                 service::instance_ = nullptr;
             }
@@ -677,7 +677,7 @@ struct scheduler : public printable {
         };
     };
 
-    ~scheduler() { HCE_HIGH_DESTRUCTOR(); }
+    virtual ~scheduler() { HCE_HIGH_DESTRUCTOR(); }
 
     static inline std::string info_name() { return "hce::scheduler"; }
     inline std::string name() const { return scheduler::info_name(); }

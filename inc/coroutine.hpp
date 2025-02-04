@@ -151,6 +151,12 @@ struct coroutine : public printable {
     private:
         /// object for creating a simple singly linked list of cleanup handlers
         struct node {
+            node(node* n, cleanup_operation c, void* i) :
+                next(n),
+                co(c),
+                install(i)
+            { }
+
             node* next; /// the next node in the cleanup handler list
             cleanup_operation co; /// the cleanup operation provided to install()
             void* install; /// data pointer provied to install()
@@ -972,7 +978,7 @@ struct awaitable : public printable {
     awaitable(const awaitable&) = delete;
     awaitable(awaitable&& rhs) = default;
     
-    ~awaitable() { 
+    virtual ~awaitable() { 
         HCE_TRACE_DESTRUCTOR();
         wait(); 
     }
@@ -1145,7 +1151,7 @@ struct awt : public awaitable {
     template <typename IMPLEMENTATION>
     awt(IMPLEMENTATION* i) : awaitable(dynamic_cast<interface*>(i)) { }
 
-    ~awt(){ }
+    virtual ~awt(){ }
     
     inline awt& operator=(const awt<T>& rhs) = delete;
     inline awt& operator=(awt<T>&& rhs) = default;
@@ -1229,7 +1235,7 @@ struct awt<void> : public awaitable {
     template <typename IMPLEMENTATION>
     awt(IMPLEMENTATION* i) : awaitable(i) { }
 
-    ~awt() { }
+    virtual ~awt() { }
     
     inline awt<void>& operator=(const awt<void>& rhs) = delete;
     inline awt<void>& operator=(awt<void>&& rhs) = default;

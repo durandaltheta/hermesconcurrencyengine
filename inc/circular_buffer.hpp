@@ -71,7 +71,7 @@ struct circular_buffer : public printable {
         swap_(std::move(rhs));
     }
 
-    ~circular_buffer() { 
+    virtual ~circular_buffer() { 
         HCE_MIN_DESTRUCTOR(); 
 
         if(buffer_) [[likely]] {

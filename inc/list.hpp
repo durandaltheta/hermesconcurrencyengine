@@ -66,7 +66,7 @@ struct list : public printable {
         move_(std::move(rhs));
     }
 
-    ~list() { 
+    virtual ~list() { 
         HCE_MIN_DESTRUCTOR();
         node* cur = head_;
 
@@ -248,6 +248,8 @@ private:
         template <typename... As>
         node(As&&... as) : value(std::forward<As>(as)...), next(nullptr) { }
 
+        virtual ~node() { }
+
         static inline std::string info_name() { 
             return hce::list<T>::info_name() + "::node"; 
         }
@@ -281,7 +283,7 @@ private:
     node* head_ = nullptr; // head of list
     node* tail_ = nullptr; // tail of list
     size_t size_ = 0; // length of list 
-    typename Allocator::rebind<node>::other allocator_; // memory allocator
+    typename Allocator::template rebind<node>::other allocator_; // memory allocator
 };
 
 }

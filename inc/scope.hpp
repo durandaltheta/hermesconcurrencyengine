@@ -64,7 +64,7 @@ struct scope : public hce::printable {
         HCE_MED_CONSTRUCTOR(rhs);
     }
 
-    ~scope() {
+    virtual ~scope() {
         HCE_MED_DESTRUCTOR();
 
         if(root_ch_ && !(root_ch_->closed())) [[likely]] {
@@ -123,7 +123,7 @@ struct scope : public hce::printable {
     }
 
 private:
-    typedef typename Allocator::rebind<hce::awaitable::interface*>::other alloc_t;
+    typedef typename Allocator::template rebind<hce::awaitable::interface*>::other alloc_t;
     typedef hce::channel::unlimited<hce::awaitable::interface*,Lock,alloc_t> channel_t;
 
     template <typename T, typename... Awts >

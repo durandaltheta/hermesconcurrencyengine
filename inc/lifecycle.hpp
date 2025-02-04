@@ -324,7 +324,7 @@ public:
         timer tmr;
     };
 
-    ~lifecycle() { 
+    virtual ~lifecycle() { 
         HCE_INFO_DESTRUCTOR(); 
     }
 

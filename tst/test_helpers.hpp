@@ -154,6 +154,7 @@ struct CustomObject : public hce::printable {
     CustomObject(CustomObject&&) = default;
 
     CustomObject(int i) : i_(i) {}
+    virtual ~CustomObject(){}
 
     static inline std::string info_name() { return "test::CustomObject"; }
     inline std::string name() const { return CustomObject::info_name(); }

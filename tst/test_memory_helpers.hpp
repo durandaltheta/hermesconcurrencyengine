@@ -144,7 +144,7 @@ inline void cache_allocate_deallocate() {
 }
 
 inline hce::co<void> cache_allocate_deallocate_co() {
-    cache_allocate_deallocate_co();
+    cache_allocate_deallocate();
     co_return;
 }
 
