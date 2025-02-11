@@ -35,7 +35,7 @@ The user can either modify the `cmake` defines or implement and link a custom `h
 Custom implementations of `info()` provide the opportunity for fine-grained control of the cache. For example, if the user determines that a few buckets needs a much higher (or lower) byte limit, they can implement the *exact* bucket limits and block size values in their implementation.
 
 ## Default Allocator 
-The `hce::allocator<T>` is a replacement for `std::allocator<T>` which uses `hce::allocate<T>()`/`hce::deallocate<T>()` instead of directly calling `malloc()`/`free()`. This allows the user to easily make use of the framework's allocation caching in their `std::` compliant containers.
+The `hce::allocator<T>` is a replacement for `std::allocator<T>` which uses `hce::allocate<T>()`/`hce::deallocate()` instead of directly calling `malloc()`/`free()`. This allows the user to easily make use of the framework's allocation caching in their `std::` compliant containers.
 
 ## Pool Allocator 
 A second tier of allocation caching is implemented by the `hce::pool_allocator<T>`. Like `hce::allocator<T>`, `pool_allocator`s can be used as the allocator in `std::` containers. However, their purpose is to implement allocation caching for a *particular* use case, allowing code which utilizes it to set the size of the cache and to guarantee that allocated values in the `pool_allocator` are private, and therefore reusable allocated memory is guaranteed to be available if they have been previously cached.
