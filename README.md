@@ -205,11 +205,16 @@ WARNING: `lambda` functions, as well as Functors (objects with implement the Cal
 Generate `Doxygen` documentation to see more for `hce` coroutine creation.
 
 ## Starting the Framework
-To initialize the framework user code is responsible for calling `hce::initialize()` and holding onto the resulting `std::unique_ptr`. The returned pointer should stay in scope until all other `hce` operations have completed and joined:
+To initialize the framework user code is responsible for calling `hce::initialize()` and holding onto the resulting `std::unique_ptr`. The returned pointer should stay in scope until all other `hce` operations have completed and joined. Here are some of the most important high level operations:
 ```
-hce::awt<T> hce::schedule(co): Schedule a coroutine and return an awaitable which can be awaited to return the coroutine return value
-hce::awt<void> hce::sleep(hce::duration): Block a coroutine for a period of time
-hce::awt<T> hce::block(Callable, args...): Invoke a Callable (function/functor/lambda) on a dedicated thread and return an awaitable to join with the result
+// Schedule a coroutine and return an awaitable which can be awaited to return the coroutine return value
+hce::awt<T> hce::schedule(co);
+
+// Return an awaitable which will block a coroutine for a period of time
+hce::awt<void> hce::sleep(hce::chrono::duration);
+
+// Invoke a Callable (function/functor/lambda) on a dedicated thread and return an awaitable to join with the result
+hce::awt<T> hce::block(Callable, args...);
 ```
 
 A simple example program:
