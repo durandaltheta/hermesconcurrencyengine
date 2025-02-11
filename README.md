@@ -367,13 +367,25 @@ hce::yield<result> non_blocking_op() {
     return hce::yield<result>(/* value yield will return on co_await */);
 }
 
-hce::co<result> attempt_non_blocking() {
+hce::co<result> attempt_non_blocking(int maximum_retry) {
     result r = failure;
+    int retry = 0;
 
     do {
         // coroutine yields execution on co_await for each attempt
         r = co_await non_blocking_op();
-    } while(r == failure);
+
+        // handle the result
+        if(r == success) {
+            break;
+        } else {
+            ++retry;
+
+            if(retry >= maximum_retry) {
+                break;
+            }
+        }
+    } while(true);
             
     co_return r;
 };
