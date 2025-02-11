@@ -323,7 +323,7 @@ hce::co<void> my_coroutine(int arg) {
 }
 
 int main() {
-    int my_result = hce::join(my_coroutine(3));
+    int my_result = hce::schedule(my_coroutine(3));
     std::cout << "main joined with my_coroutine and received " << my_result << std::endl;
     return 0;
 }
