@@ -117,7 +117,7 @@ Coroutines are valuable because they are orders of magnitude faster to context s
 
 Each `hce` compatible coroutine must:
 
-### Utilize coroutine keywords
+### Coroutines must utilize coroutine keywords
 Utilize one or more of the following `c++20` coroutine keywords:
 ```
 co_return // coroutine specific 'return' statement
@@ -138,7 +138,7 @@ hce::co<int> my_coroutine() {
 }
 ```
 
-### Coroutines return a coroutine type
+### Coroutines return a co<T>
 The `hce` coroutine function must specify its return type as `hce::co<COROUTINE_RETURN_TYPE>`. `COROUTINE_RETURN_TYPE` is the type of the returned value by the `co_return` statement.
 
 ```
