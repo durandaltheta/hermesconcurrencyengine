@@ -337,7 +337,41 @@ Generate `Doxygen` documentation to see more for `hce::block()` and `hce::schedu
 
 ## Thread Non-Blocking Calls
 
-## Integration with Existing Code
+A `coroutine` can implement a non-blocking code by using `hce::yield<T>` objects. `co_await`ing an instance of an `hce::yield<T>` object yields a value as the result of the `co_await` statement, but suspends execution of the `coroutine` allowing other `coroutine`s to run first. 
+
+Example:
+```
+int i = co_await hce::yield<int>(3); // i == 3 when coroutine resumes
+```
+
+`hce::yield<void>` is a legal instance of `hce::yield`, but returns no value, merely suspending execution of the calling `coroutine`:
+```
+ co_await hce::yield<void>(); 
+```
+
+`hce::yield<T>` can be returned arbitrarily from functions as well. Best practice is to implement non-blocking code which might fail to return an `hce::yield` templated to the result of the operation. The calling `coroutine` can then `co_await` the non-blocking operation until it succeeds, or the `coroutine` executes some fallback behavior:
+```
+enum result {
+    success,
+    failure
+};
+
+hce::yield<result> non_blocking_op() {
+    // ... implementation ...
+    return hce::yield<result>(/* value yield will return on co_await */);
+}
+
+hce::co<result> attempt_non_blocking() {
+    result r = failure;
+
+    do {
+        // coroutine yields execution on co_await for each attempt
+        r = co_await non_blocking_op();
+    } while(r == failure);
+            
+    co_return r;
+};
+```
 
 ## Debug Logging
 This project utilizes the [emilk/loguru](https://github.com/emilk/loguru) project for debug logging, writing to stdout and stderr by default. Logging features are provided primarily for the development of this library, but work has been done to make it fairly robust and may be applicable for user development and production code debugging purposes.
