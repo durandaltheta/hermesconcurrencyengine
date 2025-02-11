@@ -23,7 +23,8 @@ hce::co<void> my_coroutine(hce::chan<int> ch) {
 }
 
 int main() {
-    auto ch = hce::chan<int>::make();
+    std::unique_ptr<hce::lifecycle> lf = hce::initialize();
+    hce::chan<int> ch = hce::chan<int>::make();
     hce::schedule(my_coroutine(ch));
     ch.send(1);
     ch.send(2);
@@ -205,7 +206,9 @@ WARNING: `lambda` functions, as well as Functors (objects with implement the Cal
 Generate `Doxygen` documentation to see more for `hce` coroutine creation.
 
 ## Starting the Framework
-To initialize the framework user code is responsible for calling `hce::initialize()` and holding onto the resulting `std::unique_ptr`. The returned pointer should stay in scope until all other `hce` operations have completed and joined. Here are some of the most important high level operations:
+To initialize the framework user code is responsible for calling `hce::initialize()` and holding onto the resulting `std::unique_ptr`. The returned pointer should stay in scope until all other `hce` operations have completed and joined. `hce::initialize()` can accept a `hce::lifecycle::config` object, providing a variety of options to configure the framework before it starts. Generate the `doxygen` documentation to see more.
+
+Here are some of the most important high level operations (all of which rely on `hce::lifecycle` staying in existence):
 ```
 // Schedule a coroutine and return an awaitable which can be awaited to return the coroutine return value
 hce::awt<T> hce::schedule(co);
