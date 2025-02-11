@@ -296,9 +296,9 @@ $
 `hce::chan`s with a buffered internal queue can be constructed by passing a buffer size to `hce::chan<T>::make(int buffer_size)`. `hce::chan<T>`s with a buffer will not block on `send()` operations until the buffer becomes full. This can be used to optimize send operations from system threads (non-coroutines), where blocking the entire thread is a much more expensive operation.
 
 Meaning of `buffer_size`:
-`>0`: channel buffer of a specific maximum size (blocks on send if buffer is full)
-`0`: channel buffer of no size (direct point to point data transfer, blocks if no receiver)
-`<0`: channel buffer of unlimited size (never blocks on send)
+- `>0`: channel buffer of a specific maximum size (blocks on send if buffer is full)
+- `0`: channel buffer of no size (direct point to point data transfer, blocks if no receiver)
+- `<0`: channel buffer of unlimited size (never blocks on send)
 
 Generate `Doxygen` documentation to see more, specifically for `hce::chan<T>` unbuffered/buffered/unlimited channel construction and other API.
 
