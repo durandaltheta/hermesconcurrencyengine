@@ -122,7 +122,7 @@ co_return // coroutine specific 'return' statement
 co_await // used to safely block a coroutine on a returned awaitable object
 ``` 
 
-NOTE: `awaitable` objects are returned from various functions in this framework with the type `hce::awt<AWAITABLE_RETURN_TYPE`. `AWAITABLE_RETURN_TYPE` is the type returned from the awaitable when `co_awaited`:
+NOTE: `awaitable` objects are returned from various functions in this framework with the type `hce::awt<AWAITABLE_RETURN_TYPE>`. `AWAITABLE_RETURN_TYPE` is the type returned from the awaitable when `co_await`ed:
 ```
 // given this function
 hce::awt<int> awaitable_function();
