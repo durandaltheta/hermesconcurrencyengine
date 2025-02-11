@@ -14,7 +14,7 @@ A simple example where a coroutine is constructed, scheduled, and communicated w
 #include <iostream>
 #include <hce.hpp>
 
-hce::co<void> my_coroutine(hce::channel<int> ch) {
+hce::co<void> my_coroutine(hce::chan<int> ch) {
     int i;
 
     while(co_await ch.recv(i)) {
