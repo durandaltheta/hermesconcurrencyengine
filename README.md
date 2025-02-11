@@ -138,7 +138,7 @@ hce::co<int> my_coroutine() {
 }
 ```
 
-### Coroutines return a co<T>
+### Coroutines return a valid type
 The `hce` coroutine function must specify its return type as `hce::co<COROUTINE_RETURN_TYPE>`. `COROUTINE_RETURN_TYPE` is the type of the returned value by the `co_return` statement.
 
 ```
