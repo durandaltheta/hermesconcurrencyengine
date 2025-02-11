@@ -115,7 +115,8 @@ However, `validate` is very useful for quickly configuring the project in variou
 
 Coroutines are valuable because they are orders of magnitude faster to context switch (that is, change which one is actively executing) than the operating system equivalent of a "system thread" (POSIX `pthread`s and/or `c++` `std::thread`s). This makes executing code which needs to handle multiple simultaneous tasks (that may or may not execute on the same CPU core) written with coroutines potentially *MUCH* faster and more resource efficient (coroutines are very lightweight) than the same done with only system threads.
 
-It is enough for using this framework that each `hce` compatible coroutine must:
+Each `hce` compatible coroutine must:
+
 ### Utilize coroutine keywords
 Utilize one or more of the following `c++20` coroutine keywords:
 ```
