@@ -340,9 +340,9 @@ main joined with my_coroutine and received 4
 $
 ```
 
-`hce::block()` calls launch and self manage system threads to guarantee operations execute in an isolated manner. It is possible to configure an `hce::scheduler` to keep one or more block worker threads in existence to lower the cost for repeated `hce::block()` operations.
+`hce::block()` calls launch and self manage system threads to guarantee operations execute in an isolated manner. It is possible to configure the project to keep one or more block worker threads in existence to lower the cost for repeated `hce::block()` operations.
 
-Generate `Doxygen` documentation to see more for `hce::block()` and `hce::scheduler` configuration options.
+Generate `Doxygen` documentation to see more for `hce::block()` configuration options.
 
 ## Thread Non-Blocking Calls
 
