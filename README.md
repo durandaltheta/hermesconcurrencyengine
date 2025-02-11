@@ -59,7 +59,7 @@ cmake .
 make hce
 ```
 
-`hce.a` can then be statically linked against by user software. The directories `inc/` and `loguru/` will need to be added as user code include directories.
+`libhce.a` can then be statically linked against by user software. The directories `inc/` and `loguru/` will need to be added as user code include directories.
 
 ## Documentation
 ### Prerequisites 
