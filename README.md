@@ -89,7 +89,7 @@ Build and execute tests with `validate` script from this repository's root direc
 The `cmake` unit test target is `hce_ut`, and this can be built separately from the `validate` frontend with 
 ```
 cmake .; make -j hce_ut
-```. 
+```
 
 However, `validate` is very useful for quickly configuring the project in various ways to test different things.
 
