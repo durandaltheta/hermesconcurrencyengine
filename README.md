@@ -201,8 +201,7 @@ Generate `Doxygen` documentation to see more for `hce` coroutine creation.
 ## Starting the Framework
 To initialize the framework user code is responsible for calling `hce::initialize()` and holding onto the resulting `std::unique_ptr`. The returned pointer should stay in scope until all other `hce` operations have completed and joined:
 ```
-hce::schedule(co, ...): Schedule one or more coroutines
-hce::join(co): Schedule and join with a coroutine, returning the coroutine return value
+hce::schedule(co): Schedule a coroutine and return an awaitable which can be awaited to return the coroutine return value
 hce::scope(co, ...): Schedule and join with one or more coroutines, ignoring return values
 hce::sleep(hce::duration): Block a coroutine for a period of time
 hce::block(Callable, args...): Call a function which may block the calling thread and join the coroutine with the result
@@ -220,7 +219,8 @@ hce::co<int> my_coroutine(int arg) {
 }
 
 int main() {
-    int my_result = hce::join(my_coroutine(14));
+    std::unique_ptr<hce::lifecycle> lf = hce::initialize();
+    int my_result = hce::schedule(my_coroutine(14));
     std::cout << "main joined with my_coroutine and received " << my_result << std::endl;
     return 0;
 }
