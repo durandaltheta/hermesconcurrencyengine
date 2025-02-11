@@ -116,11 +116,14 @@ However, `validate` is very useful for quickly configuring the project in variou
 Coroutines are valuable because they are orders of magnitude faster to context switch (that is, change which one is actively executing) than the operating system equivalent of a "system thread" (POSIX `pthread`s and/or `c++` `std::thread`s). This makes executing code which needs to handle multiple simultaneous tasks (that may or may not execute on the same CPU core) written with coroutines potentially *MUCH* faster and more resource efficient (`coroutine`s are very lightweight) than the same done with only system threads.
 
 It is enough for using this framework that each `hce` compatible coroutine must:
-1. utilize one or more of the following `c++20` `coroutine` keywords:
+### Utilize coroutine keywords
+Utilize one or more of the following `c++20` `coroutine` keywords:
 ```
 co_return // coroutine specific 'return' statement
 co_await // used to safely block a coroutine on a returned awaitable object
-``` 
+```
+
+`co_yield` keyword is not utilized by this framework.
 
 NOTE: `awaitable` objects are returned from various functions in this framework with the type `hce::awt<AWAITABLE_RETURN_TYPE>`. `AWAITABLE_RETURN_TYPE` is the type returned from the awaitable when `co_await`ed:
 ```
@@ -134,7 +137,8 @@ hce::co<int> my_coroutine() {
 }
 ```
 
-2. The `hce` coroutine function must specify its return value is the object `hce::co<COROUTINE_RETURN_TYPE>`. `COROUTINE_RETURN_TYPE` is the type of the returned value by the `co_return` statement.
+### Coroutines return a coroutine type
+The `hce` coroutine function must specify its return value is the object `hce::co<COROUTINE_RETURN_TYPE>`. `COROUTINE_RETURN_TYPE` is the type of the returned value by the `co_return` statement.
 
 ```
 hce::co<int> my_coroutine_returning_int() {
@@ -142,7 +146,8 @@ hce::co<int> my_coroutine_returning_int() {
 }
 ```
 
-3. The coroutine function is exactly one stack frame in size, all `co_return`, `co_await`, and `co_yield` statements associated with a single coroutine happen in the topmost function of the coroutine.
+### Coroutines are 1 stack frame
+The coroutine function is exactly one stack frame in size, all `co_return`, `co_await`, and `co_yield` statements associated with a single coroutine happen in the topmost function of the coroutine.
 
 Bad:
 ```
