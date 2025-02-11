@@ -69,7 +69,7 @@ make hce
 ### Generate
 `doxygen` documentation can be generated locally for this library. Install `doxygen` and `graphviz` packages then run `doxygen`:
 ```
-cd /path/to/your/mce/repo/checkout
+cd /path/to/your/hce/repo/checkout
 doxygen
 ```
 The generated `doc/` directory should contain both `html` and `rtf` generated documentation. For `html`, open `index.html` by a browser to view the documentation. 
