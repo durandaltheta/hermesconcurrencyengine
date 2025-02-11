@@ -247,9 +247,7 @@ $
 Generate `Doxygen` documentation to see more for `hce::scheduler` creation, configuration and management.
 
 ## Communication
-This library allows communication between coroutines, threads, and any combination there-in using `hce::chan<T>`s. 
-
-`hce::chan` (a "channel") is a specialized communication mechanism which works correctly for both `hce` coroutines and system threads, and any combination of the two. This makes communication between coroutines and non-coroutines trivial.
+This library allows communication between coroutines, threads, and any combination there-in using `hce::chan<T>`s, a specialized communication mechanism allowing transfer of data.
 
 A simple example program:
 ```
