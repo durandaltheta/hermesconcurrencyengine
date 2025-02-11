@@ -138,7 +138,7 @@ hce::co<int> my_coroutine() {
 ```
 
 ### Coroutines return a coroutine type
-The `hce` coroutine function must specify its return value is the object `hce::co<COROUTINE_RETURN_TYPE>`. `COROUTINE_RETURN_TYPE` is the type of the returned value by the `co_return` statement.
+The `hce` coroutine function must specify its return type as `hce::co<COROUTINE_RETURN_TYPE>`. `COROUTINE_RETURN_TYPE` is the type of the returned value by the `co_return` statement.
 
 ```
 hce::co<int> my_coroutine_returning_int() {
@@ -147,7 +147,7 @@ hce::co<int> my_coroutine_returning_int() {
 ```
 
 ### Coroutines are 1 stack frame
-The coroutine function is exactly one stack frame in size, all `co_return`, `co_await`, and `co_yield` statements associated with a single coroutine happen in the topmost function of the coroutine.
+The coroutine function must be exactly one stack frame in size, all `co_return`, `co_await`, and `co_yield` statements associated with a single coroutine happen directly in the coroutine body.
 
 Bad:
 ```
@@ -244,7 +244,7 @@ Generate `Doxygen` documentation to see more for `hce::scheduler` creation, conf
 ## Communication
 This library allows communication between coroutines, threads, and any combination there-in using `hce::chan<T>`s. 
 
-`hce::chan` is a specialized communication mechanism which works correctly for both `hce` coroutines and system threads.
+`hce::chan` (a "channel") is a specialized communication mechanism which works correctly for both `hce` coroutines and system threads, and any combination of the two. This makes communication between coroutines and non-coroutines trivial.
 
 A simple example program:
 ```
@@ -289,14 +289,15 @@ main joined with my_coroutine and received 17
 $
 ```
 
-`hce::chan`s with a buffered internal queue can also be constructed by passing a buffer size to `hce::chan<T>::make(int buffer_size)`. `hce::chan<T>`s with a buffer will not block on `send()` operations until the buffer becomes full. This can be used to optimize send operations from system threads (non-coroutines), where blocking the entire thread is a much more expensive operation.
+### Alternative channel implementations
+`hce::chan`s with a buffered internal queue can be constructed by passing a buffer size to `hce::chan<T>::make(int buffer_size)`. `hce::chan<T>`s with a buffer will not block on `send()` operations until the buffer becomes full. This can be used to optimize send operations from system threads (non-coroutines), where blocking the entire thread is a much more expensive operation.
 
 Meaning of `buffer_size`:
 `>0`: channel buffer of a specific maximum size (blocks on send if buffer is full)
 `0`: channel buffer of no size (direct point to point data transfer, blocks if no receiver)
 `<0`: channel buffer of unlimited size (never blocks on send)
 
-Generate `Doxygen` documentation to see more, specifically for `hce::chaan<T>` unbuffered/buffered/unlimited channel construction and other API.
+Generate `Doxygen` documentation to see more, specifically for `hce::chan<T>` unbuffered/buffered/unlimited channel construction and other API.
 
 ## Thread Blocking Calls
 Arbitrary functions which may block a calling coroutine are unsafe to use directly by a coroutine because they will block the calling thread. Doing this will stop the processing of coroutines and in the worst case cause system deadlock. 
