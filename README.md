@@ -367,9 +367,10 @@ hce::yield<result> non_blocking_op() {
     return hce::yield<result>(/* value yield will return on co_await */);
 }
 
-hce::co<result> attempt_non_blocking(int maximum_retry) {
+hce::co<result> attempt_non_blocking(const unsigned int maximum_retry) {
     result r = failure;
-    int retry = 0;
+    bool cont = true;
+    unsigned int retry = 0;
 
     do {
         // coroutine yields execution on co_await for each attempt
@@ -377,15 +378,15 @@ hce::co<result> attempt_non_blocking(int maximum_retry) {
 
         // handle the result
         if(r == success) {
-            break;
+            cont = false;
         } else {
             ++retry;
 
             if(retry >= maximum_retry) {
-                break;
+                cont = false;
             }
         }
-    } while(true);
+    } while(cont);
             
     co_return r;
 };
