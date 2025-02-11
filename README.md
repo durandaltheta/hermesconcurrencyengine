@@ -206,7 +206,7 @@ WARNING: `lambda` functions, as well as Functors (objects with implement the Cal
 Generate `Doxygen` documentation to see more for `hce` coroutine creation.
 
 ## Starting the Framework
-To initialize the framework user code is responsible for calling `hce::initialize()` and holding onto the resulting `std::unique_ptr`. The returned pointer should stay in scope until all other `hce` operations have completed and joined. `hce::initialize()` can accept a `hce::lifecycle::config` object, providing a variety of options to configure the framework before it starts. Generate the `doxygen` documentation to see more.
+To initialize the framework user code is responsible for calling `hce::initialize()` and holding onto the resulting `std::unique_ptr<hce::lifecycle>`. The returned pointer should stay in scope until all other `hce` operations have completed and joined. `hce::initialize()` can accept a `hce::lifecycle::config` object, providing a variety of options to configure the framework before it starts. Generate the `doxygen` documentation to see more.
 
 Here are some of the most important high level operations (all of which rely on `hce::lifecycle` staying in existence):
 ```
