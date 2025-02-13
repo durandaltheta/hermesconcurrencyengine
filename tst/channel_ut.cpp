@@ -449,7 +449,7 @@ size_t send_recv_close_T(const size_t count) {
         auto test = [&](hce::chan<T> ch) {
             test::queue<T> q;
             auto lf = hce::scheduler::make();
-            std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+            std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
             auto awt = sch->schedule(test::channel::co_store_recv_till_close_return_void(ch,q));
 
             for(size_t i=count; i>0; --i) {
@@ -481,7 +481,7 @@ size_t send_recv_close_T(const size_t count) {
         HCE_INFO_FUNCTION_BODY(fname, "coroutine to thread");
         auto test = [&](hce::chan<T> ch){
             auto lf = hce::scheduler::make();
-            std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+            std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
             auto awt = sch->schedule(test::channel::co_send_count_and_close_return_void(ch,count));
 
             T t;
@@ -511,7 +511,7 @@ size_t send_recv_close_T(const size_t count) {
         auto test = [&](hce::chan<T> ch){
             test::queue<T> q;
             auto lf = hce::scheduler::make();
-            std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+            std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
             auto awt = sch->schedule(test::channel::co_send_count_and_close_return_void(ch,count));
             auto awt2 = sch->schedule(test::channel::co_store_recv_till_close_return_void(ch,q));
 
@@ -634,7 +634,7 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
         auto test = [&](hce::chan<T> ch) {
             test::queue<T> q;
             auto lf = hce::scheduler::make();
-            std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+            std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
             auto awt = sch->schedule(test::channel::co_store_recv_interrupt_with_close_return_void(ch,q));
 
             ch.close();
@@ -685,7 +685,7 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
         HCE_INFO_FUNCTION_BODY(fname, "coroutine to thread");
         auto test = [&](hce::chan<T> ch){
             auto lf = hce::scheduler::make();
-            std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+            std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
             auto awt = sch->schedule(test::channel::co_send_count_interrupt_with_close_return_void(ch));
 
             T t;
@@ -735,7 +735,7 @@ size_t send_recv_interrupt_with_close_T(const size_t count) {
         auto test = [&](hce::chan<T> ch){
             test::queue<T> q;
             auto lf = hce::scheduler::make();
-            std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+            std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
             auto awt = sch->schedule(test::channel::co_store_recv_interrupt_with_close_return_void(ch,q));
             auto awt2 = sch->schedule(test::channel::co_send_count_interrupt_with_close_return_void(ch));
 

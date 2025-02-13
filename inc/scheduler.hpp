@@ -591,8 +591,8 @@ struct scheduler : public printable {
         /**
          @return a reference to the `lifecycle`'s associated scheduler
          */
-        inline hce::scheduler& scheduler() { 
-            HCE_HIGH_METHOD_ENTER("scheduler");
+        inline hce::scheduler& get_scheduler() { 
+            HCE_HIGH_METHOD_ENTER("get_scheduler");
             return *sch_; 
         }
 
@@ -649,13 +649,13 @@ struct scheduler : public printable {
             static inline service& get() { return *(service::instance_); }
 
             /// return the process-wide scheduler instance
-            inline hce::scheduler& scheduler() { return sch_; }
+            inline hce::scheduler& get_scheduler() { return sch_; }
 
         private:
             service() :
                 sch_([]() -> hce::scheduler& {
                     auto lf = hce::scheduler::make(hce::config::scheduler::global::config());
-                    hce::scheduler& sch = lf->scheduler();
+                    hce::scheduler& sch = lf->get_scheduler();
                     hce::scheduler::lifecycle::service::instance().registration(std::move(lf));
                     return sch;
                 }())
@@ -758,7 +758,7 @@ struct scheduler : public printable {
         HCE_TRACE_FUNCTION_ENTER("hce::scheduler::get");
         return scheduler::in() 
             ? scheduler::local()
-            : scheduler::global::service::get().scheduler();
+            : scheduler::global::service::get().get_scheduler();
     }
 
     /// compare two schedulers, equality is always memory address equality

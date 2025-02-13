@@ -212,7 +212,7 @@ size_t block_T() {
         auto schedule_blocking_co = [&](T t) {
             hce::blocking::service::get().clear_worker_cache();
             auto lf = hce::scheduler::make();
-            std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+            std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
             auto thd_id = std::this_thread::get_id();
             bool co_ids_identical = true;
             bool co_ids_identical2 = true;
@@ -270,7 +270,7 @@ size_t block_T() {
         auto schedule_blocking_co = [&](T t) {
             hce::blocking::service::get().clear_worker_cache();
             auto lf = hce::scheduler::make();
-            std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+            std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
             auto thd_id = std::this_thread::get_id();
             bool co_ids_identical = true;
             bool co_ids_identical2 = true;
@@ -328,7 +328,7 @@ size_t block_T() {
         auto schedule_blocking_co = [&](T t) {
             hce::blocking::service::get().clear_worker_cache();
             auto lf = hce::scheduler::make();
-            std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+            std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
             auto thd_id = std::this_thread::get_id();
             bool co_ids_identical = true;
             bool co_ids_identical2 = true;
@@ -382,7 +382,7 @@ size_t block_T() {
         HCE_INFO_FUNCTION_BODY(fname,"coroutine stacked block");
         test::queue<T> q;
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
 
         auto schedule_blocking_co = [&](T t) {
             hce::blocking::service::get().clear_worker_cache();
@@ -474,7 +474,7 @@ size_t block_worker_cache_size_T(const size_t cache_size) {
         HCE_INFO_FUNCTION_BODY(fname, "loop; reuse_cnt:",reuse_cnt);
         std::vector<test::queue<T>> q(cache_size);
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
 
         std::deque<hce::awt<T>> awts;
 
