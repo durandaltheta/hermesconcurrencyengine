@@ -78,7 +78,7 @@ size_t scope_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname,"scope void individually");
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -93,7 +93,7 @@ size_t scope_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname,"scope void add()ed individually");
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -123,7 +123,7 @@ size_t scope_T() {
         HCE_INFO_FUNCTION_BODY(fname,"scope void run successfully");
         test::queue<T> q;
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -146,7 +146,7 @@ size_t scope_T() {
         HCE_INFO_FUNCTION_BODY(fname,"scope add()ed void run successfully");
         test::queue<T> q;
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -182,7 +182,7 @@ size_t scope_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname,"scope void group");
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -198,7 +198,7 @@ size_t scope_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname,"scope void add()ed group");
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -215,7 +215,7 @@ size_t scope_T() {
         HCE_INFO_FUNCTION_BODY(fname,"scope void group run successfully");
         test::queue<T> q;
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -243,7 +243,7 @@ size_t scope_T() {
         HCE_INFO_FUNCTION_BODY(fname,"scope void group add()ed run successfully");
         test::queue<T> q;
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -268,7 +268,7 @@ size_t scope_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname,"scope void mixed");
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -284,7 +284,7 @@ size_t scope_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname,"scope add()ed void mixed");
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -309,7 +309,7 @@ size_t scope_T() {
         HCE_INFO_FUNCTION_BODY(fname,"scope void mixed run successfully");
         test::queue<T> q;
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -335,7 +335,7 @@ size_t scope_T() {
         HCE_INFO_FUNCTION_BODY(fname,"scope add()ed void mixed run successfully");
         test::queue<T> q;
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -366,7 +366,7 @@ size_t scope_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname,"individually");
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -381,7 +381,7 @@ size_t scope_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname,"add()ed individually");
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -411,7 +411,7 @@ size_t scope_T() {
         HCE_INFO_FUNCTION_BODY(fname,"individually run successfully");
         test::queue<T> q;
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -434,7 +434,7 @@ size_t scope_T() {
         HCE_INFO_FUNCTION_BODY(fname,"add()ed individually run successfully");
         test::queue<T> q;
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -470,7 +470,7 @@ size_t scope_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname,"group");
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -489,7 +489,7 @@ size_t scope_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname,"add()ed group");
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -508,7 +508,7 @@ size_t scope_T() {
         HCE_INFO_FUNCTION_BODY(fname,"group run successfully");
         test::queue<T> q;
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -535,7 +535,7 @@ size_t scope_T() {
         HCE_INFO_FUNCTION_BODY(fname,"add()ed group run successfully");
         test::queue<T> q;
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -560,7 +560,7 @@ size_t scope_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname,"mixed");
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -576,7 +576,7 @@ size_t scope_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname,"add()ed mixed");
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -602,7 +602,7 @@ size_t scope_T() {
         HCE_INFO_FUNCTION_BODY(fname,"mixed run successfully");
         test::queue<T> q;
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -626,7 +626,7 @@ size_t scope_T() {
         HCE_INFO_FUNCTION_BODY(fname,"add()ed mixed run successfully");
         test::queue<T> q;
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{
@@ -659,7 +659,7 @@ size_t scope_T() {
         HCE_INFO_FUNCTION_BODY(fname,"large add()");
         test::queue<T> q;
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::scope<>> scopes;
 
         std::function<void()> setup = [&]{

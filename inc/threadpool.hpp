@@ -64,7 +64,7 @@ namespace threadpool {
 
  The threadpool has a minimum size of 1, and the first scheduler in the 
  threadpool is always the default process wide scheduler returned by 
- `hce::scheduler::global::service::get().scheduler()`.
+ `hce::scheduler::global::service::get().get_scheduler()`.
 
  The default count of workers can be configured at library compile time with 
  environment variable `HCETHREADPOOLSCHEDULERCOUNT`. If this value is undefined 
@@ -73,7 +73,7 @@ namespace threadpool {
 
  If `HCETHREADPOOLSCHEDULERCOUNT` is set to 1, no threads beyond the default 
  global scheduler (returned by 
- `hce::scheduler::global::service::get().scheduler()`) will be launched.
+ `hce::scheduler::global::service::get().get_scheduler()`) will be launched.
 
  If `HCETHREADPOOLSCHEDULERCOUNT` is set greater than 1, the additional count of 
  threads beyond the first will be launched.
@@ -157,7 +157,7 @@ private:
             std::vector<std::shared_ptr<hce::scheduler>> schedulers(worker_count);
 
             // the first scheduler is always the default global scheduler
-            schedulers[0] = hce::scheduler::global::service::get().scheduler();
+            schedulers[0] = hce::scheduler::global::service::get().get_scheduler();
 
             // construct the rest of the schedulers
             for(size_t i=1; i<schedulers.size(); ++i) {
@@ -165,7 +165,7 @@ private:
                 auto lf = hce::scheduler::make(hce::config::threadpool::config());
 
                 // assign the scheduler to the vector
-                schedulers[i] = lf->scheduler();
+                schedulers[i] = lf->get_scheduler();
 
                 // register the worker lifecycle
                 hce::scheduler::lifecycle::service::instance().registration(

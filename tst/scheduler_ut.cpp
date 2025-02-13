@@ -60,7 +60,7 @@ inline hce::co<void> co_scheduler_local_check(test::queue<void*>& q) {
 }
 
 inline hce::co<void> co_scheduler_global_check(test::queue<void*>& q) { 
-    q.push(&(hce::scheduler::global::service::get().scheduler()));
+    q.push(&(hce::scheduler::global::service::get().get_scheduler()));
     co_return;
 }
 
@@ -73,7 +73,7 @@ TEST(scheduler, make_with_lifecycle) {
 
     {
         lf = hce::scheduler::make();
-        sch = lf->scheduler();
+        sch = lf->get_scheduler();
         EXPECT_TRUE(sch);
         EXPECT_EQ(hce::scheduler::state::executing, sch->status());
     }
@@ -86,7 +86,7 @@ TEST(scheduler, make_with_lifecycle) {
 
     {
         lf = hce::scheduler::make();
-        sch = lf->scheduler();
+        sch = lf->get_scheduler();
         EXPECT_TRUE(sch);
         EXPECT_EQ(hce::scheduler::state::executing, sch->status());
         lf->suspend();
@@ -105,7 +105,7 @@ TEST(scheduler, conversions) {
 
     {
         auto lf = hce::scheduler::make();
-        sch = lf->scheduler();
+        sch = lf->get_scheduler();
         EXPECT_EQ(hce::scheduler::state::executing, sch->status());
 
         hce::scheduler& sch_ref = *sch;
@@ -135,7 +135,7 @@ size_t schedule_T(std::function<hce::co<void>(test::queue<T>& q, T t)> Coroutine
     {
         test::queue<T> q;
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
 
         auto awt1 = sch->schedule(Coroutine(q,test::init<T>(3)));
         auto awt2 = sch->schedule(Coroutine(q,test::init<T>(2)));
@@ -213,9 +213,9 @@ TEST(scheduler, schedule_yield) {
 TEST(scheduler, schedule_and_thread_locals) {
     {
         test::queue<void*> sch_q;
-        hce::scheduler* global_sch = &(hce::scheduler::global::service::get().scheduler());
+        hce::scheduler* global_sch = &(hce::scheduler::global::service::get().get_scheduler());
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
 
         try {
             auto awt1 = sch->schedule(test::scheduler::co_scheduler_in_check(sch_q));
@@ -252,7 +252,7 @@ size_t join_schedule_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname, "schedule");
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::awt<T>> schedules;
 
         schedules.push_back(sch->schedule(
@@ -282,7 +282,7 @@ size_t join_schedule_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname, "schedule in reverse order");
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::awt<T>> schedules;
 
         schedules.push_back(sch->schedule(co_return_T<T>(test::init<T>(3))));
@@ -309,7 +309,7 @@ size_t join_schedule_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname, "schedule void");
         auto lf = hce::scheduler::make();
-        std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
         std::deque<hce::awt<void>> schedules;
 
         schedules.push_back(sch->schedule(co_void()));
@@ -349,9 +349,9 @@ TEST(scheduler, join_schedule) {
 TEST(scheduler, migrate) {
     auto lf1 = hce::scheduler::make();
     auto lf2 = hce::scheduler::make();
-    hce::scheduler* sch1 = &(lf1->scheduler());
-    hce::scheduler* sch2 = &(lf2->scheduler());
-    hce::scheduler* schg = &(hce::scheduler::global::service::get().scheduler());
+    hce::scheduler* sch1 = &(lf1->get_scheduler());
+    hce::scheduler* sch2 = &(lf2->get_scheduler());
+    hce::scheduler* schg = &(hce::scheduler::global::service::get().get_scheduler());
 
     EXPECT_NE(nullptr, sch1);
     EXPECT_NE(nullptr, sch2);
@@ -386,7 +386,7 @@ TEST(scheduler, migrate) {
 
 TEST(scheduler, scheduler_cache_info) {
     auto lf = hce::scheduler::make();
-    std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+    std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
     hce::lifecycle::config c;
     sch->schedule(test::memory::cache_info_check_co("scheduler", c.mem.scheduler));
 }
@@ -402,7 +402,7 @@ TEST(scheduler, global_cache_info) {
     EXPECT_EQ(std::string("system"), std::string(cur_info.name()));
 
     hce::lifecycle::config c;
-    hce::scheduler::global::service::get().scheduler().schedule(
+    hce::scheduler::global::service::get().get_scheduler().schedule(
         test::memory::cache_info_check_co(
             "global", 
             c.mem.global));
@@ -410,10 +410,10 @@ TEST(scheduler, global_cache_info) {
 
 TEST(scheduler, scheduler_cache_allocate_deallocate) {
     auto lf = hce::scheduler::make();
-    std::shared_ptr<hce::scheduler> sch = lf->scheduler();
+    std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
     sch->schedule(test::memory::cache_allocate_deallocate_co());
 }
 
 TEST(scheduler, global_cache_allocate_deallocate) {
-    hce::scheduler::global::service::get().scheduler().schedule(test::memory::cache_allocate_deallocate_co());
+    hce::scheduler::global::service::get().get_scheduler().schedule(test::memory::cache_allocate_deallocate_co());
 }

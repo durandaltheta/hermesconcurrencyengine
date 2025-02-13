@@ -807,7 +807,7 @@ struct printable {
      internal elements of a given object, such as allocated pointers, or other 
      printable objects it contains.
      */
-    virtual std::string content() const { return {}; }
+    virtual inline std::string content() const { return {}; }
 
     /// string conversion
     inline std::string to_string() const { 
@@ -828,7 +828,7 @@ struct printable {
     }
 
     /// std::string conversion
-    virtual inline operator std::string() const final { return to_string(); }
+    inline operator std::string() const { return to_string(); }
 };
 
 /// convenience Callable->std::string conversion
