@@ -17,6 +17,7 @@
 
 // local 
 #include "utility.hpp"
+#include "cleanup.hpp"
 #include "logging.hpp"
 #include "memory.hpp"
 #include "alloc.hpp"
@@ -54,16 +55,7 @@ struct coroutine : public printable {
      and return_value(), as well as name() which are implemented by the 
      co<T>::promise_type.
      */
-    struct promise_type : public printable {
-        /// This object contains the necessary values for the cleanup handler 
-        struct cleanup_data {
-            void* install; /// arg pointer provided to install()
-            void* promise; /// pointer to the descendent promise_type instance
-        };
-
-        /// a function pointer to a cleanup operation
-        using cleanup_operation = void (*)(cleanup_data&);
-
+    struct promise_type : public cleanup, public printable {
         promise_type() { }
         virtual ~promise_type(){ }
 
@@ -71,6 +63,16 @@ struct coroutine : public printable {
         static coroutine get_return_object_on_allocation_failure() {
             throw std::bad_alloc();
             return coroutine(nullptr);
+        }
+
+        /// implement cleanup interface
+        inline void* cleanup_alloc(size_t n) {
+            return hce::memory::allocate(n);
+        }
+
+        /// implement cleanup interface
+        inline void cleanup_dealloc(void* p) {
+            hce::memory::deallocate(p);
         }
 
         /**
@@ -99,70 +101,6 @@ struct coroutine : public printable {
 
         /// exception pointer to the most recently raised exception
         std::exception_ptr eptr = nullptr; 
-
-        /**
-         @brief install a cleanup operation 
-
-         Cleanup handlers are installed as a list. Installed handlers are 
-         executed FILO (first in, last out).
-
-         @param co a cleanup operation function pointer 
-         @param arg some arbitrary data to be passed to `co` in the `cleanup_data` struct
-         */
-        inline void install(cleanup_operation co, void* arg) {
-            HCE_LOW_METHOD_ENTER("install", reinterpret_cast<void*>(co), arg);
-
-            node* next = hce::allocate<node>(1);
-            new(next) node(cleanup_list_, co, arg);
-            cleanup_list_ = next;
-        }
-
-        /**
-         @brief execute any installed callback operations
-
-         This should be called by the hce::co<T>::promise_type destructor. It 
-         cannot be called by the underlying `hce::coroutine::promise_type` 
-         destructor because cleanup handlers may need to access members of the 
-         descendent type.
-         */
-        inline void cleanup() {
-            // trigger the callback if it is set, then unset it
-            if(cleanup_list_) [[likely]] {
-                HCE_LOW_METHOD_BODY("cleanup", "calling operations");
-
-                do {
-                    HCE_MIN_METHOD_BODY(
-                        "cleanup", 
-                        reinterpret_cast<void*>(cleanup_list_->co), 
-                        cleanup_list_->install, 
-                        (void*)this);
-
-                    cleanup_data d{cleanup_list_->install, this};
-                    cleanup_list_->co(d);
-                    node* old = cleanup_list_;
-                    cleanup_list_ = cleanup_list_->next;
-                    hce::deallocate(old);
-                } while(cleanup_list_);
-            } else {
-                HCE_LOW_METHOD_BODY("cleanup", "no cleanup operation");
-            }
-        }
-
-    private:
-        /// object for creating a simple singly linked list of cleanup handlers
-        struct node {
-            node(node* n, cleanup_operation c, void* i) :
-                next(n),
-                co(c),
-                install(i)
-            { }
-
-            node* next; /// the next node in the cleanup handler list
-            cleanup_operation co; /// the cleanup operation provided to install()
-            void* install; /// data pointer provied to install()
-        };
-
-        node* cleanup_list_ = nullptr; // list of cleanup handlers
     };
 
     coroutine() { }
@@ -330,7 +268,7 @@ struct co : public coroutine {
 
     struct promise_type : public coroutine::promise_type {
         promise_type() { }
-        virtual ~promise_type() { cleanup(); }
+        virtual ~promise_type() { clean(); }
 
         static inline std::string info_name() { 
             return hce::co<T>::info_name() + "::promise_type";
@@ -393,7 +331,7 @@ struct co<void> : public coroutine {
 
     struct promise_type : public coroutine::promise_type {
         promise_type() { }
-        virtual ~promise_type() { cleanup(); }
+        virtual ~promise_type() { clean(); }
 
         static inline std::string info_name() { 
             return co<void>::info_name() + "::promise_type";

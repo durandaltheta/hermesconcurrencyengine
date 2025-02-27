@@ -5,8 +5,9 @@
 
 namespace hce {
 
-// forward declare lifecycle so it can be friended
+// forward declarations so they can be friended
 struct lifecycle;
+struct environment;
 
 }
 

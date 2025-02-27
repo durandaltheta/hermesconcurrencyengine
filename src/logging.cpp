@@ -1,9 +1,24 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
 #include "logging.hpp"
+#include "thread.hpp"
+#include "thread_key_map.hpp"
+
 int& hce::logger::tl_loglevel() {
-    thread_local int level = hce::config::logging::default_log_level();
-    return level;
+    struct init {
+        init() : i(-9) { 
+            if(level.ref() == nullptr) {
+                i = hce::config::logging::default_log_level();
+                level.ref() = &i;
+            }
+        }
+
+        int i;
+        hce::thread::local::ptr<hce::thread::key::loglevel> level;
+    };
+
+    thread_local init i;
+    return *(i.level.ref());
 }
 
 /// return the thread local loglevel

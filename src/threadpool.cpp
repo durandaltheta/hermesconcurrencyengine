@@ -4,10 +4,8 @@
 
 #include "threadpool.hpp"
 #include "lifecycle.hpp"
-
-hce::threadpool::service* hce::threadpool::service::instance_ = nullptr;
     
-hce::scheduler& hce::threadpool::service::lightest() {
+hce::scheduler& hce::threadpool::lightest() {
     /*
      A thread_local index is used to determine which scheduler to check first 
      during scheduler() selection. This value rotates through available indexes 
@@ -22,7 +20,7 @@ hce::scheduler& hce::threadpool::service::lightest() {
      a bottleneck in scenarios with *many* worker threads executing in parallel.
      */
     thread_local size_t tl_rotatable_start_index = 0;
-    const auto& schedulers = hce::threadpool::service::get().schedulers();
+    const auto& schedulers = hce::service<hce::threadpool>::get().schedulers();
     const size_t starting_index = tl_rotatable_start_index;
     const size_t worker_count = schedulers.size();
 

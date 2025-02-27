@@ -247,7 +247,7 @@ TEST(threadpool, join_schedule) {
 }
 
 TEST(threadpool, cache_info) {
-    auto& tp_schs = hce::threadpool::service::get().schedulers();
+    auto& tp_schs = hce::service<hce::threadpool>::get().schedulers();
 
     EXPECT_TRUE(tp_schs.size() > 0);
 
@@ -263,7 +263,7 @@ TEST(threadpool, cache_info) {
 }
 
 TEST(threadpool, cache_allocate_deallocate) {
-    auto& tp_schs = hce::threadpool::service::get().schedulers();
+    auto& tp_schs = hce::service<hce::threadpool>::get().schedulers();
 
     EXPECT_TRUE(tp_schs.size() > 0);
 

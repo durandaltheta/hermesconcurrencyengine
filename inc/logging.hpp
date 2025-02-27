@@ -7,7 +7,6 @@
 #include <string>
 #include <sstream>
 #include <ostream>
-#include <iostream>
 #include <coroutine>
 #include <cstdlib>
 #include <chrono>
@@ -889,14 +888,6 @@ namespace logging {
  */
 int default_log_level();
 
-/**
- Declaration of user replacable log initialization function 
-
- This method is called when logging is being initialized, and is responsible for
- calling any necessary `loguru::` namespace functions such as `loguru::init()`..
- */
-void initialize();
-
 }
 }
 
@@ -986,7 +977,7 @@ struct logger {
                         self.c_str(), 
                         method_name.c_str(), 
                         ingested.c_str());
-        }
+        } 
     }
 
     template <typename... As>

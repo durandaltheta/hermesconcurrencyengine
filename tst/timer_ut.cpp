@@ -71,7 +71,7 @@ void validate_test(std::optional<double> check_sleep,
     }
 
     if(check_busywait) {
-        hce::timer::service::ticks ticks = hce::timer::service::get().get_ticks();
+        hce::service<hce::timer>::ticks ticks = hce::service<hce::timer>::get().get_ticks();
         double busy_wait_rate = ((double)(ticks.busywait)/(ticks.runtime)) * 100;
         std::cout 
             << "timer service busy-wait microsecond threshold: " 
@@ -506,7 +506,7 @@ protected:
         test::timer::missedrunning_total = 0;
 
         // reset ticks for calculation
-        hce::timer::service::get().reset_ticks();
+        hce::service<hce::timer>::get().reset_ticks();
     }
 
     // This function is called after each test.

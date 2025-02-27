@@ -6,6 +6,7 @@
 #include "base.hpp"
 #include "utility.hpp"
 #include "logging.hpp"
+#include "service.hpp"
 #include "memory.hpp"
 #include "alloc.hpp"
 #include "atomic.hpp"
@@ -24,5 +25,7 @@
 #include "scope.hpp"
 #include "threadpool.hpp"
 #include "lifecycle.hpp"
+#include "environment.hpp"
+#include "module.hpp"
 
 #endif

@@ -12,7 +12,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -Wall -Wfatal-errors")
 set(HCE_INCLUDE_DIR ${CMAKE_CURRENT_LIST_DIR}/inc)
 set(HCE_SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/src)
 set(LOGURU_DIR ${CMAKE_CURRENT_LIST_DIR}/loguru)
-set(BUILD_SHARED_LIBS OFF)
+option(BUILD_SHARED_LIBS "Build hce as a shared library" OFF)
 
 project(libhce)
 
@@ -79,7 +79,9 @@ set(HCE_HEADER_FILES
     ${LOGURU_DIR}/loguru.hpp
     ${HCE_INCLUDE_DIR}/base.hpp
     ${HCE_INCLUDE_DIR}/utility.hpp
+    ${HCE_INCLUDE_DIR}/cleanup.hpp
     ${HCE_INCLUDE_DIR}/logging.hpp
+    ${HCE_INCLUDE_DIR}/service.hpp
     ${HCE_INCLUDE_DIR}/memory.hpp
     ${HCE_INCLUDE_DIR}/alloc.hpp
     ${HCE_INCLUDE_DIR}/thread.hpp
@@ -98,7 +100,10 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/channel.hpp
     ${HCE_INCLUDE_DIR}/scope.hpp
     ${HCE_INCLUDE_DIR}/threadpool.hpp
+    ${HCE_INCLUDE_DIR}/thread_key_map.hpp
     ${HCE_INCLUDE_DIR}/lifecycle.hpp
+    ${HCE_INCLUDE_DIR}/environment.hpp
+    ${HCE_INCLUDE_DIR}/module.hpp
     ${HCE_INCLUDE_DIR}/hce.hpp
 )
 
@@ -109,9 +114,10 @@ set(HCE_SOURCE_FILES
     ${HCE_SOURCE_DIR}/coroutine.cpp
     ${HCE_SOURCE_DIR}/scheduler.cpp
     ${HCE_SOURCE_DIR}/timer.cpp
-    ${HCE_SOURCE_DIR}/blocking.cpp
     ${HCE_SOURCE_DIR}/threadpool.cpp
+    ${HCE_SOURCE_DIR}/service.cpp
     ${HCE_SOURCE_DIR}/lifecycle.cpp
+    ${HCE_SOURCE_DIR}/module.cpp
     ${HCE_SOURCE_DIR}/config.cpp
 )
 
@@ -222,7 +228,16 @@ SetRemainingCompileDefines(
         HCELOGLIMIT "-1"
 )
 
-add_library(hce STATIC ${HCE_HEADER_FILES} ${HCE_SOURCE_FILES})
+if(BUILD_SHARED_LIBS)
+    add_library(hce SHARED ${HCE_HEADER_FILES} ${HCE_SOURCE_FILES})
+else()
+    add_library(hce STATIC ${HCE_HEADER_FILES} ${HCE_SOURCE_FILES})
+endif()
+
+# Apply the shared/static setting
+set_target_properties(hce PROPERTIES
+    POSITION_INDEPENDENT_CODE ON  # Ensure PIC for shared builds
+)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
