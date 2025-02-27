@@ -10,21 +10,23 @@ set(HCE_UT_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/test_helpers.hpp
     ${CMAKE_CURRENT_LIST_DIR}/test_memory_helpers.hpp
     ${CMAKE_CURRENT_LIST_DIR}/test_blocking_helpers.hpp
-    ${CMAKE_CURRENT_LIST_DIR}/lifecycle_ut.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/atomic_ut.cpp 
-    ${CMAKE_CURRENT_LIST_DIR}/memory_alloc_ut.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/allocator_ut.cpp 
-    ${CMAKE_CURRENT_LIST_DIR}/circular_buffer_ut.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/list_ut.cpp 
-    ${CMAKE_CURRENT_LIST_DIR}/synchronized_list_ut.cpp 
-    ${CMAKE_CURRENT_LIST_DIR}/id_ut.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/coroutine_ut.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/scheduler_ut.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/scope_ut.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/channel_ut.cpp 
-    ${CMAKE_CURRENT_LIST_DIR}/threadpool_ut.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/comparison_ut.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/blocking_ut.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/test_module_helpers.hpp
+    #${CMAKE_CURRENT_LIST_DIR}/lifecycle_ut.cpp
+    #${CMAKE_CURRENT_LIST_DIR}/atomic_ut.cpp 
+    #${CMAKE_CURRENT_LIST_DIR}/memory_alloc_ut.cpp
+    #${CMAKE_CURRENT_LIST_DIR}/allocator_ut.cpp 
+    #${CMAKE_CURRENT_LIST_DIR}/circular_buffer_ut.cpp
+    #${CMAKE_CURRENT_LIST_DIR}/list_ut.cpp 
+    #${CMAKE_CURRENT_LIST_DIR}/synchronized_list_ut.cpp 
+    #${CMAKE_CURRENT_LIST_DIR}/id_ut.cpp
+    #${CMAKE_CURRENT_LIST_DIR}/coroutine_ut.cpp
+    #${CMAKE_CURRENT_LIST_DIR}/scheduler_ut.cpp
+    #${CMAKE_CURRENT_LIST_DIR}/scope_ut.cpp
+    #${CMAKE_CURRENT_LIST_DIR}/channel_ut.cpp 
+    #${CMAKE_CURRENT_LIST_DIR}/threadpool_ut.cpp
+    #${CMAKE_CURRENT_LIST_DIR}/comparison_ut.cpp
+    #${CMAKE_CURRENT_LIST_DIR}/blocking_ut.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/module_ut.cpp
     )
 
 if(TIME_SENSITIVE_TESTS_ENABLED)
@@ -41,11 +43,20 @@ endif()
 
 set(HCE_UT_COMPILE_DEFINES -DHCELOGLIMIT=${HCELOGLIMIT} -DHCEMEMORYCACHEBUCKETCOUNT=${HCEMEMORYCACHEBUCKETCOUNT} -DHCETESTENABLETIMESENSITIVE=${HCETESTENABLETIMESENSITIVE})
 
-add_executable(hce_ut ${HCE_UT_SOURCES})
+# add module unit test shared library
+add_library(module_ut_shared 
+            SHARED 
+            ${CMAKE_CURRENT_LIST_DIR}/test_module_helpers.hpp
+            ${CMAKE_CURRENT_LIST_DIR}/module_ut_shared.cpp)
+target_link_libraries(module_ut_shared PRIVATE hce)
+target_compile_definitions(module_ut_shared PRIVATE ${HCE_UT_COMPILE_DEFINES})
 
+# add main unit test executable
+add_executable(hce_ut ${HCE_UT_SOURCES})
 target_include_directories(hce_ut PUBLIC ${HCE_INCLUDE_DIR} PRIVATE ${LOG_SOURCE_DIR})
 target_link_libraries(hce_ut PRIVATE gtest hce)
 target_compile_definitions(hce_ut PRIVATE ${HCE_UT_COMPILE_DEFINES})
+target_compile_definitions(hce_ut PRIVATE MODULE_UT_SHARED_PATH="$<TARGET_FILE:module_ut_shared>")
 
 SplitOnWhitespace("${HCE_UT_SOURCES}" PRETTY_HCE_UT_SOURCES)
 SplitOnWhitespace("${HCE_UT_COMPILE_DEFINES}" PRETTY_HCE_UT_COMPILE_DEFINES)

@@ -3,6 +3,21 @@
 #ifndef __HCE_COROUTINE_ENGINE_TEST_BLOCKING_HELPERS__
 #define __HCE_COROUTINE_ENGINE_TEST_BLOCKING_HELPERS__
 
+#include <deque>
+#include <string>
+#include <thread>
+#include <chrono>
+#include <vector>
+#include <algorithm>
+
+#include "loguru.hpp"
+#include "atomic.hpp"
+#include "scheduler.hpp"
+#include "blocking.hpp"
+
+#include <gtest/gtest.h> 
+#include "test_helpers.hpp"
+
 namespace test {
 namespace blocking {
 

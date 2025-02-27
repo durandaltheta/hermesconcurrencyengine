@@ -7,6 +7,8 @@ This framework implements several tiers and types of memory allocation caching i
 
 Ultimately, `malloc()`/`free()` are *still* used for every allocated value, and are called as necessary. The following mechanisms only exist to limit how frequently they need to be called.
 
+WARNING: The actual object allocated with `malloc()` by this framework's mechanisms include a privately managed memory header, but the memory after the header is returned to the user. Because of this, any memory allocated by `hce::memory::allocate()` *MUST* be deallocated by `hce::memory::deallocate()`, because of the necessary additional calculations on the given pointer before being passed to `free()`.
+
 ## High Level Allocation/Deallocation
 Allocation and deallocation are done through the templated `hce::allocate<T>(size_t count)`/`hce::deallocate<T>()` mechanisms. These functions implement memory aligned allocation (similar to `std::aligned_alloc()`). They *do not* construct the memory `T`. The template `T` is used only for determining the size of the allocation. 
 
@@ -38,19 +40,21 @@ Custom implementations of `info()` provide the opportunity for fine-grained cont
 The `hce::allocator<T>` is a replacement for `std::allocator<T>` which uses `hce::allocate<T>()`/`hce::deallocate()` instead of directly calling `malloc()`/`free()`. This allows the user to easily make use of the framework's allocation caching in their `std::` compliant containers.
 
 ## Pool Allocator 
-A second tier of allocation caching is implemented by the `hce::pool_allocator<T>`. Like `hce::allocator<T>`, `pool_allocator`s can be used as the allocator in `std::` containers. However, their purpose is to implement allocation caching for a *particular* use case, allowing code which utilizes it to set the size of the cache and to guarantee that allocated values in the `pool_allocator` are private, and therefore reusable allocated memory is guaranteed to be available if they have been previously cached.
+A second tier of allocation caching is implemented by the `hce::pool_allocator<T>`. Like `hce::allocator<T>`, `hce::pool_allocator<T>`s can be used as the allocator in `std::` containers. However, their purpose is to implement allocation caching for a *particular* use case, allowing code which utilizes it to set the size of the cache and to guarantee that allocated values in the `pool_allocator` are private, and therefore reusable allocated memory is guaranteed to be available if they have been previously cached.
 
 This mechanism is especially useful for container and communication mechanisms which need to repeatedly allocate values of a pre-known size. By separately caching allocations for reuse in the pool, the code can more precisely limit the calls to `malloc()`/`free()` based on superior knowledge of a given usecase.
 
-## Scheduler Coroutine Resource Limits
-A third example of memory allocation optimization comes in the form of `hce::scheduler` coroutine resource limits.
+## Scheduler Reusable Coroutine Handle Limits
+A third example of memory allocation optimization comes in the form of `hce::scheduler` coroutine reusable coroutine limits.
 
-List of memory related resource limits:
-- `HCESCHEDULERDEFAULTCOROUTINERESOURCELIMIT`: A fallback resource limit
-- `HCEGLOBALSCHEDULERCOROUTINERESOURCELIMIT`: The global `hce::scheduler` resource limit
-- `HCETHREADPOOLCOROUTINERESOURCELIMIT`: `hce::threadpool` `hce::scheduler` resource limit
+List of memory related reusable coroutine limits compiler defines:
+- `HCEREUSABLECOROUTINEHANDLEDEFAULTSCHEDULERLIMIT`: A fallback reusable coroutine limit
+- `HCEREUSABLECOROUTINEHANDLEGLOBALSCHEDULERLIMIT`: The global `hce::scheduler` reusable coroutine limit
+- `HCEREUSABLECOROUTINEHANDLETHREADPOOLLIMIT`: `hce::threadpool` `hce::scheduler` reusable coroutine limit 
 
-Resource limits are more of a heuristic than the previously described strategies. Specifically, they are tied to the specific size limits of `hce::pool_allocator<T>`s used internally by `hce::scheduler` objects, related to things like coroutine queue memory caching. Sane limits allow for more efficient coroutine processing in the median case, because less time is spent by the `hce::scheduler` allocating resources which are constantly being reused. 
+These values can be overriden by a custom `hce::lifecycle::config` passed to `hce::initialize()`.
+
+Reusable coroutine limits are more of a heuristic than the previously described strategies. Specifically, they are tied to the specific size limits of `hce::pool_allocator<T>`s used internally by `hce::scheduler` objects, related to things like coroutine queue memory caching. Sane limits allow for more efficient coroutine processing in the median case, because less time is spent by the `hce::scheduler` allocating reusable coroutines which are constantly being reused. 
 
 These values have *no* effect on the actual code running *inside* the coroutines running on a given `hce::scheduler`. They are instead about smoothing the algorithmic processing of scheduling itself.
 
@@ -61,13 +65,9 @@ A fourth example of memory allocation optimization is in the creation and cachin
 
 Due to this there is a need to balance startup speed via worker thread caching versus holding unnecessary amounts of memory from caching worker threads. 
 
-Therefore this framework provides a few key configurations which allow the user to fine tune their blocking call management:
-- `HCEPROCESSBLOCKWORKERRESOURCELIMIT`: The count of cacheable workers shared amongst a process-wide cache.
-- `HCEGLOBALSCHEDULERBLOCKWORKERRESOURCELIMIT`: The count of cacheable workers for *only* the thread running the global scheduler in a lockfree cache.
-- `HCEDEFAULTSCHEDULERBLOCKWORKERRESOURCELIMIT`: The count of cacheable workers for threads running  other schedulers in their own lockfree caches.
+The block worker cache size can be configured by setting this compiler define:
+- `HCEREUSABLEBLOCKWORKERCACHESIZE`
 
-If memory consumption is a primary concern, consider limiting or setting to `0` each of these values, forcing deallocation after every `hce::blocking::call()`.
+Similar to the reusable coroutine handles, this can be configured in the the `hce::lifecycle::config` passed to `hce::initialize()`.
 
-If CPU efficiency is the primary concern, set `HCEPROCESSBLOCKWORKERRESOURCELIMIT` high enough to handle the median count of blocking tasks. 
-
-If lock contention on the `hce::blocking::service` object is a limiting factor, ensure the scheduler resource limits are high enough so that the lock on the `hce::blocking::service` is lowered.
+If throughput efficiency of blocking calls is the primary concern, set `HCEPROCESSBLOCKWORKERRESOURCELIMIT` high enough to handle the median count of blocking tasks. 

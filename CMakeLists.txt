@@ -22,13 +22,6 @@ function(SplitOnWhitespace input result_var)
     set(${result_var} ${split_list} PARENT_SCOPE)  # Return as list
 endfunction()
 
-# ensure defitions exist with a default value
-function(SetDefault VAR_NAME DEFAULT_VALUE)
-    if(NOT DEFINED ${VAR_NAME} OR "${${VAR_NAME}}" STREQUAL "")
-        set(${VAR_NAME} "${DEFAULT_VALUE}" PARENT_SCOPE)
-    endif()
-endfunction()
-
 function(pow2 result exponent)
     set(value 1)
     foreach(_ UNUSED RANGE ${exponent})
@@ -36,44 +29,6 @@ function(pow2 result exponent)
     endforeach()
     set(${result} ${value} PARENT_SCOPE)
 endfunction()
-
-function(SetRemainingCompileDefines)
-    set(options "")  # No boolean options
-    set(oneValueArgs "")  # No single-value arguments
-    set(multiValueArgs "PAIRS")  # Expecting a list of pairs
-    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    if(NOT DEFINED ARG_PAIRS)
-        message(FATAL_ERROR "SetRemainingCompileDefines requires a PAIRS argument")
-    endif()
-
-    list(LENGTH ARG_PAIRS num_items)
-    math(EXPR num_items_mod2 "${num_items} % 2") 
-
-    if(NOT num_items EQUAL 0 AND NOT num_items_mod2 EQUAL 0)
-        message(FATAL_ERROR "SetRemainingCompileDefines requires an even number of arguments (pairs of VAR_NAME and DEFAULT_VALUE)")
-    endif()
-
-    set(NEW_COMPILE_DEFINES "${HCE_COMPILE_DEFINES}")  # Preserve previous values
-
-    list(LENGTH ARG_PAIRS pair_count)
-    math(EXPR pair_count "${pair_count} / 2 - 1")  # Ensure correct iteration range
-
-    foreach(index RANGE 0 ${pair_count} 1)
-        math(EXPR varindex "${index} * 2")
-        list(GET ARG_PAIRS ${varindex} VAR_NAME)
-        math(EXPR valueindex "${varindex} +1")
-        list(GET ARG_PAIRS ${valueindex} DEFAULT_VALUE)
-
-        SetDefault(${VAR_NAME} "${DEFAULT_VALUE}")
-
-        list(APPEND NEW_COMPILE_DEFINES "-D${VAR_NAME}=${${VAR_NAME}}")
-    endforeach()
-
-    set(HCE_COMPILE_DEFINES "${NEW_COMPILE_DEFINES}" PARENT_SCOPE)
-endfunction()
-
-SetDefault(TIME_SENSITIVE_TESTS_ENABLED 13)
 
 set(HCE_HEADER_FILES 
     ${LOGURU_DIR}/loguru.hpp
@@ -121,6 +76,12 @@ set(HCE_SOURCE_FILES
     ${HCE_SOURCE_DIR}/config.cpp
 )
 
+# Compile unit tests with or without time sensitive tests (which take a long 
+# time and may be affected by processing environment)
+if(NOT DEFINED TIME_SENSITIVE_TESTS_ENABLED OR "${TIME_SENSITIVE_TESTS_ENABLED}" STREQUAL "")
+    set(TIME_SENSITIVE_TESTS_ENABLED "1")
+endif()
+
 # The number of buckets containing thread_local reusable allocated memory used 
 # by this library's memory allocation facilities. Reused allocations prevent 
 # needing to call process-wide locks.
@@ -137,7 +98,9 @@ set(HCE_SOURCE_FILES
 #
 # Any requested allocated size larger than the largest bucket can provide will 
 # be allocated/deallocated directly with `malloc()`/`free()`.
-SetDefault(HCEMEMORYCACHEBUCKETCOUNT 13)
+if(NOT DEFINED HCEMEMORYCACHEBUCKETCOUNT OR "${HCEMEMORYCACHEBUCKETCOUNT}" STREQUAL "")
+    set(HCEMEMORYCACHEBUCKETCOUNT "13")
+endif()
 
 # 512 bytes == 2^9. Buckets 10-HCEMEMORYCACHEBUCKETCOUNT will hold a maximum of 
 # 1 value, but buckets 0-9 will hold more.
@@ -151,11 +114,11 @@ math(EXPR SCHBYTELIMIT "1 << ${HCEMEMORYCACHEBUCKETCOUNT}")
 # load
 math(EXPR GLBBYTELIMIT "${SCHBYTELIMIT} * 2") 
        
-# start the list
-set(HCE_COMPILE_DEFINES "-DHCEMEMORYCACHEBUCKETCOUNT=${HCEMEMORYCACHEBUCKETCOUNT}")
+# Start the compile definitions list
+set(HCE_COMPILE_DEFINES "-DHCEMORYCACHEBUCKETCOUNT=${HCEMEMORYCACHEBUCKETCOUNT}")
 
-SetRemainingCompileDefines(
-    PAIRS
+# Define the pairs of variable names and their default values
+set(PAIRS
 # If the count of buckets is above 256 due to the user implementation they can 
 # configure the memory cache's index type to be larger than "unsigned char".
 #

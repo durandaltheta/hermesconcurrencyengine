@@ -22,14 +22,15 @@
 /**
  User source code compile time macro determining compiled log code. Keeping this 
  low ensures that not only will code beneath the specified log level not print, 
- the logging code won't even be compiled because the statements will resolve to 
- an empty statement.
+ the logging code won't even be compiled because the macro will resolve to an
+ empty statement.
 
  What's interesting about this is that by setting the HCELOGLIMIT to -9, maximum 
  library performance will be achieved no matter how high the loglevel is . 
  However, it should realistically never be necessary to set HCELOGLIMIT lower 
  than -1, even in most production code, because any error messages may be very 
- important to have logged.
+ important to have logged. Additionally, calls to log error messages are rare,
+ so performance shouldn't take a hit.
 
  A lot of the slightly odd design of the logging mechanics is to enforce "no 
  compile unless required" behavior, along with standardizing output to a high 
@@ -47,22 +48,22 @@
  called by implementions of `hce::printable`.  However, `FUNCTION` and `LOG` 
  macros can be called anywhere. `CONSTRUCTOR`, `DESTRUCTOR`, and `METHOD` 
  logging macros will print details about their object, such as its `this` 
- pointer address, namespace and (optional) object content/state.
+ pointer address, namespace+name and (optional) object content/state.
 
  `ENTER` and `CONSTRUCTOR` (for object constructors specifically) macros are for 
  describing functions as they are being entered, all arguments to the macro are 
  interpretted as if they are arguments to a function.
 
- Example logline:
+ Example ENTER logline:
  HCE_FATAL_FUNCTION_ENTER("my_function", "string", "int");
 
  Would print something like:
  my_function(string, int)
 
  In comparision `BODY` macros are for writing arbitrary function loglines, and 
- will be interpretted not as arguments, but concatenated into a single logline:
+ will be interpretted not as arguments, but concatenated into a single logline.
 
- Whereas:
+ Example BODY logline:
  HCE_FATAL_FUNCTION_BODY("my_function", "hello ", "world ", 3);
 
  Would print something like:
