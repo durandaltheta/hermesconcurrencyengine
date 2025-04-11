@@ -16,6 +16,7 @@
 #include "synchronized_list.hpp"
 #include "coroutine.hpp"
 #include "scheduler.hpp"
+#include "chrono.hpp"
 
 namespace hce {
 namespace config {
@@ -147,6 +148,7 @@ private:
 
 }
 
+
 /**
  @brief singleton service maintaining worker threads for executing blocking calls
 
@@ -163,8 +165,6 @@ private:
  lock contention:
  - block() checks if the current thread is a scheduler. If it isn't, the Callable 
  is immediately invoked.
- - a thread_local, lockless cache is used to hold reusable worker threads 
- capable of invoking Callables which can be drawn upon to invoke Callables.
  - a process-wide pool of reusable workers is maintained by this object which 
  can be drawn upon to invoke Callables.
  - if none of the previous options are available a new worker thread is 
@@ -520,6 +520,118 @@ private:
     hce::circular_buffer<std::unique_ptr<worker>> worker_cache_;
 
     friend hce::lifecycle;
+};
+
+/**
+ @brief an interface for objects which implement business-logic for switching between optimistic non-blocking and fallback blocking behavior
+
+ Given some implementation of hce::blocking::op<RESULT> named my_op, usage from 
+ a coroutine is as follows:
+ ```
+ my_blocking_op mbo(... args for my_op constructor ...);
+ co_await mo.await();
+ ```
+
+ User implementations are expected to catch exceptions and handle errors. 
+ Behavior from uncaught exceptions is undefined.
+ */
+template <typename RESULT>
+struct op {
+    virtual ~op() { }
+
+    /**
+     Overrideable algorithm for determining when to fallback to blocking operation.
+
+     @return true if should fallback to blocking operation, else false
+     */
+    virtual inline bool should_block() = 0;
+
+    /**
+     @brief nonblocking implementation 
+     @param result variable that operation must assign the result to
+     @return true if the operation succeeded, else false 
+     */
+    virtual bool nonblock(RESULT& result) = 0;
+
+    /**
+     @brief blocking implementation 
+     @param result variable that operation must assign the result to
+     */
+    virtual void block(RESULT& result) = 0;
+
+    /**
+     @brief `co_await`able blocking operation
+     */
+    inline hce::awt<RESULT> await() { 
+        return hce::schedule(op<RESULT>::co(this)); 
+    }
+
+private:
+    static hce::co<RESULT> co(op* self) {
+        RESULT r;
+        bool done = false;
+
+        do {
+            if(self->should_block()) {
+                co_await blocking::service::get().block([&]{ self->block(r); });
+                done = true;
+            } else {
+                done = self->nonblock(r);
+            }
+        } while(!done);
+
+        co_return r;
+    }
+};
+
+/**
+ @brief partial implementation of hce::blocking::op which attempts non-blocking until success or retries == 0 before attempting the blocking implementation.
+ */
+template <typename RESULT> 
+struct retry_op : public op<RESULT> {
+    /**
+     @param retry default implementation retries nonblocking this many times before blocking 
+     */
+    retry_op(size_t retry = 3) : retry_(retry) { } 
+
+    virtual ~retry_op() { }
+
+    inline size_t retries() const { return retry_; }
+
+    virtual inline bool should_block() {
+        if(retry_) {
+            --retry_;
+            return false;
+        } else {
+            return true;
+        }
+    }
+
+private:
+    size_t retry_;
+};
+
+/**
+ @brief partial implementation of hce::blocking::op which attempts non-blocking until success or a timeout is reached before attempting the blocking implementation.
+ */
+template <typename RESULT> 
+struct timeout_op : public op<RESULT> {
+    /**
+     @param dur default implementation retries until timeout before blocking
+     */
+    timeout_op(const hce::chrono::duration& dur) :
+        timeout_(dur + hce::chrono::now())
+    { } 
+
+    inline const hce::chrono::duration& timeout() const { return timeout_; }
+
+    virtual ~timeout_op() { }
+
+    /// fallback to blocking when the timeout is reached
+    virtual inline bool should_block() { return hce::chrono::now() >= timeout_; }
+
+private:
+    const hce::chrono::time_point timeout_;
 };
 
 }
