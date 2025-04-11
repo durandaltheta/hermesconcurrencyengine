@@ -398,5 +398,87 @@ hce::co<result> attempt_non_blocking(const unsigned int maximum_retry) {
 };
 ```
 
+## Combining Thread Non-Blocking Calls and Blocking Calls
+It may be the case that the ideal of implementing non-blocking calls with `hce::yield` may cause performance degradation due to high CPU usage. However, *when* this will occur is not always obvious. Therefore non-trivial blocking call algorithms which combine optimistic non-blocking and fallback blocking variations of an operation may need to be used.
+
+This library features a virtual interface which implements the necessary business logic for such an algorithm: `hce::blocking::operation`:
+```
+/// RESULT is the type returned from the blocking operation
+template <typename RESULT>
+struct operation {
+    virtual ~operation();
+
+    /**
+     Overrideable algorithm for determining when to fallback to blocking operation.
+
+     @return true if should fallback to blocking operation, else false
+     */
+    virtual inline bool should_block() = 0;
+
+    /**
+     @brief nonblocking implementation 
+     @param result variable that operation must assign the result to
+     @return awaitable hce::yield returning true if the operation succeeded, else false 
+     */
+    virtual bool nonblock(RESULT& result) = 0;
+
+    /**
+     @brief blocking implementation 
+     @param result variable that operation must assign the result to
+     */
+    virtual void block(RESULT& result) = 0;
+
+    /**
+     @brief `co_await`able blocking operation
+     */
+    hce::awt<RESULT> await();
+};
+```
+
+This interface allows the user to assemble an operation that will try to call the `operation::nonblocking()` implementation first, until `operation::should_block() == true`, upon which it will call `operation::block()`. The operations will be executed in an internally scheduled `hce::coroutine` when `operation::await()` is `co_await`ed. This coroutine abstracts and properly utilizes `hce::yield` and `hce::block()` when appropriate.
+
+Assuming the user has an implementation of `hce::blocking::operation<my_result>` in an object `my_blocking_op`, then it can be invoked from a user coroutine like this:
+```
+my_blocking_op mbo(... args for constructor ...);
+my_result mr = co_await mbo.await();
+```
+
+Two partial implementations for common use-cases are provided which user code can inherit, `hce::blocking::retry` and `hce::blocking::timeout`:
+```
+template <typename RESULT> 
+struct retry : public operation<RESULT> {
+    /**
+     @param retry default implementation retries nonblocking this many times before blocking 
+     */
+    retry(size_t retry = 3);
+
+    virtual ~retry();
+
+    size_t retries() const;
+
+    /// returns true when retries == 0
+    virtual bool should_block();
+};
+
+/**
+ @brief partial implementation of hce::blocking::op which attempts non-blocking until success or a timeout is reached before attempting the blocking implementation.
+ */
+template <typename RESULT> 
+struct timeout : public operation<RESULT> {
+    /**
+     @param dur default implementation retries until timeout before blocking
+     */
+    timeout(const hce::chrono::duration& dur);
+
+    virtual ~timeout();
+
+    /// return the timeout time_point
+    const hce::chrono::duration& time_point() const;
+
+    /// fallback to blocking when the timeout is reached
+    virtual bool should_block();
+};
+```
+
 ## Debug Logging
 This project utilizes the [emilk/loguru](https://github.com/emilk/loguru) project for debug logging, writing to stdout and stderr by default. Logging features are provided primarily for the development of this library, but work has been done to make it fairly robust and may be applicable for user development and production code debugging purposes. See the [logging primer](logging.md) for more information.

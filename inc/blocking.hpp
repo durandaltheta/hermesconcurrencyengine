@@ -538,8 +538,8 @@ private:
  Behavior from uncaught exceptions is undefined.
  */
 template <typename RESULT>
-struct op {
-    virtual ~op() { }
+struct operation {
+    virtual ~operation() { }
 
     /**
      Overrideable algorithm for determining when to fallback to blocking operation.
@@ -553,7 +553,7 @@ struct op {
      @param result variable that operation must assign the result to
      @return awaitable hce::yield returning true if the operation succeeded, else false 
      */
-    virtual hce::yield<bool> nonblock(RESULT& result) = 0;
+    virtual bool nonblock(RESULT& result) = 0;
 
     /**
      @brief blocking implementation 
@@ -579,7 +579,7 @@ private:
                 co_await blocking::service::get().block([&]{ self->block(r); });
                 done = true;
             } else {
-                done = co_await self->nonblock(r);
+                done = co_await hce::yield<bool>(self->nonblock(r));
             }
         } while(!done);
 
@@ -588,19 +588,20 @@ private:
 };
 
 /**
- @brief partial implementation of hce::blocking::op which attempts non-blocking until success or retries == 0 before attempting the blocking implementation.
+ @brief partial implementation of hce::blocking::operation which attempts non-blocking until success or retries == 0 before attempting the blocking implementation.
  */
 template <typename RESULT> 
-struct retry_op : public op<RESULT> {
+struct retry : public operation<RESULT> {
     /**
      @param retry default implementation retries nonblocking this many times before blocking 
      */
-    retry_op(size_t retry = 3) : retry_(retry) { } 
+    retry(size_t retry = 3) : retry_(retry) { } 
 
-    virtual ~retry_op() { }
+    virtual ~retry() { }
 
     inline size_t retries() const { return retry_; }
 
+    /// returns true when retries == 0
     virtual inline bool should_block() {
         if(retry_) {
             --retry_;
@@ -615,22 +616,23 @@ private:
 };
 
 /**
- @brief partial implementation of hce::blocking::op which attempts non-blocking until success or a timeout is reached before attempting the blocking implementation.
+ @brief partial implementation of hce::blocking::operation which attempts non-blocking until success or a timeout is reached before attempting the blocking implementation.
  */
 template <typename RESULT> 
-struct timeout_op : public op<RESULT> {
+struct timeout : public operation<RESULT> {
     /**
      @param dur default implementation retries until timeout before blocking
      */
-    timeout_op(const hce::chrono::duration& dur) :
+    timeout(const hce::chrono::duration& dur) :
         timeout_(dur + hce::chrono::now())
     { } 
 
-    inline const hce::chrono::duration& timeout() const { return timeout_; }
+    virtual ~timeout() { }
 
-    virtual ~timeout_op() { }
+    /// return the timeout time_point
+    inline const hce::chrono::duration& time_point() const { return timeout_; }
 
-    /// fallback to blocking when the timeout is reached
+    /// returns true when the timeout is reached
     virtual inline bool should_block() { 
         return hce::chrono::now() >= timeout_; 
     }
