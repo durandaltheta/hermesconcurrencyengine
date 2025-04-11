@@ -525,11 +525,11 @@ private:
 /**
  @brief an interface for objects which implement business-logic for switching between optimistic non-blocking and fallback blocking behavior using the `hce::blocking::service`
 
- Given some implementation of `hce::blocking::op<RESULT>` named 
+ Given some implementation of `hce::blocking::op<my_result>` named 
  `my_blocking_op`, usage from a coroutine is as follows:
  ```
  my_blocking_op mbo(... args for constructor ...);
- co_await mbo.await();
+ my_result mr = co_await mbo.await();
  ```
 
  Early cancellation, if desired, must be provided by the user implementation.
