@@ -551,9 +551,9 @@ struct op {
     /**
      @brief nonblocking implementation 
      @param result variable that operation must assign the result to
-     @return true if the operation succeeded, else false 
+     @return awaitable hce::yield returning true if the operation succeeded, else false 
      */
-    virtual bool nonblock(RESULT& result) = 0;
+    virtual hce::yield<bool> nonblock(RESULT& result) = 0;
 
     /**
      @brief blocking implementation 
@@ -578,7 +578,7 @@ private:
                 co_await blocking::service::get().block([&]{ self->block(r); });
                 done = true;
             } else {
-                done = self->nonblock(r);
+                done = co_await self->nonblock(r);
             }
         } while(!done);
 
