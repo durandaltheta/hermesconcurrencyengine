@@ -202,7 +202,7 @@ private:
 };
 
 /**
- @brief call schedule() on a threadpool scheduler
+ @brief call schedule() on a threadpool hce::scheduler
  @param as arguments for scheduler::schedule()
  @return result of schedule()
  */

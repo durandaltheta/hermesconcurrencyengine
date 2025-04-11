@@ -4,7 +4,7 @@ C++20 Stackless Coroutine Concurrency Engine
 ## Rationale
 `c++20` coroutines are an extremely powerful and efficient mechanism for writing concurrent code. They are also one of the most difficult parts of the language to use correctly.
 
-This framework is designed to make using `c++20` coroutines real code much easier and to make integration into existing codebases simple.
+This framework is designed to make using `c++20` coroutines in real code much easier and to make integration into existing codebases simple.
 
 ### Example
 A simple example where a coroutine is constructed, scheduled, and communicated with asynchronously. 
@@ -249,6 +249,59 @@ $
 
 Generate `Doxygen` documentation to see more for `hce::scheduler` creation, configuration and management.
 
+## Joining 
+Coroutines can join with other launched coroutines by `co_await`ing the result of an `hce::schedule()` call:
+```
+hce::co<int> my_co2(int i) {
+    co_return i + 1;
+}
+
+hce::co<int> my_co1(int i) {
+    co_return co_await hce::schedule(my_co2(i + 1));
+}
+
+int main() {
+    std::unique_ptr<hce::lifecycle> lf = hce::initialize();
+    int my_result = hce::schedule(my_co1(1));
+    std::cout << "main joined with my_coroutine and received " << my_result << std::endl;
+    return 0;
+}
+```
+
+Example output:
+```
+$ ./a.out 
+my_coroutine received 14
+main joined with my_coroutine and received 3
+$
+```
+
+## Concurrency vs Parallelization
+The framework creates a global `hce::threadpool` which manages a count of system threads running `hce::scheduler`s, allowing coroutines to be scheduled in parallel (potentially having 2 or more running simultaneously on separate processor cores) in addition to concurrently (having 2 or more coroutines in-progress, but not necessarily executing their code at the same moment in time).
+
+The `hce::threadpool::schedule()` mechanism can be used to call `hce::scheduler::schedule()` on the `hce::threadpool`:
+```
+namespace hce {
+namespace threadpool {
+
+/**
+ @brief call schedule() on a threadpool hce::scheduler
+ @param as arguments for scheduler::schedule()
+ @return result of schedule()
+ */
+template <typename... As>
+static auto schedule(As&&... as);
+
+}
+}
+```
+
+As a general note, executing coroutines in parallel schedulers increases communication latency compared to executing on the same scheduler. The default `hce::schedule()` always attempts to schedule on the calling thread's assigned `hce::scheduler`, while `hce::threadpool::schedule()` always attempts to select *some* `hce::scheduler` in the threadpool based on its internally defined algorithm.
+
+Unless the bottleneck in performance is CPU bound, scheduling with `hce::schedule()` will normally provide ideal results.
+
+Generate `Doxygen` documentation to see more for `hce::threadpool` usage, algorithms and configuration.
+
 ## Communication
 This library allows communication between coroutines, threads, and any combination there-in using `hce::chan<T>`s, a specialized communication mechanism allowing transfer of data.
 
@@ -480,5 +533,70 @@ struct timeout : public operation<RESULT> {
 };
 ```
 
+## Timers and Sleeps
+This framework provides a timer mechanism which allows `hce::coroutine`s to block until timeout or cancel by `co_await`ing. Here are the most relevant details:
+```
+namespace hce {
+namespace timer {
+
+/**
+ @brief start a timer  
+
+ A simplification for calling hce::timer::service::get().start().
+
+ The returned awaitable will result in `true` if the timer timeout was 
+ reached, else `false` will be returned if it was cancelled early due to 
+ scheduler being totally .
+
+ @param id a reference to an hce::sid which will be set to the launched timer's id
+ @param timeout an hce::chrono::time_point or hce::chrono::duration when the timer should time out
+ @return an awaitable to join with the timer timing out (returning true) or being cancelled (returning false)
+ */
+template <typename TIMEOUT>
+hce::awt<bool> start(hce::sid& sid, const TIMEOUT& timeout);
+
+/**
+ @brief determine if a timer is running
+
+ A simplification for calling hce::timer::service::get().running().
+
+ @param sid the sid associated with a launched timer
+ @return true if the timer is running, else false
+ */
+bool running(const hce::sid& sid);
+
+/**
+ @brief attempt to cancel a scheduled timer
+
+ A simplification for calling hce::timer::service::get().cancel().
+
+ The `hce::sid` should be constructed from a call to the `hce::timer::start()` method.
+
+ @param id the hce::sid associated with the timer to be cancelled
+ @return true if cancelled timer successfully, false if timer already timed out or was never started or if the sid was never constructed
+ */
+bool cancel(const hce::sid& sid);
+
+}
+
+/**
+ @brief start a timer to sleep for a period
+
+ Calls `hce::timer::start()` but abstracts away the timer's sid and success 
+ state (no need to track success when timer is uncancellable).
+
+ @param timeout an hce::chrono::time_point or hce::chrono::duration when the sleep should time out
+ @return an awaitable to join with the timer timing out or being cancelled
+ */
+template <typename TIMEOUT>
+hce::awt<void> sleep(const TIMEOUT& timeout);
+
+}
+```
+
+Generate `Doxygen` documentation to see more for timer information.
+
+## Networking
+At the moment this framework does not support networking out of the box. However, `hce::yield` non-blocking and `hce::block()` blocking call support allow using any relevant networking mechanism with coroutines and user code. 
 ## Debug Logging
 This project utilizes the [emilk/loguru](https://github.com/emilk/loguru) project for debug logging, writing to stdout and stderr by default. Logging features are provided primarily for the development of this library, but work has been done to make it fairly robust and may be applicable for user development and production code debugging purposes. See the [logging primer](logging.md) for more information.
