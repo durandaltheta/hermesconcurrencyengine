@@ -573,6 +573,7 @@ private:
         RESULT r;
         bool done = false;
 
+        // loop until nonblocking succeeds or fallback kicks in
         do {
             if(self->should_block()) {
                 co_await blocking::service::get().block([&]{ self->block(r); });
