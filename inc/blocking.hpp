@@ -523,14 +523,16 @@ private:
 };
 
 /**
- @brief an interface for objects which implement business-logic for switching between optimistic non-blocking and fallback blocking behavior
+ @brief an interface for objects which implement business-logic for switching between optimistic non-blocking and fallback blocking behavior using the `hce::blocking::service`
 
- Given some implementation of hce::blocking::op<RESULT> named my_op, usage from 
- a coroutine is as follows:
+ Given some implementation of `hce::blocking::op<RESULT>` named 
+ `my_blocking_op`, usage from a coroutine is as follows:
  ```
- my_blocking_op mbo(... args for my_op constructor ...);
- co_await mo.await();
+ my_blocking_op mbo(... args for constructor ...);
+ co_await mbo.await();
  ```
+
+ Early cancellation, if desired, must be provided by the user implementation.
 
  User implementations are expected to catch exceptions and handle errors. 
  Behavior from uncaught exceptions is undefined.
@@ -628,7 +630,9 @@ struct timeout_op : public op<RESULT> {
     virtual ~timeout_op() { }
 
     /// fallback to blocking when the timeout is reached
-    virtual inline bool should_block() { return hce::chrono::now() >= timeout_; }
+    virtual inline bool should_block() { 
+        return hce::chrono::now() >= timeout_; 
+    }
 
 private:
     const hce::chrono::time_point timeout_;
@@ -638,6 +642,9 @@ private:
 
 /**
  @brief call a Callable on a thread that is not running a coroutine 
+
+ This mechanism can be used with any Callable.
+
  @param cb a Callable function, function pointer, Functor or lambda
  @param as arguments for the callable
  @return an awaitable for the result of the callable
