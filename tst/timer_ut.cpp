@@ -71,7 +71,7 @@ void validate_test(std::optional<double> check_sleep,
     }
 
     if(check_busywait) {
-        hce::service<hce::timer>::ticks ticks = hce::service<hce::timer>::get().get_ticks();
+        hce::timer::ticks ticks = hce::service<hce::timer>::get().get_ticks();
         double busy_wait_rate = ((double)(ticks.busywait)/(ticks.runtime)) * 100;
         std::cout 
             << "timer service busy-wait microsecond threshold: " 
@@ -514,6 +514,10 @@ protected:
         // Cleanup code here
     }
 };
+
+TEST_F(timer, init) {
+    hce::timer::init();
+}
 
 TEST_F(timer, start_short) {
     size_t expected_successes = 10;

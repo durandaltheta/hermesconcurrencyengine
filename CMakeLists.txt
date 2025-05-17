@@ -115,7 +115,7 @@ math(EXPR SCHBYTELIMIT "1 << ${HCEMEMORYCACHEBUCKETCOUNT}")
 math(EXPR GLBBYTELIMIT "${SCHBYTELIMIT} * 2") 
        
 # Start the compile definitions list
-set(HCE_COMPILE_DEFINES "-DHCEMORYCACHEBUCKETCOUNT=${HCEMEMORYCACHEBUCKETCOUNT}")
+set(HCE_COMPILE_DEFINES "HCEMORYCACHEBUCKETCOUNT=${HCEMEMORYCACHEBUCKETCOUNT}")
 
 # Define the pairs of variable names and their default values
 set(PAIRS
@@ -168,8 +168,9 @@ set(PAIRS
         HCEREUSABLEBLOCKWORKERCACHESIZE "1"
 
 # Define the count of available threads running schedulers in the threadpool. If 
-# unspecified or set to 0, the framework will decide the final threadcount
-        HCETHREADPOOLSCHEDULERCOUNT "0"
+# unspecified or set to 0, the framework will decide the final threadcount. The 
+# default is 1, only spawning the global scheduler thread.
+        HCETHREADPOOLSCHEDULERCOUNT "1"
 
 # Microsecond busy wait timer threshhold. If a timer has this amount of time or 
 # less before timeout, the timer_service will busy-wait
@@ -190,6 +191,22 @@ set(PAIRS
 # Set compilation limiter loglimit to a sane default (loguru::Verbosity_WARNING)
         HCELOGLIMIT "-1"
 )
+
+# Add pairs to compile defines
+list(LENGTH PAIRS len)
+set(i 0)
+while(i LESS len)
+    list(GET PAIRS ${i} name)
+    math(EXPR i "${i} + 1")
+    list(GET PAIRS ${i} value)
+
+    if(NOT DEFINED ${name} OR "${${name}}" STREQUAL "")
+        set(${name} ${value})
+    endif()
+
+    list(APPEND HCE_COMPILE_DEFINES "${name}=${${name}}")
+    math(EXPR i "${i} + 1")
+endwhile()
 
 if(BUILD_SHARED_LIBS)
     add_library(hce SHARED ${HCE_HEADER_FILES} ${HCE_SOURCE_FILES})
@@ -220,7 +237,8 @@ SplitOnWhitespace("${HCE_COMPILE_DEFINES}" PRETTY_HCE_COMPILE_DEFINES)
 message("-- HCE LIBRARY -- ")
 message("CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
 message("CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
-message("TIME_SENSITIVE_TESTS=${TIME_SENSITIVE_TESTS}")
+message("BUILD_SHARED_LIBS=${BUILD_SHARED_LIBS}")
+message("TIME_SENSITIVE_TESTS_ENABLED=${TIME_SENSITIVE_TESTS_ENABLED}")
 message("-- HCE LIBRARY HEADERS -- ")
 
 foreach(item IN LISTS PRETTY_HCE_HEADER_FILES)

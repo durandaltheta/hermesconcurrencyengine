@@ -243,6 +243,12 @@ int main() {
 Concurrent scheduling (scheduling on the same thread) provides very fast communication speeds between coroutines. It is preferable to utilize concurrent scheduling unless your program's bottleneck is CPU throughput.
 
 ### Parallel
+This framework employes a threadpool of `hce::scheduler`s in the `hce::threadpool` service object, allow the ability to schedule coroutines optionally in parallel. 
+
+Parallel scheduling allows for potentially more usage of CPU resources, but has impared communication speed between coroutines scheduled on different threads.
+
+NOTE: The default count of threads in the `hce::threadpool` is 1, disabling parallelism. See below on how to configure the system to spawn more. Calls to `hce::threadpool::schedule()` will always function, but will only select the global scheduler if the threadpool size is `1`.
+
 `hce::co<T>`s can be scheduled for on some `hce::scheduler` managed by the `hce::threadpool` with `hce::threadpool::schedule()`:
 ```
 hce::co<int> my_coroutine2() { 
@@ -264,7 +270,11 @@ int main() {
 }
 ```
 
-Parallel scheduling allows for potentially more usage of CPU resources, but has impared communication speed between coroutines scheduled on different threads.
+The count of system threads managed by the `hce::threadpool` is controlled by the `hce::lifecycle::config` object optionally passed to `hce::initialize()`, in the `hce::lifecycle::config::threadpool::count` member. The default value of `hce::lifecycle::config::threadpool::count` is set by CMake configurable variable `HCETHREADPOOLSCHEDULERCOUNT` (propogating as a compiler define). The first scheduler in the `hce::threadpool` (index `0`) is always the global scheduler thread. The default value of `HCETHREADPOOLSCHEDULERCOUNT` is `1`, only spawning the global scheduler thread.
+
+If `hce::lifecycle::config::threadpool::count` is specified as `0`, the framework will decide how many threads to spawn (it enforces at least 1, and attempts to spawn an equal count of system threads as reported CPU count from `std::thread::hardware_concurrency()`), otherwise spawning exactly the number of threads as `count` specifies. Once threads are spawned during `hce::initialize()` they are never modified.
+
+Generate `Doxygen` documentation to see more for `hce::threadpool` creation, configuration and management.
 
 ## Communication
 This library allows communication between coroutines, threads, and any combination there-in using `hce::chan<T>`s, a specialized communication mechanism allowing transfer of data.
@@ -418,6 +428,16 @@ hce::co<result> attempt_non_blocking(const unsigned int maximum_retry) {
 Coroutines can use the following API to start/check/cancel timers:
 ```
 /**
+ @brief optionally ensure the timer service thread is running 
+
+ If this function is not called, the timer service thread will not be 
+ started until the first call to `hce::timer::start()`, potentially 
+ introducing a slight delay. Call this early to prepare and launch the 
+ thread.
+ */
+void hce::timer::init();
+
+/**
  @brief start a timer  
 
  A simplification for calling hce::timer::service::get().start().
@@ -430,8 +450,8 @@ Coroutines can use the following API to start/check/cancel timers:
  @param timeout an hce::chrono::time_point or hce::chrono::duration when the timer should time out
  @return an awaitable to join with the timer timing out (returning true) or being cancelled (returning false)
  */
-template <typename TIMEOUT>
-hce::awt<bool> hce::timer::start(hce::sid& sid, const TIMEOUT& timeout);
+hce::awt<bool> hce::timer::start(hce::sid& sid, const hce::chrono::time_point& timeout);
+hce::awt<bool> hce::timer::start(hce::sid& sid, const hce::chrono::duration& dur);
 
 /**
  @brief determine if a timer is running
@@ -464,8 +484,8 @@ bool hce::timer::cancel(const hce::sid& sid);
  @param timeout an hce::chrono::time_point or hce::chrono::duration when the sleep should time out
  @return an awaitable to join with the timer timing out or being cancelled
  */
-template <typename TIMEOUT>
-hce::awt<void> hce::sleep(const TIMEOUT& timeout);
+hce::awt<void> hce::sleep(const hce::chrono::time_point& timeout);
+hce::awt<void> hce::sleep(const hce::chrono::duration& dur);
 ```
 
 ## Modules
@@ -624,10 +644,12 @@ However, `validate` is very useful for quickly configuring the project in variou
 
 `validate` has a number of configurations it can build and execute tests:
 - `basic`: all unit tests (without compiler optimizations)
+- `parallel`: same as `basic` but enable CPU-count parallelism with `-DHCETHREADPOOLSCHEDULERCOUNT=0`. Certain comparison unit tests will probably be more performant with this enabled.
 - `log`: all unit tests with maximum debug logging enabled (without compiler optimizations)
 - `mem`: all unit tests with address sanitization enabled (without compiler optimizations) 
 - `jitter`: non-timing unit tests compiled and executed with many variations of loglevels to check for random timing errors (without compiler optimizations)
-- `release`: all unit tests with maximum compiler optimizations
+- `performance`: all unit tests with maximum compiler optimizations (with parallelism enabled)
+- `release`: all unit tests with maximum compiler optimizations (generally default `cmake` configurations)
 - `ALL`: build and execute each configuration sequentially
 
 `ALL` is useful for doing a broad sanity test to ensure everything is working before a public release.

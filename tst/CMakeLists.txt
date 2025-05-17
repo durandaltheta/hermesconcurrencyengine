@@ -41,7 +41,7 @@ else()
     set(HCETESTENABLETIMESENSITIVE false)
 endif()
 
-set(HCE_UT_COMPILE_DEFINES -DHCELOGLIMIT=${HCELOGLIMIT} -DHCEMEMORYCACHEBUCKETCOUNT=${HCEMEMORYCACHEBUCKETCOUNT} -DHCETESTENABLETIMESENSITIVE=${HCETESTENABLETIMESENSITIVE})
+set(HCE_UT_COMPILE_DEFINES ${HCE_COMPILE_DEFINES} -DHCETESTENABLETIMESENSITIVE=${HCETESTENABLETIMESENSITIVE})
 
 # add module unit test shared library
 add_library(module_ut_shared 
@@ -57,6 +57,7 @@ target_include_directories(hce_ut PUBLIC ${HCE_INCLUDE_DIR} PRIVATE ${LOG_SOURCE
 target_link_libraries(hce_ut PRIVATE gtest hce)
 target_compile_definitions(hce_ut PRIVATE ${HCE_UT_COMPILE_DEFINES})
 target_compile_definitions(hce_ut PRIVATE MODULE_UT_SHARED_PATH="$<TARGET_FILE:module_ut_shared>")
+add_dependencies(hce_ut module_ut_shared)  # Add this line
 
 SplitOnWhitespace("${HCE_UT_SOURCES}" PRETTY_HCE_UT_SOURCES)
 SplitOnWhitespace("${HCE_UT_COMPILE_DEFINES}" PRETTY_HCE_UT_COMPILE_DEFINES)

@@ -158,6 +158,10 @@ class Optimization:
     LOW = '-Og -fno-inline'
     HIGH = '-O3'
 
+class Concurrency:
+    CONCURRENT = '-DHCETHREADPOOLSCHEDULERCOUNT=1'
+    PARALLEL = '-DHCETHREADPOOLSCHEDULERCOUNT=0'
+
 class Log:
     RELEASE = '-DHCELOGLEVEL=-1 -DHCELOGLIMIT=-1'
     INFO = '-DHCELOGLEVEL=0 -DHCELOGLIMIT=0'
@@ -193,9 +197,10 @@ class Build:
     timing = Option()
     log = Option()
     optimization = Option()
+    concurrency = Option()
     address_sanitation = Option()
 
-    def __init__(self, name: str, toolchain_name: str, buildtype: BuildType, timing: Timing, log: Log, optimization: Optimization, address_sanitation: AddressSanitation):
+    def __init__(self, name: str, toolchain_name: str, buildtype: BuildType, timing: Timing, log: Log, optimization: Optimization, concurrency: Concurrency, address_sanitation: AddressSanitation):
         toolchain = None 
         if toolchain_name in Toolchain.mapping:
             toolchain = Toolchain.mapping[toolchain_name]
@@ -213,7 +218,11 @@ class Build:
 
         self.log = Option(log)
         self.optimization = Option(optimization)
+        self.concurrency = Option(concurrency)
         self.address_sanitation = Option(address_sanitation)
+
+    def __str__(self):
+        return f'\n\tname: {self.name}\n\ttoolchain: {self.toolchain}\n\tbuildtype: {self.buildtype}\n\ttiming: {self.timing}\n\tlog: {self.log}\n\toptimization: {self.optimization}\n\tconcurrency: {self.concurrency}\n\taddress_sanitation: {self.address_sanitation}\n'
 
     def commands(self):
         return [ \
@@ -223,6 +232,7 @@ class Build:
                 str(self.timing), \
                 str(self.log), \
                 str(self.optimization), \
+                str(self.concurrency), \
                 str(self.address_sanitation)), \
             'make -j hce_ut']
 
@@ -238,6 +248,7 @@ class Build:
         validate_attr(self.timing, 'timing')
         validate_attr(self.log, 'log')
         validate_attr(self.optimization, 'optimization')
+        validate_attr(self.concurrency, 'concurrency')
         validate_attr(self.address_sanitation, 'address_sanitation')
         global PROJECT_ROOT 
         code, _, _ = exscript(self.name, self.commands(), cwd=PROJECT_ROOT, env=env)
@@ -248,11 +259,15 @@ class Build:
         log(strings.ok())
 
 class Test:
-    name = Option()
+    build = None 
+    name = ''
 
     def __init__(self, build: Build):
         self.build = build
-        self.name = build.name
+        self.name = build.name 
+
+    def __str__(self):
+        return f'{self.build}'
     
     def __call__(self, env=os.environ):
         validate_attr(self.name, 'name')
@@ -290,42 +305,57 @@ class Test:
 # 
 # This operation is to tease out timing issues, and it is unknown high or low 
 # optimization would trigger them.
-def jitterTest(name, toolchain, debug, optimization):
-    for loglimit in range(-1, 10):
-        for loglevel in range(-1, 10):
-            test = Test(Build(name, toolchain, debug, Timing.DISABLED, f'-DHCELOGLEVEL={loglevel} -DHCELOGLIMIT={loglimit}', optimization, AddressSanitation.DISABLED))
-            test() # rebuild and execute test
+class jitterTest:
+    name = None
+    toolchain = None 
+    buildtype = None
+    optimization = None 
 
-def jitterTestGccDebug():
-    jitterTest('GCCJITTERDEBUG', Toolchain.GCC, BuildType.DEBUG, Optimization.LOW)
+    def GetTest(self, loglimit, loglevel):
+        return Test(Build(self.name, self.toolchain, self.buildtype, Timing.DISABLED, f'-DHCELOGLEVEL={loglevel} -DHCELOGLIMIT={loglimit}', self.optimization, Concurrency.PARALLEL, AddressSanitation.DISABLED))
 
-def jitterTestClangDebug():
-    jitterTest('CLANGJITTERDEBUG', Toolchain.CLANG, BuildType.DEBUG, Optimization.LOW)
+    def __init__(self, name, toolchain, buildtype, optimization):
+        self.name = name
+        self.toolchain = toolchain
+        self.buildtype = buildtype
+        self.optimization = optimization
+
+    def __str__(self):
+        exampletest = self.GetTest(-1,-1)
+        return f' iteratively test loglimit -1 to 10  and loglevel -1 to 10, with test similar to: {exampletest}'
+
+    def __call__(self):
+        for loglimit in range(-1, 10):
+            for loglevel in range(-1, 10):
+                test = self.GetTest(loglimit, loglevel)
+                test() # rebuild and execute test
 
 class Tests:
     basic = None
+    parallel = None
     log = None
     mem = None 
     jitter = None
+    performance = None
     release = None
     tests = None 
 
     def __init__(self, toolchain_name=''):
-        self.basic = Test(Build('basic', toolchain_name, BuildType.DEBUG, Timing.ENABLED, Log.INFO, Optimization.LOW, AddressSanitation.DISABLED))
-        self.log = Test(Build('log', toolchain_name, BuildType.DEBUG, Timing.DISABLED, Log.MAX, Optimization.LOW, AddressSanitation.DISABLED))
-        self.mem = Test(Build('mem', toolchain_name, BuildType.DEBUG, Timing.ENABLED, Log.INFO, Optimization.LOW, AddressSanitation.ENABLED))
-
-        def jitterTestDebug():
-            jitterTest('jitter', toolchain_name, BuildType.DEBUG, Optimization.LOW)
-
-        self.jitter = jitterTestDebug 
-        self.release = Test(Build('release', toolchain_name, BuildType.RELEASE, Timing.ENABLED, Log.RELEASE, Optimization.HIGH, AddressSanitation.DISABLED))
+        self.basic = Test(Build('basic', toolchain_name, BuildType.DEBUG, Timing.ENABLED, Log.INFO, Optimization.LOW, Concurrency.CONCURRENT, AddressSanitation.DISABLED))
+        self.parallel= Test(Build('parallel', toolchain_name, BuildType.DEBUG, Timing.ENABLED, Log.INFO, Optimization.LOW, Concurrency.PARALLEL, AddressSanitation.DISABLED))
+        self.log = Test(Build('log', toolchain_name, BuildType.DEBUG, Timing.DISABLED, Log.MAX, Optimization.LOW, Concurrency.CONCURRENT, AddressSanitation.DISABLED))
+        self.mem = Test(Build('mem', toolchain_name, BuildType.DEBUG, Timing.ENABLED, Log.INFO, Optimization.LOW, Concurrency.CONCURRENT, AddressSanitation.ENABLED))
+        self.jitter = jitterTest('jitter', toolchain_name, BuildType.DEBUG, Optimization.LOW)
+        self.performance = Test(Build('performance', toolchain_name, BuildType.RELEASE, Timing.ENABLED, Log.RELEASE, Optimization.HIGH, Concurrency.PARALLEL, AddressSanitation.DISABLED))
+        self.release = Test(Build('release', toolchain_name, BuildType.RELEASE, Timing.ENABLED, Log.RELEASE, Optimization.HIGH, Concurrency.CONCURRENT, AddressSanitation.DISABLED))
 
         self.tests = {
             'basic': self.basic,
+            'parallel': self.parallel,
             'log': self.log,
             'mem': self.mem,
             'jitter': self.jitter,
+            'performance': self.performance,
             'release': self.release
         }
 
@@ -343,6 +373,17 @@ class Tests:
             results.append(name)
 
         results.append('ALL')
+        results.append('info')
+
+        return results
+
+    def infos(self):
+        results = list()
+
+        for name, test in self.tests.items():
+            results.append(f'{name}:{test}')
+
+        results.append('ALL')
 
         return results
 
@@ -356,11 +397,13 @@ def parse_args():
     gcc_parser = subparsers.add_parser("gcc", help="Options for GCC compiler")
     gcc_parser.add_argument("test", choices=Tests().names(), help="Select a test to run")
     gcc_parser.add_argument("--no-timing", action='store_true', help="Enforce no timing tests")
+    gcc_parser.add_argument("info", action='store_true', help='Print test information')
 
     # Clang subparser
     clang_parser = subparsers.add_parser("clang", help="Options for Clang compiler")
     clang_parser.add_argument("test", choices=Tests().names(), help="Select a test to run")
     clang_parser.add_argument("--no-timing", action='store_true', help="Enforce no timing tests")
+    clang_parser.add_argument("info", action='store_true', help='Print test information')
 
     args = parser.parse_args()
 
@@ -373,28 +416,38 @@ def parse_args():
 def main():
     def inner():
         args = parse_args()
-        test = Tests(args.compiler).tests[args.test]
-        log(strings.section())
-        test()
 
-        global RUNINFOS
-        log(strings.section())
-        log('Test Report')
-        log(strings.separator())
-        success = True
+        if(args.info):
+            log('HCE Test Information')
+            infos = Tests(args.compiler).infos()
 
-        for r in RUNINFOS:
-            success = success and r.success
-            print(r)
+            for info in infos:
+                log(info)
 
-        log('')
-        
-        if success == True:
-            log('HCE Test Validation SUCCESS')
             return 0
         else:
-            log('HCE Test Validation FAILURE')
-            return 1
+            test = Tests(args.compiler).tests[args.test]
+            log(strings.section())
+            test()
+
+            global RUNINFOS
+            log(strings.section())
+            log('Test Report')
+            log(strings.separator())
+            success = True
+
+            for r in RUNINFOS:
+                success = success and r.success
+                print(r)
+
+            log('')
+            
+            if success == True:
+                log('HCE Test Validation SUCCESS')
+                return 0
+            else:
+                log('HCE Test Validation FAILURE')
+                return 1
 
     # setup the logfile so log() can function
     global LOGFILEPATH

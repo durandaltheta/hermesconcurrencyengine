@@ -305,7 +305,7 @@ private:
     }
 
     inline void insert_cache_(std::unique_ptr<hce::memory::cache>&& cache) {
-        HCE_INFO_METHOD_ENTER("insert_cache_"); 
+        HCE_HIGH_METHOD_ENTER("insert_cache_"); 
         auto key = std::this_thread::get_id();
 
         std::lock_guard<std::mutex> lk(mtx_);

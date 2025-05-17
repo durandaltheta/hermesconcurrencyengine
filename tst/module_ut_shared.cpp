@@ -15,12 +15,12 @@ struct module_ut : public hce::module {
 private:
     static inline hce::co<int> op(test::module::interface* intf) {
         // concurrent channel receive/sends test
-        co_await intf->conc_chs.receive(false);
-        co_await intf->conc_chs.send(false);
+        co_await intf->conc_chs.receive();
+        co_await intf->conc_chs.send();
 
         // parallel channel receive/sends test
-        co_await intf->para_chs.receive(true);
-        co_await intf->para_chs.send(true);
+        co_await intf->para_chs.receive();
+        co_await intf->para_chs.send();
 
         // block tests
         co_await intf->blk.launch();
@@ -29,7 +29,7 @@ private:
         co_await intf->tmr.launch();
 
         // prove we can send non-zero
-        co_return interface::expected_code;
+        co_return test::module::interface::expected_code;
     }
 };
 

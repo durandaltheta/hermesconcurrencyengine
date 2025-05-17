@@ -103,14 +103,18 @@ algorithm_function_ptr timeout_algorithm();
 }
 
 /**
- @brief an object capable of starting, cancelling, and handling timer timeouts 
+ @brief an namespace object with static methods capable of starting, cancelling, and handling timer timeouts 
  */
 struct timer : public hce::service<timer>, public hce::printable {
     static inline std::string info_name() { return "hce::timer"; }
     inline std::string name() const { return timer::info_name(); }
 
     /**
-     @brief microsecond ticks info struct
+     @brief microsecond ticks info struct 
+
+     This provides runtime information about the timer service thread. It is 
+     only useful during testing or when validating some algorithm configuration 
+     in a `hce::lifecycle::config` passed to `hce::initialize()`.
      */
     struct ticks {
         size_t runtime; // microsecond ticks spent running
@@ -133,6 +137,16 @@ struct timer : public hce::service<timer>, public hce::printable {
         micro_runtime_ticks_ = 0;
         micro_busywait_ticks_ = 0;
     }
+   
+    /**
+     @brief optionally ensure the timer service thread is running 
+
+     If this function is not called, the timer service thread will not be 
+     started until the first call to `hce::timer::start()`, potentially 
+     introducing a slight delay. Call this early to prepare and launch the 
+     thread.
+     */
+    static inline void init() { hce::service<timer>::get().init_(); }
 
     /**
      @brief start a timer  
@@ -304,6 +318,28 @@ private:
         }
     }
 
+    inline void thread_guard_() {
+        if(!runflag_) [[unlikely]] {
+            // launch the timer service thread if it was never started
+            runflag_ = true;
+
+            thd_ = std::thread([](timer* ts) { 
+                HCE_HIGH_FUNCTION_ENTER("hce::timer::thread");
+                ts->run(); 
+                HCE_HIGH_FUNCTION_BODY("hce::timer::thread","exit");
+            }, this);
+
+            hce::thread::set_priority(
+                thd_, 
+                hce::config::timer::thread_priority());
+        }
+    }
+
+    inline void init_() {
+        std::lock_guard<hce::spinlock> lk(lk_);
+        thread_guard_();
+    }
+
     /*
       The default algorithm for determining how long the timer service should 
       wait for until the next timeout
@@ -337,21 +373,7 @@ private:
 
         {
             std::lock_guard<hce::spinlock> lk(lk_);
-
-            if(!runflag_) [[unlikely]] {
-                // launch the timer service thread if it was never started
-                runflag_ = true;
-
-                thd_ = std::thread([](timer* ts) { 
-                    HCE_HIGH_FUNCTION_ENTER("hce::timer::thread");
-                    ts->run(); 
-                    HCE_HIGH_FUNCTION_BODY("hce::timer::thread","exit");
-                }, this);
-
-                hce::thread::set_priority(
-                    thd_, 
-                    hce::config::timer::thread_priority());
-            }
+            thread_guard_();
 
             timers_.push_back(t);
             timers_.sort([](timer_* lhs, timer_* rhs) {
@@ -365,7 +387,7 @@ private:
         return hce::awt<bool>(awt);
     }
 
-    hce::awt<bool> start_(hce::sid& sid, const hce::chrono::duration& dur) {
+    inline hce::awt<bool> start_(hce::sid& sid, const hce::chrono::duration& dur) {
         sid.make();
         HCE_LOW_METHOD_ENTER("start", sid, dur);
         return start_(sid, hce::chrono::now() + dur);

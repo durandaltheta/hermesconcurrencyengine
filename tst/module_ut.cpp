@@ -35,7 +35,7 @@ TEST(module, import) {
     test::module::interface intf;
 
     // import the module and get its awaitable
-    const std::string so_lib_name = "module_ut_shared.so";
+    const std::string so_lib_name = "libmodule_ut_shared.so";
     std::filesystem::path so_lib_path = get_executable_path().parent_path() / so_lib_name;
     auto awt_module = hce::module::import(so_lib_path.c_str(), (void*)&intf);
 
