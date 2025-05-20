@@ -4,14 +4,111 @@
 #define __HCE_COROUTINE_ENGINE_TEST_MODULE_HELPERS__
 
 #include <mutex>
+#include <sstream>
 #include "hce.hpp"
 #include "test_helpers.hpp"
 
 namespace test {
 namespace module {
 
+inline constexpr size_t LOOP_OP_TX_MAX = 100;
+inline constexpr size_t TYPE_VARIANT_COUNT = 9;
+
+inline constexpr size_t CHANNEL_VARIANT_COUNT = 3;
+inline constexpr size_t COMMUNICATOR_COUNT = 2; // 1 sender and receiver
+inline constexpr size_t CHANNEL_RESULT_TOTAL = COMMUNICATOR_COUNT * TYPE_VARIANT_COUNT * CHANNEL_VARIANT_COUNT * LOOP_OP_TX_MAX;
+
+inline constexpr size_t BLOCKING_VARIANT_COUNT = 3;
+inline constexpr size_t BLOCKING_RESULT_TOTAL = TYPE_VARIANT_COUNT * BLOCKING_VARIANT_COUNT * LOOP_OP_TX_MAX;
+
+inline constexpr size_t TIMER_TIMEOUT_INCREMENT_MS = 100;
+inline constexpr size_t TIMER_TIMEOUT_LIMIT_MS = TIMER_TIMEOUT_INCREMENT_MS * 11;
+
+enum struct command {
+    error,
+    send_concurrent_req,
+    send_parallel_req,
+    receive_concurrent_req,
+    receive_parallel_req,
+    blocking_req,
+    timing_req
+};
+
+struct result : public hce::printable {
+    result() :
+        expected(0), 
+        actual(0),
+        error(0)
+    { 
+        HCE_HIGH_CONSTRUCTOR();
+    }
+
+    result(unsigned int exp, unsigned int act, unsigned int err) :
+        expected(exp), 
+        actual(act),
+        error(err)
+    { 
+        HCE_HIGH_CONSTRUCTOR(exp, act, err);
+    }
+
+    virtual ~result() {
+        HCE_HIGH_DESTRUCTOR();
+    }
+
+    static inline std::string info_name() { return "test::module::result"; }
+    inline std::string name() const { return result::info_name(); }
+
+    inline operator bool() const {
+        std::string fname = "operator bool";
+        bool success = this->validate_();
+
+        if(!success) {
+            HCE_ERROR_METHOD_BODY(fname, this->stringify_());
+        } else {
+            HCE_INFO_FUNCTION_BODY(fname, this->stringify_());
+        }
+
+        return success;
+    }
+
+    inline friend result operator+(const result& lhs, const result& rhs) {
+        return result(
+            lhs.expected + rhs.expected,
+            lhs.actual + rhs.actual,
+            lhs.error + rhs.error);
+    }
+
+    const unsigned int expected;
+    const unsigned int actual;
+    const unsigned int error;
+
+private:
+    // need sub-calculation 
+    inline bool validate_() const { return (error == 0) && (expected == actual); }
+
+    inline std::string stringify_() const { 
+        std::stringstream ss;
+        ss << "success["; 
+
+        if(this->validate_()) {
+            ss << "true";
+        } else {
+            ss << "false";
+        }
+
+        ss << "], expected[" << this->expected
+           << "], actual[" << this->actual 
+           << "], error[" << this->error << "]";
+        return ss.str(); 
+    }
+};
+
 template <unsigned int EXPECTED_SUCCESS_COUNT>
 struct result_interface : public hce::printable {
+    result_interface() {
+        this->reset_results();
+    }
+
     virtual ~result_interface() {
         if(!this->validated_) {
             HCE_FATAL_METHOD_BODY("~result_interface","result_interface did not have validate_results() called before being destroyed, cannot continue");
@@ -31,30 +128,31 @@ struct result_interface : public hce::printable {
         return b;
     }
 
-    inline bool validate_results() {
+    inline result validate_results() {
         std::lock_guard<std::mutex> lk(this->mtx_);
 
         if(!this->validated_) {
             this->validated_ = true;
-
-            if(this->error_count_) {
-                HCE_ERROR_METHOD_BODY("validate","expected 0 errors, but ",this->error_count_," errors detected");
-            } else if(this->success_count_ != EXPECTED_SUCCESS_COUNT){
-                HCE_ERROR_METHOD_BODY("validate","expected ",EXPECTED_SUCCESS_COUNT," successes, but ",this->success_count_," successes recorded");
-            } else {
-                this->valid_ = true;
-            }
+            this->result_ = 
+                std::make_unique<result>(EXPECTED_SUCCESS_COUNT, this->success_count_, this->error_count_);
         }
 
-        return this->valid_;
+        return *(this->result_);
+    }
+
+    inline void reset_results() {
+        this->validated_ = false;
+        this->result_.reset();
+        this->success_count_ = 0;
+        this->error_count_ = 0;
     }
 
 private:
     std::mutex mtx_;
-    bool valid_ = false;
-    bool validated_ = false;
-    size_t success_count_ = 0;
-    size_t error_count_ = 0;
+    bool validated_;
+    std::unique_ptr<result> result_;
+    size_t success_count_;
+    size_t error_count_;
 };
 
 template <bool PARALLEL>
@@ -92,16 +190,15 @@ struct scheduler<false> {
  send() and receive() called once before some test calls validate_results().
  */
 template <bool PARALLEL>
-struct channels : public result_interface<44> {
+struct channels : public result_interface<CHANNEL_RESULT_TOTAL> {
     channels() { }
     virtual ~channels(){}
 
     template <typename T>
-    struct variants : public result_interface<16> {
-        struct pair : public result_interface<8> {
-            pair(int i) : 
-                in(hce::chan<T>::make(i)),
-                out(hce::chan<T>::make(i)),
+    struct variants : public hce::printable {
+        struct chan : public hce::printable {
+            chan(int i) : 
+                impl(hce::chan<T>::make(i)),
                 chan_type_(i == 0 
                     ? "unbuffered"
                     : i > 0
@@ -109,64 +206,54 @@ struct channels : public result_interface<44> {
                         : "unlimited")
             { }
 
-            virtual ~pair(){}
+            virtual ~chan(){}
 
             static inline std::string info_name() { 
-                return variants<T>::info_name() + "::pair";
+                return variants<T>::info_name() + "::chan";
             }
 
-            inline std::string name() const { return pair::info_name(); }
+            inline std::string name() const { return chan::info_name(); }
             inline std::string content() const { return chan_type_; }
 
-            hce::chan<T> in;
-            hce::chan<T> out;
+            // the actual channel object
+            hce::chan<T> impl;
 
-            inline hce::awt<bool> send(T t) {
-                return scheduler<PARALLEL>::schedule(send_op(this, t));
+            inline hce::awt<bool> send(channels<PARALLEL>* chs, const char* owner, T t) {
+                return scheduler<PARALLEL>::schedule(send_and_result_op(chs, this, owner, t));
             }
 
-            inline hce::awt<bool> receive(T t) {
-                return scheduler<PARALLEL>::schedule(receive_op(this, t));
+            inline hce::awt<bool> receive(channels<PARALLEL>* chs, const char* owner, T t) {
+                return scheduler<PARALLEL>::schedule(receive_and_result_op(chs, this, owner, t));
             }
 
         private:
             const char* chan_type_;
 
-            static inline hce::co<bool> send_op(variants<T>::pair* pr, T t) {
-                std::string fname = pr->name() + "::send_op";
+            static inline hce::co<bool> send_and_result_op(channels<PARALLEL>* chs, variants<T>::chan* ch, const char* owner, T t) {
+                std::string fname = ch->name() + "::send_and_result_op@" + owner;
                 bool success = false;
-                success = pr->handle_result(co_await pr->in.send(t));
+                success = chs->handle_result(co_await ch->impl.send(t));
 
-                if(success) {
-                    T t2;
-                    success = pr->handle_result(co_await pr->out.recv(t2));
-
-                    if(success) {
-                        success = t == t2;
-
-                        if(!success) {
-                            HCE_ERROR_FUNCTION_BODY(fname, "value mismatch, t[", t, "] != t2[", t2, "]");
-                        }
-                    }
+                if(!success) {
+                    HCE_ERROR_FUNCTION_BODY(fname, "channel[", ch->impl,"] send fail");
                 }
 
                 co_return success;
             }
 
-            static inline hce::co<bool> receive_op(variants<T>::pair* pr, T t) {
-                std::string fname = pr->name() + "::receive_op";
+            static inline hce::co<bool> receive_and_result_op(channels<PARALLEL>* chs, variants<T>::chan* ch, const char* owner, T t) {
+                std::string fname = ch->name() + "::receive_and_result_op@" + owner;
                 bool success = false;
                 T t2;
-                success = pr->handle_result(co_await pr->in.recv(t2));
+                success = chs->handle_result(co_await ch->impl.recv(t2));
 
                 if(success) {
-                    if(t == t2) {
-                        success = pr->handle_result(co_await pr->out.send(t2));
-                    } else {
+                    if(t != t2) {
                         HCE_ERROR_FUNCTION_BODY(fname, "value mismatch, t[", t, "] != t2[", t2, "]");
                         success = false;
-                        pr->handle_result(co_await pr->out.send(t2));
                     }
+                } else {
+                    HCE_ERROR_FUNCTION_BODY(fname, "channel[", ch->impl,"] receive fail");
                 }
 
                 co_return success;
@@ -187,46 +274,37 @@ struct channels : public result_interface<44> {
     
         virtual ~variants(){}
 
-        pair unbuf;
-        pair buf;
-        pair unlim;
+        chan unbuf;
+        chan buf;
+        chan unlim;
 
-        inline hce::awt<bool> send(T t) {
-            return scheduler<PARALLEL>::schedule(send_op(this, t));
+        inline hce::awt<bool> send(channels<PARALLEL>* chs, const char* owner, T t) {
+            return scheduler<PARALLEL>::schedule(send_op(chs, this, owner, t));
         }
 
-        inline hce::awt<bool> receive(T t) {
-            return scheduler<PARALLEL>::schedule(receive_op(this, t));
-        }
-
-        // override so validate gets called internally
-        inline bool validate_results() {
-            return 
-                this->result_interface<16>::validate_results() &&
-                unbuf.validate_results() && 
-                buf.validate_results() &&
-                unlim.validate_results();
+        inline hce::awt<bool> receive(channels<PARALLEL>* chs, const char* owner, T t) {
+            return scheduler<PARALLEL>::schedule(receive_op(chs, this, owner, t));
         }
 
     private:
-        static inline hce::co<bool> send_op(variants<T>* vars, T t) {
-            auto awt_unbuf = vars->unbuf.send(t);
-            auto awt_buf = vars->buf.send(t);
-            auto awt_unlim = vars->unlim.send(t);
-            co_return vars->handle_result(
-                vars->handle_result(co_await awt_unbuf) && 
-                vars->handle_result(co_await awt_buf) && 
-                vars->handle_result(co_await awt_unlim));
+        static inline hce::co<bool> send_op(channels<PARALLEL>* chs, variants<T>* vars, const char* owner, T t) {
+            auto awt_unbuf = vars->unbuf.send(chs, owner, t);
+            auto awt_buf = vars->buf.send(chs, owner, t);
+            auto awt_unlim = vars->unlim.send(chs, owner, t);
+            co_return 
+                co_await awt_unbuf && 
+                co_await awt_buf && 
+                co_await awt_unlim;
         }
 
-        static inline hce::co<bool> receive_op(variants<T>* vars, T t) {
-            auto awt_unbuf = vars->unbuf.receive(t);
-            auto awt_buf = vars->buf.receive(t);
-            auto awt_unlim = vars->unlim.receive(t);
-            co_return vars->handle_result(
-                vars->handle_result(co_await awt_unbuf) && 
-                vars->handle_result(co_await awt_buf) && 
-                vars->handle_result(co_await awt_unlim));
+        static inline hce::co<bool> receive_op(channels<PARALLEL>* chs, variants<T>* vars, const char* owner, T t) {
+            auto awt_unbuf = vars->unbuf.receive(chs, owner, t);
+            auto awt_buf = vars->buf.receive(chs, owner, t);
+            auto awt_unlim = vars->unlim.receive(chs, owner, t);
+            co_return 
+                co_await awt_unbuf && 
+                co_await awt_buf && 
+                co_await awt_unlim;
         }
     };
 
@@ -241,107 +319,85 @@ struct channels : public result_interface<44> {
     variants<test::CustomObject> vars_CustomObject;
 
     static inline std::string info_name() { 
-        return PARALLEL ? "test::module::channels<true>" 
-                        : "test::module::channels<false>";
+        return PARALLEL ? "test::module::parchans" 
+                        : "test::module::conchans";
     }
 
-    inline hce::awt<bool> send() {
-        return scheduler<PARALLEL>::schedule(send_loop_op(this));
+    inline std::string name() const {
+        return channels<PARALLEL>::info_name();
     }
 
-    inline hce::awt<bool> receive() {
-        return scheduler<PARALLEL>::schedule(receive_loop_op(this));
+    inline hce::awt<bool> send(const char* owner) {
+        return scheduler<PARALLEL>::schedule(send_loop_op(this, owner));
     }
 
-    // override so validate gets called internally
-    inline bool validate_results() {
-        return 
-            this->result_interface<44>::validate_results() &&
-            vars_int.validate_results() &&
-            vars_unsigned_int.validate_results() &&
-            vars_size_t.validate_results() &&
-            vars_float.validate_results() &&
-            vars_double.validate_results() &&
-            vars_char.validate_results() &&
-            vars_voidp.validate_results() &&
-            vars_std_string.validate_results() &&
-            vars_CustomObject.validate_results();
+    inline hce::awt<bool> receive(const char* owner) {
+        return scheduler<PARALLEL>::schedule(receive_loop_op(this, owner));
     }
 
 private:
     // expects 1100 successes
-    static inline hce::co<bool> send_loop_op(channels* chs) {
+    static inline hce::co<bool> send_loop_op(channels<PARALLEL>* chs, const char* owner) {
+        std::string fname = chs->name() + "::send_loop_op@" + owner;
         bool success=true;
 
-        for(size_t i=0; success && i<100; ++i) {
-            success = 
-                chs->handle_result(
-                    co_await scheduler<PARALLEL>::schedule(
-                        send_op(chs, i)));
+        for(size_t i=0; success && i<LOOP_OP_TX_MAX; ++i) {
+            success = co_await scheduler<PARALLEL>::schedule(send_op(chs, owner, i));
+
+            if(!success) {
+                HCE_ERROR_FUNCTION_BODY(fname, "send_op(", chs, ", ", i,") failed");
+            }
         }
 
         co_return success;
     }
 
-    static inline hce::co<bool> send_op(channels* chs, size_t i) {
-        co_return chs->handle_result(
-            chs->handle_result(co_await chs->vars_int.send((int)test::init<int>(i))));
-            //chs->handle_result(co_await chs->vars_int.send((int)test::init<int>(i))) && 
-            //chs->handle_result(co_await chs->vars_unsigned_int.send((unsigned int)test::init<unsigned int>(i))) && 
-            //chs->handle_result(co_await chs->vars_size_t.send((size_t)test::init<size_t>(i))) && 
-            //chs->handle_result(co_await chs->vars_float.send((float)test::init<float>(i))) && 
-            //chs->handle_result(co_await chs->vars_double.send((double)test::init<double>(i))) && 
-            //chs->handle_result(co_await chs->vars_char.send((char)test::init<char>(i))) && 
-            //chs->handle_result(co_await chs->vars_voidp.send((void*)test::init<void*>(i))) && 
-            //chs->handle_result(co_await chs->vars_std_string.send((std::string)test::init<std::string>(i))) && 
-            //chs->handle_result(co_await chs->vars_CustomObject.send((CustomObject)test::init<CustomObject>(i))));
+    static inline hce::co<bool> send_op(channels<PARALLEL>* chs, const char* owner, size_t i) {
+        co_return 
+            co_await chs->vars_int.send(chs, owner, (int)test::init<int>(i)) && 
+            co_await chs->vars_unsigned_int.send(chs, owner, (unsigned int)test::init<unsigned int>(i)) && 
+            co_await chs->vars_size_t.send(chs, owner, (size_t)test::init<size_t>(i)) && 
+            co_await chs->vars_float.send(chs, owner, (float)test::init<float>(i)) && 
+            co_await chs->vars_double.send(chs, owner, (double)test::init<double>(i)) && 
+            co_await chs->vars_char.send(chs, owner, (char)test::init<char>(i)) && 
+            co_await chs->vars_voidp.send(chs, owner, (void*)test::init<void*>(i)) && 
+            co_await chs->vars_std_string.send(chs, owner, (std::string)test::init<std::string>(i)) && 
+            co_await chs->vars_CustomObject.send(chs, owner, (CustomObject)test::init<CustomObject>(i));
     }
 
-    static inline hce::co<bool> receive_loop_op(channels* chs) {
+    static inline hce::co<bool> receive_loop_op(channels<PARALLEL>* chs, const char* owner) {
+        std::string fname = chs->name() + "::receive_loop_op@" + owner;
         bool success=true;
 
-        for(size_t i=0; success && i<100; ++i) {
-            success = 
-                chs->handle_result(
-                    co_await scheduler<PARALLEL>::schedule(
-                        receive_op(chs, i)));
+        for(size_t i=0; success && i<LOOP_OP_TX_MAX; ++i) {
+            success = co_await scheduler<PARALLEL>::schedule(receive_op(chs, owner, i));
+
+            if(!success) {
+                HCE_ERROR_FUNCTION_BODY(fname, "receive_op(", chs, ", ", i,") failed");
+            }
         }
 
         co_return success;
     }
 
-    static inline hce::co<bool> receive_op(channels* chs, size_t i) {
-        co_return chs->handle_result(
-            chs->handle_result(co_await chs->vars_int.receive((int)test::init<int>(i))));
-            //chs->handle_result(co_await chs->vars_int.receive((int)test::init<int>(i))) && 
-            //chs->handle_result(co_await chs->vars_unsigned_int.receive((unsigned int)test::init<unsigned int>(i))) && 
-            //chs->handle_result(co_await chs->vars_size_t.receive((size_t)test::init<size_t>(i))) && 
-            //chs->handle_result(co_await chs->vars_float.receive((float)test::init<float>(i))) && 
-            //chs->handle_result(co_await chs->vars_double.receive((double)test::init<double>(i))) && 
-            //chs->handle_result(co_await chs->vars_char.receive((char)test::init<char>(i))) && 
-            //chs->handle_result(co_await chs->vars_voidp.receive((void*)test::init<void*>(i))) && 
-            //chs->handle_result(co_await chs->vars_std_string.receive((std::string)test::init<std::string>(i))) && 
-            //chs->handle_result(co_await chs->vars_CustomObject.receive((CustomObject)test::init<CustomObject>(i))));
+    static inline hce::co<bool> receive_op(channels<PARALLEL>* chs, const char* owner, size_t i) {
+        co_return 
+            co_await chs->vars_int.receive(chs, owner, (int)test::init<int>(i)) && 
+            co_await chs->vars_unsigned_int.receive(chs, owner, (unsigned int)test::init<unsigned int>(i)) && 
+            co_await chs->vars_size_t.receive(chs, owner, (size_t)test::init<size_t>(i)) && 
+            co_await chs->vars_float.receive(chs, owner, (float)test::init<float>(i)) && 
+            co_await chs->vars_double.receive(chs, owner, (double)test::init<double>(i)) && 
+            co_await chs->vars_char.receive(chs, owner, (char)test::init<char>(i)) && 
+            co_await chs->vars_voidp.receive(chs, owner, (void*)test::init<void*>(i)) && 
+            co_await chs->vars_std_string.receive(chs, owner, (std::string)test::init<std::string>(i)) && 
+            co_await chs->vars_CustomObject.receive(chs, owner, (CustomObject)test::init<CustomObject>(i));
     }
 };
 
-struct parallel_channels : public channels<true> {
-    static inline std::string info_name() { 
-        return "test::module::parallel_channels";
-    }
+typedef channels<true> parchans;
+typedef channels<false> conchans;
 
-    inline std::string name() const { return parallel_channels::info_name(); }
-};
-
-struct concurrent_channels : public channels<false> {
-    static inline std::string info_name() { 
-        return "test::module::concurrent_channels";
-    }
-
-    inline std::string name() const { return concurrent_channels::info_name(); }
-};
-
-struct blocking : public result_interface<10> {
+struct blocking : public result_interface<BLOCKING_RESULT_TOTAL> {
     blocking()  { }
     virtual ~blocking(){}
 
@@ -357,7 +413,7 @@ struct blocking : public result_interface<10> {
 
 private:
     template <typename T>
-    struct ops : public result_interface<300> {
+    struct ops : public hce::printable {
         virtual ~ops(){}
 
         static inline std::string info_name() { 
@@ -384,48 +440,70 @@ private:
             q->push((T)test::init<T>(i));
         }
 
-        static inline hce::co<bool> blocking_op(blocking* blk) {
+        static inline hce::co<bool> blocking_and_result_op(blocking* blk) {
+            std::string fname = blk->name() + "::blocking_and_result_op";
             const std::thread::id id = std::this_thread::get_id();
             bool success = false;
-            bool cont = true;
-            bool ids_identical = false;
-            bool pop_ids_identical = false;
-            bool push_ids_identical = false;
 
-            for(size_t i=0; cont && i<100; ++i) {
-                success = 
-                    blk->handle_result(
-                        (T)test::init<T>(i) == 
-                        co_await hce::block(
+            for(size_t i=0; i<LOOP_OP_TX_MAX; ++i) {
+                bool ids_identical = false;
+                bool pop_ids_identical = false;
+                bool push_ids_identical = false;
+
+                T t = co_await hce::block(
                             block_done_immediately_T,
                             (T)test::init<T>(i),
                             &ids_identical,
-                            id));
-                cont = success;
+                            id);
 
-                if(success) {
-                    test::queue<T> q;
-                    auto pop_awt = 
-                        hce::block(block_to_pop_queue_T, 
-                                   &q, 
-                                   &pop_ids_identical,
-                                   id);
-                    auto push_awt = 
-                        hce::block(block_to_push_queue_T, 
-                                   &q, 
-                                   i,
-                                   &push_ids_identical,
-                                   id);
+                bool immediate_t_same = (t == (T)test::init<T>(i));
 
-                    T t = co_await std::move(pop_awt);
-                    bool pop_success = blk->handle_result(t == (T)test::init<T>(i));
-                    co_await std::move(push_awt);
-                    t = q.pop();
-                    bool push_success = blk->handle_result(t == (T)test::init<T>(i));
+                if(!immediate_t_same) {
+                    HCE_ERROR_FUNCTION_BODY(fname, "done immediately T mismatch, expected[",(T)test::init<T>(i),"], actual[",t,"");
+                }
 
-                    success = pop_success && push_success;
-                    cont = success;
-                } 
+                if(ids_identical) {
+                    HCE_ERROR_FUNCTION_BODY(fname, "done immediately ids were identical");
+                }
+
+                bool immediate_success = blk->handle_result(immediate_t_same && !ids_identical);
+
+                test::queue<T> q;
+                auto pop_awt = 
+                    hce::block(block_to_pop_queue_T, 
+                               &q, 
+                               &pop_ids_identical,
+                               id);
+                auto push_awt = 
+                    hce::block(block_to_push_queue_T, 
+                               &q, 
+                               i,
+                               &push_ids_identical,
+                               id);
+
+                co_await std::move(push_awt);
+                t = co_await std::move(pop_awt);
+                bool pop_t_same = (t == (T)test::init<T>(i));
+
+                if(!pop_t_same) {
+                    HCE_ERROR_FUNCTION_BODY(fname, "queue pop T mismatch, expected[",(T)test::init<T>(i),"], actual[",t,"");
+                }
+
+                if(pop_ids_identical) {
+                    HCE_ERROR_FUNCTION_BODY(fname, "queue pop ids were identical");
+                }
+
+                if(push_ids_identical) {
+                    HCE_ERROR_FUNCTION_BODY(fname, "queue push ids were identical");
+                }
+
+                bool pop_success = blk->handle_result(pop_t_same && !pop_ids_identical);
+                bool push_success = blk->handle_result(!push_ids_identical);
+                success = immediate_success && pop_success && push_success;
+
+                if(!success) {
+                    break;
+                }
             }
 
             co_return success;
@@ -433,16 +511,16 @@ private:
     };
 
     static inline hce::co<bool> launch_blocking_ops(blocking* blk) {
-        co_return blk->handle_result(
-            blk->handle_result(co_await hce::schedule(ops<int>::blocking_op(blk))) &&
-            blk->handle_result(co_await hce::schedule(ops<unsigned int>::blocking_op(blk))) &&
-            blk->handle_result(co_await hce::schedule(ops<size_t>::blocking_op(blk))) &&
-            blk->handle_result(co_await hce::schedule(ops<float>::blocking_op(blk))) &&
-            blk->handle_result(co_await hce::schedule(ops<double>::blocking_op(blk))) &&
-            blk->handle_result(co_await hce::schedule(ops<char>::blocking_op(blk))) &&
-            blk->handle_result(co_await hce::schedule(ops<void*>::blocking_op(blk))) &&
-            blk->handle_result(co_await hce::schedule(ops<std::string>::blocking_op(blk))) &&
-            blk->handle_result(co_await hce::schedule(ops<test::CustomObject>::blocking_op(blk))));
+        co_return 
+            co_await hce::schedule(ops<int>::blocking_and_result_op(blk)) &&
+            co_await hce::schedule(ops<unsigned int>::blocking_and_result_op(blk)) &&
+            co_await hce::schedule(ops<size_t>::blocking_and_result_op(blk)) &&
+            co_await hce::schedule(ops<float>::blocking_and_result_op(blk)) &&
+            co_await hce::schedule(ops<double>::blocking_and_result_op(blk)) &&
+            co_await hce::schedule(ops<char>::blocking_and_result_op(blk)) &&
+            co_await hce::schedule(ops<void*>::blocking_and_result_op(blk)) &&
+            co_await hce::schedule(ops<std::string>::blocking_and_result_op(blk)) &&
+            co_await hce::schedule(ops<test::CustomObject>::blocking_and_result_op(blk));
     }
 };
 
@@ -497,14 +575,20 @@ private:
         bool success = false;
         bool cont = true;
 
-        for(size_t i=100; cont && i<1100; i+=100) {
+        for(size_t i=TIMER_TIMEOUT_INCREMENT_MS; 
+            cont && i<TIMER_TIMEOUT_LIMIT_MS; 
+            i+=TIMER_TIMEOUT_INCREMENT_MS) 
+        {
             success = tmr->handle_result(
                 co_await(hce::schedule(timer_op(std::chrono::milliseconds(i)))));
             cont = success;
         }
 
         if(success) {
-            for(size_t i=100; cont && i<1100; i+=100) {
+            for(size_t i=TIMER_TIMEOUT_INCREMENT_MS; 
+                cont && i<TIMER_TIMEOUT_LIMIT_MS; 
+                i+=TIMER_TIMEOUT_INCREMENT_MS) 
+            {
                 success = tmr->handle_result(
                     co_await(hce::schedule(sleep_op(std::chrono::milliseconds(i)))));
                 cont = success;
@@ -523,8 +607,27 @@ private:
 struct interface {
     static constexpr unsigned int expected_code = 42;
 
-    concurrent_channels conc_chs;
-    parallel_channels para_chs;
+    inline void init() {
+        comch = hce::chan<command>::make();
+        resch = hce::chan<bool>::make();
+        cchs.reset_results();
+        pchs.reset_results();
+        blk.reset_results();
+        tmr.reset_results();
+    }
+
+    // access the global interface instance
+    static interface& global();
+
+    // host->module command channel
+    hce::chan<command> comch;
+
+    // module->host result channel
+    hce::chan<bool> resch;
+
+    // used to implement commands
+    conchans cchs;
+    parchans pchs;
     blocking blk;
     timer tmr;
 };

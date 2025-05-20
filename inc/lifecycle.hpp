@@ -324,7 +324,7 @@ private:
     }
     
     inline void erase_cache_() {
-        HCE_INFO_METHOD_ENTER("erase_cache_"); 
+        HCE_HIGH_METHOD_ENTER("erase_cache_"); 
         auto key = std::this_thread::get_id();
 
         std::lock_guard<std::mutex> lk(mtx_);
