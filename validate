@@ -10,7 +10,7 @@ import traceback
 SCRIPT_PATH = os.path.abspath(__file__)
 SCRIPT_NAME = os.path.basename(SCRIPT_PATH)
 PROJECT_ROOT = os.path.dirname(SCRIPT_PATH)
-UT_BIN_DIR = os.path.join(PROJECT_ROOT, 'ut_bin')
+UT_BIN_DIR = os.path.join(PROJECT_ROOT, 'tst/ut_bin')
 LOGFILEPATH=os.path.join(PROJECT_ROOT,'validate.log')
 LOGFILE = None
 NO_TIMING = False
