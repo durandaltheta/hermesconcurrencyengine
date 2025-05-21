@@ -68,6 +68,11 @@ const std::filesystem::path module::so_lib_path = module::get_module_path();
 hce::awt<int> module::awt;
 
 TEST_F(module, empty_result_sanity) {
+    test::module::interface::global().cchs.reset_results();
+    test::module::interface::global().pchs.reset_results();
+    test::module::interface::global().blk.reset_results();
+    test::module::interface::global().tmr.reset_results();
+
     {
         auto result = test::module::interface::global().cchs.validate_results();
         EXPECT_EQ(5400, result.expected);
@@ -99,6 +104,7 @@ TEST_F(module, empty_result_sanity) {
 
 TEST_F(module, send_concurrent) {
     HCE_INFO_FUNCTION_BODY(module::fname, "send command: send_concurrent_req");
+    test::module::interface::global().cchs.reset_results();
     EXPECT_TRUE((bool)test::module::interface::global().comch.send(test::module::command::send_concurrent_req));
     hce::schedule(conc_receive_op(&test::module::interface::global(), module::fname.c_str())); 
     bool success = false;
@@ -132,6 +138,7 @@ TEST_F(module, receive_concurrent) {
 
 TEST_F(module, send_parallel) {
     HCE_INFO_FUNCTION_BODY(module::fname, "send command: send_parallel_req");
+    test::module::interface::global().pchs.reset_results();
     EXPECT_TRUE((bool)test::module::interface::global().comch.send(test::module::command::send_parallel_req));
     hce::schedule(para_receive_op(&test::module::interface::global(), module::fname.c_str())); 
     bool success = false;
@@ -147,6 +154,7 @@ TEST_F(module, send_parallel) {
 
 TEST_F(module, receive_parallel) {
     HCE_INFO_FUNCTION_BODY(module::fname, "send command: receive_parallel_req");
+    test::module::interface::global().pchs.reset_results();
     EXPECT_TRUE((bool)test::module::interface::global().comch.send(test::module::command::receive_parallel_req));
     hce::schedule(para_send_op(&test::module::interface::global(), module::fname.c_str())); 
     bool success = false;
@@ -162,6 +170,7 @@ TEST_F(module, receive_parallel) {
 
 TEST_F(module, blocking) {
     HCE_INFO_FUNCTION_BODY(module::fname, "send command: blocking_req");
+    test::module::interface::global().blk.reset_results();
     EXPECT_TRUE((bool)test::module::interface::global().comch.send(test::module::command::blocking_req));
     bool success = false;
     EXPECT_TRUE((bool)test::module::interface::global().resch.recv(success));
@@ -176,6 +185,7 @@ TEST_F(module, blocking) {
 
 TEST_F(module, timing){
     HCE_INFO_FUNCTION_BODY(module::fname, "send command: timing_req");
+    test::module::interface::global().tmr.reset_results();
     EXPECT_TRUE((bool)test::module::interface::global().comch.send(test::module::command::timing_req));
 
     HCE_INFO_FUNCTION_BODY(module::fname, "wait for timer start");

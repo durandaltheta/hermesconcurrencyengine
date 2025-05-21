@@ -116,6 +116,12 @@ struct result_interface : public hce::printable {
         }
     }
 
+    static inline std::string info_name() { 
+        return "test::module::result_interface";
+    }
+
+    inline std::string name() const { return result_interface::info_name(); }
+
     inline bool handle_result(bool b) {
         std::lock_guard<std::mutex> lk(this->mtx_);
 
@@ -610,10 +616,6 @@ struct interface {
     inline void init() {
         comch = hce::chan<command>::make();
         resch = hce::chan<bool>::make();
-        cchs.reset_results();
-        pchs.reset_results();
-        blk.reset_results();
-        tmr.reset_results();
     }
 
     // access the global interface instance
