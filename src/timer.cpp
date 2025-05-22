@@ -3,9 +3,7 @@
 #include "timer.hpp"
 #include "lifecycle.hpp"
 
-hce::timer::service* hce::timer::service::instance_ = nullptr;
-
-hce::chrono::time_point hce::timer::service::default_timeout_algorithm(
+hce::chrono::time_point hce::timer::default_timeout_algorithm(
         const hce::chrono::time_point& now, 
         const hce::chrono::time_point& requested_timeout)
 {

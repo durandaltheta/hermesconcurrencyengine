@@ -1,17 +1,5 @@
 //SPDX-License-Identifier: Apache-2.0
 //Author: Blayne Dennis 
-#include <deque>
-#include <string>
-#include <thread>
-#include <chrono>
-#include <vector>
-#include <algorithm>
-
-#include "loguru.hpp"
-#include "atomic.hpp"
-#include "scheduler.hpp"
-#include "blocking.hpp"
-
 #include <gtest/gtest.h> 
 #include "test_helpers.hpp"
 #include "test_blocking_helpers.hpp"
@@ -36,14 +24,14 @@ size_t block_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname,"thread block done immediately");
         auto schedule_blocking = [&](T t) {
-            hce::blocking::service::get().clear_worker_cache();
+            hce::service<hce::blocking>::get().clear_worker_cache();
             auto thd_id = std::this_thread::get_id();
             bool ids_identical = false;
             bool ids_identical2 = false;
             bool ids_identical3 = false;
 
             if(worker_count_check) {
-                EXPECT_EQ(0, hce::blocking::service::get().worker_count());
+                EXPECT_EQ(0, hce::service<hce::blocking>::get().worker_count());
             }
 
             EXPECT_EQ(t, (T)hce::block(block_done_immediately_T<T>,t,std::ref(ids_identical), thd_id));
@@ -54,7 +42,7 @@ size_t block_T() {
             EXPECT_TRUE(ids_identical3);
 
             if(worker_count_check) {
-                EXPECT_EQ(0, hce::blocking::service::get().worker_count());
+                EXPECT_EQ(0, hce::service<hce::blocking>::get().worker_count());
             }
         };
 
@@ -72,7 +60,7 @@ size_t block_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname,"thread block for queue");
         auto schedule_blocking = [&](T t) {
-            hce::blocking::service::get().clear_worker_cache();
+            hce::service<hce::blocking>::get().clear_worker_cache();
             test::queue<T> q;
             auto thd_id = std::this_thread::get_id();
             bool ids_identical = false;
@@ -81,13 +69,13 @@ size_t block_T() {
 
             auto launch_sender_thd = [&]{
                 std::thread([&](T t){
-                    EXPECT_EQ(0, hce::blocking::service::get().worker_count());
+                    EXPECT_EQ(0, hce::service<hce::blocking>::get().worker_count());
                     q.push(std::move(t));
                 },t).detach();
             };
 
             if(worker_count_check) {
-                EXPECT_EQ(0, hce::blocking::service::get().worker_count());
+                EXPECT_EQ(0, hce::service<hce::blocking>::get().worker_count());
             }
 
             launch_sender_thd();
@@ -101,7 +89,7 @@ size_t block_T() {
             EXPECT_TRUE(ids_identical3);
 
             if(worker_count_check) {
-                EXPECT_EQ(0, hce::blocking::service::get().worker_count());
+                EXPECT_EQ(0, hce::service<hce::blocking>::get().worker_count());
             }
         };
 
@@ -125,14 +113,14 @@ size_t block_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname,"thread stacked block done immediately");
         auto schedule_blocking = [&](T t) {
-            hce::blocking::service::get().clear_worker_cache();
+            hce::service<hce::blocking>::get().clear_worker_cache();
             auto thd_id = std::this_thread::get_id();
             bool ids_identical = false;
             bool ids_identical2 = false;
             bool ids_identical3 = false;
 
             if(worker_count_check) {
-                EXPECT_EQ(0, hce::blocking::service::get().worker_count());
+                EXPECT_EQ(0, hce::service<hce::blocking>::get().worker_count());
             }
 
             EXPECT_EQ(t, (T)hce::block(block_done_immediately_stacked_outer_T<T>,t,std::ref(ids_identical), thd_id));
@@ -143,7 +131,7 @@ size_t block_T() {
             EXPECT_TRUE(ids_identical3);
 
             if(worker_count_check) {
-                EXPECT_EQ(0, hce::blocking::service::get().worker_count());
+                EXPECT_EQ(0, hce::service<hce::blocking>::get().worker_count());
             }
         };
 
@@ -161,7 +149,7 @@ size_t block_T() {
     {
         HCE_INFO_FUNCTION_BODY(fname,"thread stacked block");
         auto schedule_blocking = [&](T t) {
-            hce::blocking::service::get().clear_worker_cache();
+            hce::service<hce::blocking>::get().clear_worker_cache();
             test::queue<T> q;
             auto thd_id = std::this_thread::get_id();
             bool ids_identical = false;
@@ -170,13 +158,13 @@ size_t block_T() {
 
             auto launch_sender_thd = [&]{
                 std::thread([&](T t){
-                    EXPECT_EQ(0, hce::blocking::service::get().worker_count());
+                    EXPECT_EQ(0, hce::service<hce::blocking>::get().worker_count());
                     q.push(std::move(t));
                 },t).detach();
             };
 
             if(worker_count_check) {
-                EXPECT_EQ(0, hce::blocking::service::get().worker_count());
+                EXPECT_EQ(0, hce::service<hce::blocking>::get().worker_count());
             }
 
             launch_sender_thd();
@@ -190,7 +178,7 @@ size_t block_T() {
             EXPECT_TRUE(ids_identical3);
             
             if(worker_count_check) {
-                EXPECT_EQ(0, hce::blocking::service::get().worker_count());
+                EXPECT_EQ(0, hce::service<hce::blocking>::get().worker_count());
             }
         };
 
@@ -210,7 +198,7 @@ size_t block_T() {
         test::queue<T> q;
 
         auto schedule_blocking_co = [&](T t) {
-            hce::blocking::service::get().clear_worker_cache();
+            hce::service<hce::blocking>::get().clear_worker_cache();
             auto lf = hce::scheduler::make();
             std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
             auto thd_id = std::this_thread::get_id();
@@ -248,7 +236,7 @@ size_t block_T() {
 
                 EXPECT_EQ(
                     post_block_expected_worker_count(3), 
-                    hce::blocking::service::get().worker_count());
+                    hce::service<hce::blocking>::get().worker_count());
             }
         };
 
@@ -268,7 +256,7 @@ size_t block_T() {
         test::queue<T> q;
 
         auto schedule_blocking_co = [&](T t) {
-            hce::blocking::service::get().clear_worker_cache();
+            hce::service<hce::blocking>::get().clear_worker_cache();
             auto lf = hce::scheduler::make();
             std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
             auto thd_id = std::this_thread::get_id();
@@ -296,7 +284,7 @@ size_t block_T() {
 
             if(worker_count_check) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                EXPECT_EQ(3, hce::blocking::service::get().worker_count());
+                EXPECT_EQ(3, hce::service<hce::blocking>::get().worker_count());
             }
 
             q.push(t);
@@ -326,7 +314,7 @@ size_t block_T() {
         test::queue<T> q;
 
         auto schedule_blocking_co = [&](T t) {
-            hce::blocking::service::get().clear_worker_cache();
+            hce::service<hce::blocking>::get().clear_worker_cache();
             auto lf = hce::scheduler::make();
             std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
             auto thd_id = std::this_thread::get_id();
@@ -363,7 +351,7 @@ size_t block_T() {
             if(worker_count_check) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-                EXPECT_EQ(post_block_expected_worker_count(3), hce::blocking::service::get().worker_count());
+                EXPECT_EQ(post_block_expected_worker_count(3), hce::service<hce::blocking>::get().worker_count());
             }
         };
 
@@ -385,7 +373,7 @@ size_t block_T() {
         std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
 
         auto schedule_blocking_co = [&](T t) {
-            hce::blocking::service::get().clear_worker_cache();
+            hce::service<hce::blocking>::get().clear_worker_cache();
             auto thd_id = std::this_thread::get_id();
             bool co_ids_identical = true;
             bool co_ids_identical2 = true;
@@ -411,7 +399,7 @@ size_t block_T() {
 
             if(worker_count_check) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                EXPECT_EQ(3, hce::blocking::service::get().worker_count());
+                EXPECT_EQ(3, hce::service<hce::blocking>::get().worker_count());
             }
 
             q.push(t);
@@ -468,7 +456,7 @@ size_t block_worker_cache_size_T(const size_t cache_size) {
         hce::config::blocking::reusable_block_worker_cache_size();
 
     EXPECT_EQ(reusable_block_worker_cache_size, 
-              hce::blocking::service::get().worker_cache_size());
+              hce::service<hce::blocking>::get().worker_cache_size());
 
     for(size_t reuse_cnt=0; reuse_cnt<cache_size; ++reuse_cnt) {
         HCE_INFO_FUNCTION_BODY(fname, "loop; reuse_cnt:",reuse_cnt);
@@ -479,10 +467,10 @@ size_t block_worker_cache_size_T(const size_t cache_size) {
         std::deque<hce::awt<T>> awts;
 
         try {
-            hce::blocking::service::get().clear_worker_cache();
+            hce::service<hce::blocking>::get().clear_worker_cache();
 
             if(worker_count_check) {
-                EXPECT_EQ(0, hce::blocking::service::get().worker_count());
+                EXPECT_EQ(0, hce::service<hce::blocking>::get().worker_count());
             }
 
             // block a set of coroutines
@@ -494,7 +482,7 @@ size_t block_worker_cache_size_T(const size_t cache_size) {
             if(worker_count_check) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-                EXPECT_EQ(cache_size, hce::blocking::service::get().worker_count());
+                EXPECT_EQ(cache_size, hce::service<hce::blocking>::get().worker_count());
             }
 
             // unblock all the coroutines
@@ -511,7 +499,7 @@ size_t block_worker_cache_size_T(const size_t cache_size) {
             if(worker_count_check) {
                 // worker count in the cache should have grown to this
                 size_t expected_count = std::min(cache_size, reusable_block_worker_cache_size);
-                EXPECT_EQ(expected_count, hce::blocking::service::get().worker_count());
+                EXPECT_EQ(expected_count, hce::service<hce::blocking>::get().worker_count());
             }
 
             ++success_count;

@@ -12,7 +12,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -Wall -Wfatal-errors")
 set(HCE_INCLUDE_DIR ${CMAKE_CURRENT_LIST_DIR}/inc)
 set(HCE_SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/src)
 set(LOGURU_DIR ${CMAKE_CURRENT_LIST_DIR}/loguru)
-set(BUILD_SHARED_LIBS OFF)
+option(BUILD_SHARED_LIBS "Build hce as a shared library" OFF)
 
 project(libhce)
 
@@ -20,13 +20,6 @@ function(SplitOnWhitespace input result_var)
     string(STRIP "${input}" trimmed_input)  # Trim leading and trailing whitespace
     string(REGEX REPLACE "[ \t\n\r]+" ";" split_list "${trimmed_input}")  # Split on whitespace
     set(${result_var} ${split_list} PARENT_SCOPE)  # Return as list
-endfunction()
-
-# ensure defitions exist with a default value
-function(SetDefault VAR_NAME DEFAULT_VALUE)
-    if(NOT DEFINED ${VAR_NAME} OR "${${VAR_NAME}}" STREQUAL "")
-        set(${VAR_NAME} "${DEFAULT_VALUE}" PARENT_SCOPE)
-    endif()
 endfunction()
 
 function(pow2 result exponent)
@@ -37,49 +30,13 @@ function(pow2 result exponent)
     set(${result} ${value} PARENT_SCOPE)
 endfunction()
 
-function(SetRemainingCompileDefines)
-    set(options "")  # No boolean options
-    set(oneValueArgs "")  # No single-value arguments
-    set(multiValueArgs "PAIRS")  # Expecting a list of pairs
-    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    if(NOT DEFINED ARG_PAIRS)
-        message(FATAL_ERROR "SetRemainingCompileDefines requires a PAIRS argument")
-    endif()
-
-    list(LENGTH ARG_PAIRS num_items)
-    math(EXPR num_items_mod2 "${num_items} % 2") 
-
-    if(NOT num_items EQUAL 0 AND NOT num_items_mod2 EQUAL 0)
-        message(FATAL_ERROR "SetRemainingCompileDefines requires an even number of arguments (pairs of VAR_NAME and DEFAULT_VALUE)")
-    endif()
-
-    set(NEW_COMPILE_DEFINES "${HCE_COMPILE_DEFINES}")  # Preserve previous values
-
-    list(LENGTH ARG_PAIRS pair_count)
-    math(EXPR pair_count "${pair_count} / 2 - 1")  # Ensure correct iteration range
-
-    foreach(index RANGE 0 ${pair_count} 1)
-        math(EXPR varindex "${index} * 2")
-        list(GET ARG_PAIRS ${varindex} VAR_NAME)
-        math(EXPR valueindex "${varindex} +1")
-        list(GET ARG_PAIRS ${valueindex} DEFAULT_VALUE)
-
-        SetDefault(${VAR_NAME} "${DEFAULT_VALUE}")
-
-        list(APPEND NEW_COMPILE_DEFINES "-D${VAR_NAME}=${${VAR_NAME}}")
-    endforeach()
-
-    set(HCE_COMPILE_DEFINES "${NEW_COMPILE_DEFINES}" PARENT_SCOPE)
-endfunction()
-
-SetDefault(TIME_SENSITIVE_TESTS_ENABLED 13)
-
 set(HCE_HEADER_FILES 
     ${LOGURU_DIR}/loguru.hpp
     ${HCE_INCLUDE_DIR}/base.hpp
     ${HCE_INCLUDE_DIR}/utility.hpp
+    ${HCE_INCLUDE_DIR}/cleanup.hpp
     ${HCE_INCLUDE_DIR}/logging.hpp
+    ${HCE_INCLUDE_DIR}/service.hpp
     ${HCE_INCLUDE_DIR}/memory.hpp
     ${HCE_INCLUDE_DIR}/alloc.hpp
     ${HCE_INCLUDE_DIR}/thread.hpp
@@ -98,7 +55,10 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/channel.hpp
     ${HCE_INCLUDE_DIR}/scope.hpp
     ${HCE_INCLUDE_DIR}/threadpool.hpp
+    ${HCE_INCLUDE_DIR}/thread_key_map.hpp
     ${HCE_INCLUDE_DIR}/lifecycle.hpp
+    ${HCE_INCLUDE_DIR}/environment.hpp
+    ${HCE_INCLUDE_DIR}/module.hpp
     ${HCE_INCLUDE_DIR}/hce.hpp
 )
 
@@ -109,11 +69,18 @@ set(HCE_SOURCE_FILES
     ${HCE_SOURCE_DIR}/coroutine.cpp
     ${HCE_SOURCE_DIR}/scheduler.cpp
     ${HCE_SOURCE_DIR}/timer.cpp
-    ${HCE_SOURCE_DIR}/blocking.cpp
     ${HCE_SOURCE_DIR}/threadpool.cpp
+    ${HCE_SOURCE_DIR}/service.cpp
     ${HCE_SOURCE_DIR}/lifecycle.cpp
+    ${HCE_SOURCE_DIR}/module.cpp
     ${HCE_SOURCE_DIR}/config.cpp
 )
+
+# Compile unit tests with or without time sensitive tests (which take a long 
+# time and may be affected by processing environment)
+if(NOT DEFINED TIME_SENSITIVE_TESTS_ENABLED OR "${TIME_SENSITIVE_TESTS_ENABLED}" STREQUAL "")
+    set(TIME_SENSITIVE_TESTS_ENABLED "1")
+endif()
 
 # The number of buckets containing thread_local reusable allocated memory used 
 # by this library's memory allocation facilities. Reused allocations prevent 
@@ -131,7 +98,9 @@ set(HCE_SOURCE_FILES
 #
 # Any requested allocated size larger than the largest bucket can provide will 
 # be allocated/deallocated directly with `malloc()`/`free()`.
-SetDefault(HCEMEMORYCACHEBUCKETCOUNT 13)
+if(NOT DEFINED HCEMEMORYCACHEBUCKETCOUNT OR "${HCEMEMORYCACHEBUCKETCOUNT}" STREQUAL "")
+    set(HCEMEMORYCACHEBUCKETCOUNT "13")
+endif()
 
 # 512 bytes == 2^9. Buckets 10-HCEMEMORYCACHEBUCKETCOUNT will hold a maximum of 
 # 1 value, but buckets 0-9 will hold more.
@@ -145,11 +114,11 @@ math(EXPR SCHBYTELIMIT "1 << ${HCEMEMORYCACHEBUCKETCOUNT}")
 # load
 math(EXPR GLBBYTELIMIT "${SCHBYTELIMIT} * 2") 
        
-# start the list
-set(HCE_COMPILE_DEFINES "-DHCEMEMORYCACHEBUCKETCOUNT=${HCEMEMORYCACHEBUCKETCOUNT}")
+# Start the compile definitions list
+set(HCE_COMPILE_DEFINES "HCEMEMORYCACHEBUCKETCOUNT=${HCEMEMORYCACHEBUCKETCOUNT}")
 
-SetRemainingCompileDefines(
-    PAIRS
+# Define the pairs of variable names and their default values
+set(PAIRS
 # If the count of buckets is above 256 due to the user implementation they can 
 # configure the memory cache's index type to be larger than "unsigned char".
 #
@@ -199,8 +168,9 @@ SetRemainingCompileDefines(
         HCEREUSABLEBLOCKWORKERCACHESIZE "1"
 
 # Define the count of available threads running schedulers in the threadpool. If 
-# unspecified or set to 0, the framework will decide the final threadcount
-        HCETHREADPOOLSCHEDULERCOUNT "0"
+# unspecified or set to 0, the framework will decide the final threadcount. The 
+# default is 1, only spawning the global scheduler thread.
+        HCETHREADPOOLSCHEDULERCOUNT "1"
 
 # Microsecond busy wait timer threshhold. If a timer has this amount of time or 
 # less before timeout, the timer_service will busy-wait
@@ -222,7 +192,32 @@ SetRemainingCompileDefines(
         HCELOGLIMIT "-1"
 )
 
-add_library(hce STATIC ${HCE_HEADER_FILES} ${HCE_SOURCE_FILES})
+# Add pairs to compile defines
+list(LENGTH PAIRS len)
+set(i 0)
+while(i LESS len)
+    list(GET PAIRS ${i} name)
+    math(EXPR i "${i} + 1")
+    list(GET PAIRS ${i} value)
+
+    if(NOT DEFINED ${name} OR "${${name}}" STREQUAL "")
+        set(${name} ${value})
+    endif()
+
+    list(APPEND HCE_COMPILE_DEFINES "${name}=${${name}}")
+    math(EXPR i "${i} + 1")
+endwhile()
+
+if(BUILD_SHARED_LIBS)
+    add_library(hce SHARED ${HCE_HEADER_FILES} ${HCE_SOURCE_FILES})
+else()
+    add_library(hce STATIC ${HCE_HEADER_FILES} ${HCE_SOURCE_FILES})
+endif()
+
+# Apply the shared/static setting
+set_target_properties(hce PROPERTIES
+    POSITION_INDEPENDENT_CODE ON  # Ensure PIC for shared builds
+)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
@@ -242,7 +237,8 @@ SplitOnWhitespace("${HCE_COMPILE_DEFINES}" PRETTY_HCE_COMPILE_DEFINES)
 message("-- HCE LIBRARY -- ")
 message("CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
 message("CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
-message("TIME_SENSITIVE_TESTS=${TIME_SENSITIVE_TESTS}")
+message("BUILD_SHARED_LIBS=${BUILD_SHARED_LIBS}")
+message("TIME_SENSITIVE_TESTS_ENABLED=${TIME_SENSITIVE_TESTS_ENABLED}")
 message("-- HCE LIBRARY HEADERS -- ")
 
 foreach(item IN LISTS PRETTY_HCE_HEADER_FILES)

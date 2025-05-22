@@ -9,6 +9,7 @@
 
 #include "base.hpp"
 #include "utility.hpp"
+#include "service.hpp"
 #include "alloc.hpp"
 #include "logging.hpp"
 #include "atomic.hpp"
@@ -32,9 +33,8 @@ size_t reusable_block_worker_cache_size();
 }
 }
 
-namespace blocking {
-
 namespace detail {
+namespace blocking {
 
 // sync operations are lockfree because they are allocated on the same thread 
 // as the caller and are immediately complete (no interthread communication 
@@ -146,6 +146,7 @@ private:
 };
 
 }
+}
 
 /**
  @brief singleton service maintaining worker threads for executing blocking calls
@@ -170,14 +171,10 @@ private:
  - if none of the previous options are available a new worker thread is 
  created/destroyed as necessary to execute the Callable
  */
-struct service : public hce::printable {
-    static inline std::string info_name() { return ("hce::blocking::service"); }
-    inline std::string name() const { return service::info_name(); }
-
-    /**
-     @return the process-wide blocking service
-     */
-    static inline service& get() { return *(service::instance_); }
+struct blocking : public hce::service<blocking>, public hce::printable {
+    virtual ~blocking() { HCE_HIGH_DESTRUCTOR(); }
+    static inline std::string info_name() { return ("hce::blocking"); }
+    inline std::string name() const { return blocking::info_name(); }
 
     /**
      This value is determined by:
@@ -264,7 +261,7 @@ struct service : public hce::printable {
         typedef hce::function_return_type<Callable,As...> RETURN_TYPE;
         using isv = typename std::is_void<RETURN_TYPE>;
 
-        HCE_LOW_METHOD_ENTER("block",hce::callable_to_string(cb));
+        HCE_LOW_METHOD_ENTER("block", hce::callable_to_string(cb));
 
         return block_(
             std::integral_constant<bool,isv::value>(),
@@ -286,7 +283,7 @@ private:
         }
 
         static inline std::string info_name() { 
-            return "hce::blocking::service::worker"; 
+            return "hce::blocking::worker"; 
         }
 
         inline std::string name() const { return worker::info_name(); }
@@ -327,12 +324,12 @@ private:
     template <typename T>
     struct sync : public 
             hce::scheduler::reschedule<
-                hce::blocking::detail::sync_partial<T>>
+                hce::detail::blocking::sync_partial<T>>
     {
         template <typename... As>
         sync(As&&... as) : 
             hce::scheduler::reschedule<
-                hce::blocking::detail::sync_partial<T>>(
+                hce::detail::blocking::sync_partial<T>>(
                     std::forward<As>(as)...)
         { 
             HCE_MED_CONSTRUCTOR();
@@ -343,7 +340,7 @@ private:
         }
         
         static inline std::string info_name() { 
-            return type::templatize<T>("hce::blocking::service::sync"); 
+            return type::templatize<T>("hce::blocking::sync"); 
         }
 
         inline std::string name() const { return sync<T>::info_name(); }
@@ -352,12 +349,12 @@ private:
     // awaitable implementation for returning an asynchronously available value
     template <typename T>
     struct async : public 
-           scheduler::reschedule<hce::blocking::detail::async_partial<T>>
+           scheduler::reschedule<hce::detail::blocking::async_partial<T>>
     {
         async() : 
-            scheduler::reschedule<hce::blocking::detail::async_partial<T>>(),
+            scheduler::reschedule<hce::detail::blocking::async_partial<T>>(),
             // on construction get a worker
-            wkr_(service::get().checkout_worker_())
+            wkr_(hce::service<blocking>::get().checkout_worker_())
         { 
             HCE_MED_CONSTRUCTOR();
         }
@@ -367,34 +364,28 @@ private:
 
             // return the worker to its scheduler
             if(wkr_) [[likely]] { 
-                service::get().checkin_worker_(std::move(wkr_));
+                hce::service<blocking>::get().checkin_worker_(std::move(wkr_));
             }
         }
         
         static inline std::string info_name() { 
-            return type::templatize<T>("hce::blocking::service::async"); 
+            return type::templatize<T>("hce::blocking::async"); 
         }
 
         inline std::string name() const { return async<T>::info_name(); }
 
         // return the contractor's worker
-        inline service::worker& worker() { return *wkr_; }
+        inline blocking::worker& worker() { return *wkr_; }
 
     private:
-        std::unique_ptr<service::worker> wkr_;
+        std::unique_ptr<blocking::worker> wkr_;
     };
 
-    service() :
+    blocking() :
         worker_active_count_(0),
         worker_cache_(config::blocking::reusable_block_worker_cache_size())
     { 
-        service::instance_ = this;
         HCE_HIGH_CONSTRUCTOR();
-    }
-
-    virtual ~service() { 
-        HCE_HIGH_DESTRUCTOR(); 
-        service::instance_ = nullptr;
     }
 
     // retrieve a worker thread from the service to execute blocking operations on
@@ -445,7 +436,7 @@ private:
 
         if(hce::coroutine::in()) {
             // construct an asynchronous awaitable implementation
-            auto ai = new service::async<T>();
+            auto ai = new blocking::async<T>();
             auto& wkr = ai->worker();
             HCE_MIN_METHOD_BODY("block","executing on ",wkr);
             
@@ -470,7 +461,7 @@ private:
             
             // we own the thread already, call cb immediately and return the 
             // result
-            return hce::awt<T>(new service::sync<T>(
+            return hce::awt<T>(new blocking::sync<T>(
                 cb(std::forward<As>(as)...)));
         }
     }
@@ -480,7 +471,7 @@ private:
     inline hce::awt<void>
     block_(std::true_type, Callable&& cb, As&&... as) {
         if(hce::coroutine::in()) {
-            auto ai = new service::async<void>();
+            auto ai = new blocking::async<void>();
             auto& wkr = ai->worker(); 
             HCE_MIN_METHOD_BODY("block","executing on ",wkr);
 
@@ -500,11 +491,9 @@ private:
         } else {
             HCE_MIN_METHOD_BODY("block","executing on current thread");
             cb(std::forward<As>(as)...);
-            return hce::awt<void>(new service::sync<void>);
+            return hce::awt<void>(new blocking::sync<void>);
         }
     }
-
-    static service* instance_;
 
     // synchronize checkin/checkout of workers
     mutable hce::spinlock lk_;
@@ -522,8 +511,6 @@ private:
     friend hce::lifecycle;
 };
 
-}
-
 /**
  @brief call a Callable on a thread that is not running a coroutine 
  @param cb a Callable function, function pointer, Functor or lambda
@@ -534,7 +521,7 @@ template <typename Callable, typename... Args>
 inline hce::awt<hce::function_return_type<Callable,Args...>> 
 block(Callable&& cb, Args&&... args) {
     HCE_MED_FUNCTION_ENTER("hce::block");
-    return blocking::service::get().block(
+    return hce::service<blocking>::get().block(
         std::forward<Callable>(cb),
         std::forward<Args>(args)...);
 }

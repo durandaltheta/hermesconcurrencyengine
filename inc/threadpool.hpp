@@ -8,6 +8,7 @@
 
 // local
 #include "base.hpp"
+#include "service.hpp"
 #include "logging.hpp"
 #include "scheduler.hpp"
 
@@ -50,8 +51,6 @@ algorithm_function_ptr algorithm();
 }
 }
 
-namespace threadpool {
-
 /**
  @brief an object providing access to a pool of worker schedulers 
 
@@ -78,9 +77,9 @@ namespace threadpool {
  If `HCETHREADPOOLSCHEDULERCOUNT` is set greater than 1, the additional count of 
  threads beyond the first will be launched.
  */
-struct service : public printable {
-    static inline std::string info_name() { return "hce::threadpool::service"; }
-    inline std::string name() const { return service::info_name(); }
+struct threadpool : public hce::service<threadpool>, public hce::printable {
+    static inline std::string info_name() { return "hce::threadpool"; }
+    inline std::string name() const { return threadpool::info_name(); }
 
     inline std::string content() const {
         std::stringstream ss;
@@ -97,13 +96,6 @@ struct service : public printable {
 
         return ss.str(); 
     }
-
-    /**
-     There is only ever one threadpool in existence.
-
-     @return the process wide threadpool service
-     */
-    static inline service& get() { return *(service::instance_); }
 
     /**
      @return a const reference to the managed vector of threadpool schedulers
@@ -136,8 +128,19 @@ struct service : public printable {
      */
     static hce::scheduler& lightest(); 
 
+    /**
+     @brief call schedule() on a threadpool scheduler
+     @param as arguments for scheduler::schedule()
+     @return result of schedule()
+     */
+    template <typename... As>
+    static inline auto schedule(As&&... as) {
+        HCE_HIGH_FUNCTION_ENTER("hce::threadpool::schedule");
+        return hce::service<threadpool>::get().algorithm().schedule(std::forward<As>(as)...);
+    }
+
 private:
-    service() : 
+    threadpool() : 
         // initialize const vector
         schedulers_([]() -> std::vector<std::shared_ptr<hce::scheduler>> { 
             // acquire the selected worker count from compiler define
@@ -157,7 +160,7 @@ private:
             std::vector<std::shared_ptr<hce::scheduler>> schedulers(worker_count);
 
             // the first scheduler is always the default global scheduler
-            schedulers[0] = hce::scheduler::global::service::get().get_scheduler();
+            schedulers[0] = hce::service<hce::scheduler::global>::get().get_scheduler();
 
             // construct the rest of the schedulers
             for(size_t i=1; i<schedulers.size(); ++i) {
@@ -168,7 +171,7 @@ private:
                 schedulers[i] = lf->get_scheduler();
 
                 // register the worker lifecycle
-                hce::scheduler::lifecycle::service::instance().registration(
+                hce::service<hce::scheduler::lifecycle::manager>::get().registration(
                     std::move(lf));
             }
 
@@ -178,22 +181,15 @@ private:
     { 
         // set the threadpool's algorithm
         algorithm_ = hce::config::threadpool::algorithm();
-        service::instance_ = this;
         HCE_HIGH_CONSTRUCTOR();
     }
 
-    service(const service&) = delete;
-    service(service&&) = delete;
+    threadpool(const threadpool&) = delete;
+    threadpool(threadpool&&) = delete;
+    virtual ~threadpool(){ HCE_HIGH_DESTRUCTOR(); }
 
-    virtual ~service(){ 
-        HCE_HIGH_DESTRUCTOR();
-        service::instance_ = nullptr; 
-    }
-
-    service& operator=(const service&) = delete;
-    service& operator=(service&&) = delete;
-
-    static service* instance_;
+    threadpool& operator=(const threadpool&) = delete;
+    threadpool& operator=(threadpool&&) = delete;
 
     const std::vector<std::shared_ptr<hce::scheduler>> schedulers_;
     hce::scheduler& (*algorithm_)();
@@ -201,18 +197,6 @@ private:
     friend hce::lifecycle;
 };
 
-/**
- @brief call schedule() on a threadpool scheduler
- @param as arguments for scheduler::schedule()
- @return result of schedule()
- */
-template <typename... As>
-static inline auto schedule(As&&... as) {
-    HCE_HIGH_FUNCTION_ENTER("hce::threadpool::schedule");
-    return threadpool::service::get().algorithm().schedule(std::forward<As>(as)...);
-}
-
-}
 }
 
 #endif

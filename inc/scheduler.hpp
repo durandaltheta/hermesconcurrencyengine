@@ -16,9 +16,10 @@
 #include <thread>
 
 // local 
-#include "logging.hpp"
 #include "base.hpp"
+#include "logging.hpp"
 #include "utility.hpp"
+#include "service.hpp"
 #include "atomic.hpp"
 #include "memory.hpp"
 #include "alloc.hpp"
@@ -208,13 +209,13 @@ private:
      handler is triggered just before the promise_type is destroyed and passes 
      around the necessary data to the awaitable (joiner<T>) and resumes it.
      */
-    static inline void cleanup(hce::coroutine::promise_type::cleanup_data& data) { 
-        HCE_TRACE_FUNCTION_ENTER(hce::detail::scheduler::joiner<T>::info_name() + "::cleanup", data.install, data.promise);
+    static inline void cleanup(hce::cleanup::data& data) { 
+        HCE_TRACE_FUNCTION_ENTER(hce::detail::scheduler::joiner<T>::info_name() + "::cleanup", data.install, data.self);
         // acquire a reference to the joiner<T>
         auto& joiner = *(static_cast<hce::detail::scheduler::joiner<T>*>(data.install));
 
         // acquire a reference to the promise
-        auto& promise = *(static_cast<typename hce::co<T>::promise_type*>(data.promise));
+        auto& promise = *(static_cast<typename hce::co<T>::promise_type*>(data.self));
 
         // get a copy of the handle to see if the coroutine completed 
         auto handle = std::coroutine_handle<hce::co_promise_type<T>>::from_promise(promise);
@@ -271,8 +272,8 @@ struct joiner<void> :
     inline void on_resume(void* m) { ready_ = true; }
 
 private:
-    static inline void cleanup(hce::coroutine::promise_type::cleanup_data& data) { 
-        HCE_TRACE_FUNCTION_ENTER("joiner<void>::cleanup()", data.install, data.promise);
+    static inline void cleanup(hce::cleanup::data& data) { 
+        HCE_TRACE_FUNCTION_ENTER("joiner<void>::cleanup()", data.install, data.self);
         static_cast<hce::detail::scheduler::joiner<void>*>(data.install)->resume(nullptr);
     }
 
@@ -474,28 +475,20 @@ struct scheduler : public printable {
         /**
          @brief process-wide object responsible for managing scheduler lifecycles
          */
-        struct service : public printable {
-            service() : state_(executing) { 
-                service::instance_ = this;
+        struct manager : public hce::service<manager>, public hce::printable {
+            manager() : state_(executing) { 
                 HCE_HIGH_CONSTRUCTOR(); 
             }
 
-            virtual ~service() { 
+            virtual ~manager() { 
                 HCE_HIGH_DESTRUCTOR(); 
-                service::instance_ = nullptr;
             }
 
             static inline std::string info_name() { 
-                return "hce::scheduler::lifecycle::service"; 
+                return "hce::scheduler::lifecycle::manager"; 
             }
 
-            inline std::string name() const { return service::info_name(); }
-
-            /** 
-             @brief access the process wide service object
-             @return a reference to the service 
-             */
-            static inline service& instance() { return *instance_; }
+            inline std::string name() const { return manager::info_name(); }
 
             inline std::string content() const { 
                 std::stringstream ss;
@@ -556,7 +549,6 @@ struct scheduler : public printable {
             }
 
         private:
-            static service* instance_;
             hce::spinlock lk_;
             hce::scheduler::state state_;
 
@@ -631,50 +623,35 @@ struct scheduler : public printable {
 
         std::shared_ptr<hce::scheduler> sch_;
         std::thread thd_;
-        friend struct hce::scheduler;
+        friend hce::scheduler;
     };
 
-    struct global {
-        /**
-         @brief the object managing the process-wide global scheduler instance
-         */
-        struct service : public printable {
-            static inline std::string info_name() { 
-                return "hce::scheduler::global::service"; 
-            }
+    /**
+     @brief the object managing the process-wide global scheduler instance
+     */
+    struct global : public hce::service<global>, public hce::printable {
+        virtual ~global() { HCE_HIGH_DESTRUCTOR(); }
+        static inline std::string info_name() { return "hce::scheduler::global"; }
+        inline std::string name() const { return global::info_name(); }
 
-            inline std::string name() const { return service::info_name(); }
+        /// return the process-wide scheduler instance
+        inline hce::scheduler& get_scheduler() { return sch_; }
 
-            /// return this service
-            static inline service& get() { return *(service::instance_); }
+    private:
+        global() :
+            sch_([]() -> hce::scheduler& {
+                auto lf = hce::scheduler::make(hce::config::scheduler::global::config());
+                hce::scheduler& sch = lf->get_scheduler();
+                hce::service<lifecycle::manager>::get().registration(std::move(lf));
+                return sch;
+            }())
+        { 
+            HCE_HIGH_CONSTRUCTOR();
+        }
 
-            /// return the process-wide scheduler instance
-            inline hce::scheduler& get_scheduler() { return sch_; }
+        hce::scheduler& sch_;
 
-        private:
-            service() :
-                sch_([]() -> hce::scheduler& {
-                    auto lf = hce::scheduler::make(hce::config::scheduler::global::config());
-                    hce::scheduler& sch = lf->get_scheduler();
-                    hce::scheduler::lifecycle::service::instance().registration(std::move(lf));
-                    return sch;
-                }())
-            { 
-                service::instance_ = this;
-                HCE_HIGH_CONSTRUCTOR();
-            }
-
-            virtual ~service() {
-                HCE_HIGH_DESTRUCTOR();
-                service::instance_ = nullptr;
-            }
-
-            static service* instance_;
-
-            hce::scheduler& sch_;
-
-            friend hce::lifecycle;
-        };
+        friend hce::lifecycle;
     };
 
     virtual ~scheduler() { HCE_HIGH_DESTRUCTOR(); }
@@ -758,7 +735,7 @@ struct scheduler : public printable {
         HCE_TRACE_FUNCTION_ENTER("hce::scheduler::get");
         return scheduler::in() 
             ? scheduler::local()
-            : scheduler::global::service::get().get_scheduler();
+            : hce::service<global>::get().get_scheduler();
     }
 
     /// compare two schedulers, equality is always memory address equality

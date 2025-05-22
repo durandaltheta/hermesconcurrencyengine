@@ -1,3 +1,4 @@
+#include "utility.hpp"
 #include "lifecycle.hpp"
 
 #ifndef HCELOGLEVEL
@@ -130,19 +131,25 @@
 #define HCETIMEREARLYWAKEUPMICROSECONDLONGTHRESHOLD 250000
 #endif
 
-hce::spinlock hce::lifecycle::slk_;
-hce::lifecycle* hce::lifecycle::instance_ = nullptr;
+// called once at process start
+struct hce_log_initializer {
+    hce_log_initializer() {
+        int loglevel = HCELOGLEVEL;
+        std::stringstream ss;
+        ss << "-v" << loglevel;
+        std::string process("hce");
+        std::string verbosity = ss.str();
 
-// define all the global (process-wide) configs
-hce::lifecycle::config::logging hce::lifecycle::config::logging::global_;
-hce::lifecycle::config::memory hce::lifecycle::config::memory::global_;
-hce::lifecycle::config::allocator hce::lifecycle::config::allocator::global_;
-hce::lifecycle::config::scheduler hce::lifecycle::config::scheduler::global_(
-    hce::lifecycle::config::memory::global_);
-hce::lifecycle::config::threadpool hce::lifecycle::config::threadpool::global_(
-    hce::lifecycle::config::memory::global_);
-hce::lifecycle::config::blocking hce::lifecycle::config::blocking::global_;
-hce::lifecycle::config::timer hce::lifecycle::config::timer::global_;
+        // Create raw char pointers for argc/argv
+        const char* argv[] = {process.c_str(), verbosity.c_str(), nullptr};
+        int argc = 2; // Number of actual arguments (excluding the nullptr)
+
+        loguru::Options opt;
+        opt.main_thread_name = nullptr;
+        opt.signal_options = loguru::SignalOptions::none();
+        loguru::init(argc, const_cast<char**>(argv), opt);
+    }
+} g_hce_log_initializer; 
 
 hce::lifecycle::config::logging::logging() :
     loglevel(HCELOGLEVEL)
@@ -230,8 +237,7 @@ info::impl info::scheduler_impl_("scheduler", info::bucket_count_, info::schedul
 hce::config::scheduler::config::config() :
     loglevel(HCELOGLEVEL),
     reusable_coroutine_handle_limit(HCEREUSABLECOROUTINEHANDLEDEFAULTSCHEDULERLIMIT),
-    // pull directly from the global memory config
-    cache_info(hce::lifecycle::config::memory::global_.scheduler) 
+    cache_info(&(info::scheduler_impl_)) 
 { }
 
 hce::lifecycle::config::memory::memory() :
@@ -264,7 +270,7 @@ hce::lifecycle::config::threadpool::threadpool(const hce::lifecycle::config::mem
         c.cache_info = m.scheduler;
         return c;
     }()),
-    algorithm(&(hce::threadpool::service::lightest))
+    algorithm(&(hce::threadpool::lightest))
 { }
 
 hce::lifecycle::config::blocking::blocking() :
@@ -296,27 +302,15 @@ hce::lifecycle::config::timer::timer() :
     early_wakeup_long_threshold(
         std::chrono::microseconds(
             HCETIMEREARLYWAKEUPMICROSECONDLONGTHRESHOLD)),
-    algorithm(&(hce::timer::service::default_timeout_algorithm))
+    algorithm(&(hce::timer::default_timeout_algorithm))
 { }
 
-hce::lifecycle::logging_init::logging_init() {
-    struct do_once {
-        do_once() {
-            std::stringstream ss;
-            ss << "-v" << hce::config::logging::default_log_level();
-            std::string process("hce");
-            std::string verbosity = ss.str();
-
-            // Create raw char pointers for argc/argv
-            const char* argv[] = {process.c_str(), verbosity.c_str(), nullptr};
-            int argc = 2; // Number of actual arguments (excluding the nullptr)
-
-            loguru::Options opt;
-            opt.main_thread_name = nullptr;
-            opt.signal_options = loguru::SignalOptions::none();
-            loguru::init(argc, const_cast<char**>(argv), opt);
-        }
-    };
-
-    static do_once d; // static so init only happens once
+std::unique_ptr<hce::lifecycle> hce::lifecycle::initialize(hce::lifecycle::config c) {
+    return std::unique_ptr<hce::lifecycle>(
+        new lifecycle(
+            c, 
+            // initialize thread locals first
+            std::unique_ptr<hce::thread::local>(new hce::thread::local)));
 }
+
+int hce::config::logging::default_log_level() { return HCELOGLEVEL; }
