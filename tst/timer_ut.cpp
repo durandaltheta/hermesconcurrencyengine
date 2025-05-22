@@ -517,6 +517,8 @@ protected:
 
 TEST_F(timer, init) {
     hce::timer::init();
+    auto ticks = hce::service<hce::timer>::get().get_ticks();
+    EXPECT_TRUE(ticks.running);
 }
 
 TEST_F(timer, start_short) {

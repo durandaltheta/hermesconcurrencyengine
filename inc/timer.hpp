@@ -117,8 +117,11 @@ struct timer : public hce::service<timer>, public hce::printable {
      in a `hce::lifecycle::config` passed to `hce::initialize()`.
      */
     struct ticks {
+        // True if timer service thread is running. Requires timer::init() or 
+        // timer::start() has been called
+        bool running; 
         size_t runtime; // microsecond ticks spent running
-        size_t busywait; // microsecond ticks spent busy-waiting 
+        size_t busywait; // microsecond ticks spent busy-waiting  
     };
     
     /**
@@ -126,7 +129,7 @@ struct timer : public hce::service<timer>, public hce::printable {
      */
     inline ticks get_ticks() const { 
         std::lock_guard<hce::spinlock> lk(lk_);
-        return { micro_runtime_ticks_, micro_busywait_ticks_ };
+        return { runflag_, micro_runtime_ticks_, micro_busywait_ticks_ };
     }
     
     /**
@@ -163,6 +166,7 @@ struct timer : public hce::service<timer>, public hce::printable {
      */
     template <typename TIMEOUT>
     static inline hce::awt<bool> start(hce::sid& sid, const TIMEOUT& timeout) {
+        sid.make();
         auto awt = hce::service<timer>::get().start_(sid, timeout);
         HCE_MED_FUNCTION_ENTER("hce::start", sid, timeout);
         return awt;
@@ -388,7 +392,6 @@ private:
     }
 
     inline hce::awt<bool> start_(hce::sid& sid, const hce::chrono::duration& dur) {
-        sid.make();
         HCE_LOW_METHOD_ENTER("start", sid, dur);
         return start_(sid, hce::chrono::now() + dur);
     }
