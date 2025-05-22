@@ -230,13 +230,13 @@ class Build:
 
     def commands(self):
         return [ \
-            'cmake {} {} {} {} -DCMAKE_CXX_FLAGS=\\"{} {}\\" .'.format( \
+            'cmake {} {} {} {} {} -DCMAKE_CXX_FLAGS=\\"{} {}\\" .'.format( \
                 str(self.toolchain), \
                 str(self.buildtype), \
                 str(self.timing), \
                 str(self.log), \
-                str(self.optimization), \
                 str(self.concurrency), \
+                str(self.optimization), \
                 str(self.address_sanitation)), \
             'make -j hce_ut']
 
