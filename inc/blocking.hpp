@@ -41,16 +41,11 @@ namespace blocking {
 // required)
 template <typename T>
 struct sync_partial : 
-    public hce::awaitable::lockable<
-        hce::lockfree,
-        hce::awt_interface<T>>
+    public hce::awaitable::lockfree_lockable<hce::awt_interface<T>>
 {
     template <typename... As>
     sync_partial(As&&... as) : 
-        hce::awaitable::lockable<
-            hce::lockfree,
-            hce::awt_interface<T>>(
-                lf_,
+        hce::awaitable::lockfree_lockable<hce::awt_interface<T>>(
                 hce::awaitable::await::policy::defer,
                 hce::awaitable::resume::policy::lock),
         t_(std::forward<As>(as)...) 
@@ -61,95 +56,68 @@ struct sync_partial :
     inline T get_result() { return std::move(t_); }
 
 private:
-    hce::lockfree lf_;
     T t_;
 };
 
 template <>
 struct sync_partial<void> : public 
-        hce::awaitable::lockable<
-            hce::lockfree,
-            hce::awt_interface<void>>
+        hce::awaitable::lockfree_lockable<hce::awt_interface<void>>
 {
     sync_partial() :
-        hce::awaitable::lockable<
-            hce::lockfree,
+        hce::awaitable::lockfree_lockable<
             hce::awt_interface<void>>(
-                lf_,
                 hce::awaitable::await::policy::defer,
                 hce::awaitable::resume::policy::lock)
     { }
 
     inline bool on_ready() { return true; }
     inline void on_resume(void* m) { }
-
-private:
-    hce::lockfree lf_;
 };
 
 // async operations require a lock because they are used to communicate across
 // thread boundaries
 template <typename T>
 struct async_partial : 
-    public hce::awaitable::lockable<
-        hce::spinlock,
-        hce::awt_interface<T>>
+    public hce::awaitable::spinlock_lockable<hce::awt_interface<T>>
 {
     async_partial() : 
-        hce::awaitable::lockable<
-            hce::spinlock,
+        hce::awaitable::spinlock_lockable<
             hce::awt_interface<T>>(
-                lk_,
                 hce::awaitable::await::policy::defer,
-                hce::awaitable::resume::policy::lock),
-        ready_(false)
+                hce::awaitable::resume::policy::lock)
     { }
-
-    inline bool on_ready() { return ready_; }
 
     // this will never be called *except* in cases where m!=nullptr
     inline void on_resume(void* m) { 
         t_ = std::unique_ptr<T>((T*)m);
-        ready_ = true;
+        this->ready(true);
     }
 
     inline T get_result() { return std::move(*t_); }
 
 private:
-    hce::spinlock lk_;
-    bool ready_;
     std::unique_ptr<T> t_;
 };
 
 template <>
 struct async_partial<void> : 
-    public hce::awaitable::lockable<
-        hce::spinlock,
-        hce::awt_interface<void>>
+    public hce::awaitable::spinlock_lockable<hce::awt_interface<void>>
 {
     async_partial() : 
-        hce::awaitable::lockable<
-            hce::spinlock,
+        hce::awaitable::spinlock_lockable<
             hce::awt_interface<void>>(
-                lk_,
                 hce::awaitable::await::policy::defer,
-                hce::awaitable::resume::policy::lock),
-        ready_(false)
+                hce::awaitable::resume::policy::lock)
     { }
 
-    inline bool on_ready() { return ready_; }
-    inline void on_resume(void* m) { ready_ = true; }
-
-private:
-    hce::spinlock lk_;
-    bool ready_;
+    inline void on_resume(void* m) { this->ready(true); }
 };
 
 }
 }
 
 /**
- @brief singleton service maintaining worker threads for executing blocking calls
+ @brief manager object maintaining worker threads for executing blocking calls
 
  Much attention is paid to the design of this object because threads are 
  expensive:
@@ -159,22 +127,42 @@ private:
  Instead this mechanism launches threads which listen for tasks over a private 
  synchronized queue, shutting down only when necessary.
 
- Several layers of optimization exist in order to limit the amount of worker 
- threads that need to get created/destroyed as well as limiting process-wide 
- lock contention:
- - block() checks if the current thread is a scheduler. If it isn't, the Callable 
- is immediately invoked.
- - a thread_local, lockless cache is used to hold reusable worker threads 
- capable of invoking Callables which can be drawn upon to invoke Callables.
- - a process-wide pool of reusable workers is maintained by this object which 
- can be drawn upon to invoke Callables.
- - if none of the previous options are available a new worker thread is 
+ Layers of optimization exist in order to limit the amount of worker threads 
+ that need to get created/destroyed as well as limiting lock contention:
+ - block() checks if the current thread is a scheduler. If it isn't, the 
+ Callable is immediately invoked.
+ - a cache of reusable workers is maintained by this object which can be drawn 
+ upon to invoke Callables.
+ - if neither of the previous options are available a new worker thread is 
  created/destroyed as necessary to execute the Callable
+
+ Calls to hce::block() use the global instance of this object. If the user 
+ wishes to manage an instance of this object for an optimized circumstance, they 
+ can create their own. 
  */
-struct blocking : public hce::service<blocking>, public hce::printable {
-    virtual ~blocking() { HCE_HIGH_DESTRUCTOR(); }
-    static inline std::string info_name() { return ("hce::blocking"); }
-    inline std::string name() const { return blocking::info_name(); }
+struct blocking : public hce::printable {
+    /**
+     @brief singleton service managing a global blocking instance
+
+     Calls to `hce::block()` use this service.
+     */
+    struct manager : public hce::service<manager>, public hce::printable {
+        virtual ~manager();
+        static std::string info_name();
+        std::string name() const;
+
+        /// return the blocking instance
+        hce::blocking& blocking();
+
+    private:
+        manager();
+        std::unique_ptr<hce::blocking> blocking_;
+        friend hce::lifecycle;
+    };
+
+    virtual ~blocking();
+    static std::string info_name();
+    std::string name() const;
 
     /**
      This value is determined by:
@@ -187,37 +175,22 @@ struct blocking : public hce::service<blocking>, public hce::printable {
 
      @return the maximum count of `block()` worker threads the service will persist
      */
-    inline size_t worker_cache_size() const { 
-        HCE_LOW_METHOD_BODY("worker_cache_size",worker_cache_.size());
-        return worker_cache_.size();
-    }
+    size_t worker_cache_size() const;
+
+    /**
+     @brief resize the worker cache's maximum reusable worker count
+     */
+    void worker_cache_size(size_t);
 
     /**
      @return the total count of worker threads spawned for blocking operations in the entire process
      */
-    inline size_t worker_count() const {
-        size_t c;
-
-        {
-            std::lock_guard<hce::spinlock> lk(lk_);
-            c = worker_active_count_ + worker_cache_.used();
-        }
-
-        HCE_LOW_METHOD_BODY("worker_count",c);
-        return c; 
-    }
+    size_t worker_count() const;
 
     /**
      @brief shutdown, join, destruct and deallocate all workers in the process-wide cache 
      */
-    inline void clear_worker_cache() {
-        HCE_LOW_METHOD_ENTER("clear");
-
-        std::lock_guard<spinlock> lk(lk_);
-        while(worker_cache_.used()) {
-            worker_cache_.pop();
-        }
-    }
+    void clear_worker_cache();
 
     /**
      @brief execute a Callable on a dedicated thread (if necessary) and block the co_awaiting coroutine or calling thread until the Callable returns
@@ -269,42 +242,27 @@ struct blocking : public hce::service<blocking>, public hce::printable {
             std::forward<As>(as)...);
     }
 
+    /**
+     @brief construct a new blocking operation manager object
+     @param the initial count of workers to maximally cache for reuse
+     */
+    blocking(size_t worker_cache_size = 0);
+
 private:
     // block worker thread 
     struct worker : public printable {
-        worker() : thd_(worker::run_, &operations_) { 
-            HCE_LOW_CONSTRUCTOR();
-        }
-
-        virtual ~worker() { 
-            HCE_LOW_DESTRUCTOR(); 
-            operations_.close();
-            thd_.join();
-        }
-
-        static inline std::string info_name() { 
-            return "hce::blocking::worker"; 
-        }
-
-        inline std::string name() const { return worker::info_name(); }
+        worker();
+        virtual ~worker();
+        static std::string info_name();
+        std::string name() const;
 
         // schedule an operation 
-        inline void schedule(std::unique_ptr<hce::thunk>&& operation) { 
-            operations_.push_back(std::move(operation));
-        }
+        void schedule(std::unique_ptr<hce::thunk>&& operation);
 
     private:
         // worker thread scheduler run function
-        static inline void run_(
-                synchronized_list<std::unique_ptr<hce::thunk>>* operations) 
-        {
-            std::unique_ptr<hce::thunk> operation;
-
-            while(operations->pop(operation)) [[likely]] {
-                // execute operations sequentially until recv() returns false
-                (*operation)();
-            }
-        }
+        static void run_(
+                synchronized_list<std::unique_ptr<hce::thunk>>* operations);
 
         // Blocking operation queue. No reason to use thread_local cache
         // for hce::thunk, because it would be essentially doing a one-way 
@@ -337,6 +295,7 @@ private:
 
         virtual ~sync() { 
             HCE_MED_DESTRUCTOR();
+            this->clean();
         }
         
         static inline std::string info_name() { 
@@ -351,20 +310,22 @@ private:
     struct async : public 
            scheduler::reschedule<hce::detail::blocking::async_partial<T>>
     {
-        async() : 
+        async(hce::blocking* b) : 
             scheduler::reschedule<hce::detail::blocking::async_partial<T>>(),
+            blocking_(b),
             // on construction get a worker
-            wkr_(hce::service<blocking>::get().checkout_worker_())
+            wkr_(blocking_->checkout_worker_())
         { 
             HCE_MED_CONSTRUCTOR();
         }
 
         virtual ~async() {
             HCE_MED_DESTRUCTOR();
+            this->clean();
 
             // return the worker to its scheduler
             if(wkr_) [[likely]] { 
-                hce::service<blocking>::get().checkin_worker_(std::move(wkr_));
+                blocking_->checkin_worker_(std::move(wkr_));
             }
         }
         
@@ -378,56 +339,15 @@ private:
         inline blocking::worker& worker() { return *wkr_; }
 
     private:
+        hce::blocking* blocking_;
         std::unique_ptr<blocking::worker> wkr_;
     };
 
-    blocking() :
-        worker_active_count_(0),
-        worker_cache_(config::blocking::reusable_block_worker_cache_size())
-    { 
-        HCE_HIGH_CONSTRUCTOR();
-    }
-
     // retrieve a worker thread from the service to execute blocking operations on
-    inline std::unique_ptr<worker> checkout_worker_() {
-        // attempt to pull from the thread_local cache first
-        std::unique_ptr<worker> w;
-
-        std::unique_lock<spinlock> lk(lk_);
-        ++worker_active_count_; // update checked out thread count
-        
-        // check if we have any workers in reserve
-        if(worker_cache_.empty()) [[unlikely]] {
-            // need to start a new worker thread but don't need to hold the lock 
-            lk.unlock();
-
-            // as a fallback generate a new worker thread 
-            w.reset(new worker());
-            HCE_TRACE_METHOD_BODY("checkout_worker_","allocated ",w.get());
-        } else [[likely]] {
-            // get the first available worker
-            w = std::move(worker_cache_.front());
-            worker_cache_.pop();
-            lk.unlock();
-
-            HCE_TRACE_METHOD_BODY("checkout_worker_","reused ",w.get());
-        }
-
-        return w;
-    }
+    std::unique_ptr<worker> checkout_worker_();
 
     // return a worker to the service when blocking operation is completed
-    inline void checkin_worker_(std::unique_ptr<worker>&& w) {
-        std::lock_guard<spinlock> lk(lk_);
-        --worker_active_count_; // update checked out thread count
-        
-        if(worker_cache_.full()) {
-            HCE_TRACE_METHOD_BODY("checkin_worker_","discarded ",w.get());
-        } else { 
-            HCE_TRACE_METHOD_BODY("checkin_worker_","cached ",w.get());
-            worker_cache_.push(std::move(w)); // reuse worker
-        }
-    }
+    void checkin_worker_(std::unique_ptr<worker>&& w);
 
     template <typename Callable, typename... As>
     inline hce::awt<hce::function_return_type<Callable,As...>>
@@ -436,7 +356,7 @@ private:
 
         if(hce::coroutine::in()) {
             // construct an asynchronous awaitable implementation
-            auto ai = new blocking::async<T>();
+            auto ai = new blocking::async<T>(this);
             auto& wkr = ai->worker();
             HCE_MIN_METHOD_BODY("block","executing on ",wkr);
             
@@ -471,7 +391,7 @@ private:
     inline hce::awt<void>
     block_(std::true_type, Callable&& cb, As&&... as) {
         if(hce::coroutine::in()) {
-            auto ai = new blocking::async<void>();
+            auto ai = new blocking::async<void>(this);
             auto& wkr = ai->worker(); 
             HCE_MIN_METHOD_BODY("block","executing on ",wkr);
 
@@ -507,8 +427,6 @@ private:
      executed the operation will be placed in this queue if there is room. 
      */
     hce::circular_buffer<std::unique_ptr<worker>> worker_cache_;
-
-    friend hce::lifecycle;
 };
 
 /**
@@ -521,7 +439,7 @@ template <typename Callable, typename... Args>
 inline hce::awt<hce::function_return_type<Callable,Args...>> 
 block(Callable&& cb, Args&&... args) {
     HCE_MED_FUNCTION_ENTER("hce::block");
-    return hce::service<blocking>::get().block(
+    return hce::service<hce::blocking::manager>::get().blocking().block(
         std::forward<Callable>(cb),
         std::forward<Args>(args)...);
 }

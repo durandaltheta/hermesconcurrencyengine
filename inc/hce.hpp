@@ -9,6 +9,7 @@
 #include "service.hpp"
 #include "memory.hpp"
 #include "alloc.hpp"
+#include "cleanup.hpp"
 #include "atomic.hpp"
 #include "id.hpp"
 #include "chrono.hpp"
@@ -16,6 +17,7 @@
 #include "list.hpp"
 #include "synchronized_list.hpp"
 #include "coroutine.hpp"
+#include "awaitable.hpp"
 #include "scheduler.hpp"
 #include "blocking.hpp"
 #include "timer.hpp"
@@ -25,7 +27,7 @@
 #include "scope.hpp"
 #include "threadpool.hpp"
 #include "lifecycle.hpp"
-#include "environment.hpp"
+#include "services.hpp"
 #include "module.hpp"
 
 #endif

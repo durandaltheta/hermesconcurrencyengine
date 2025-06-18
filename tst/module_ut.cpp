@@ -58,6 +58,7 @@ protected:
         test::module::interface::global().comch.close();
         HCE_INFO_FUNCTION_BODY(module::fname, "join module");
         EXPECT_EQ(test::module::interface::expected_code, (int)module::awt);
+        awt = hce::awt<int>(); // ensure it is destroyed
         HCE_INFO_FUNCTION_BODY(module::fname, "done");
     }
 };

@@ -40,10 +40,13 @@ std::string key_value_str(std::string key, T value)
 template <typename F, typename... As>
 void launch_core_multiplier_op(F&& f, size_t multiplier, As&&... as)
 {
+    size_t threadpool_scheduler_count = hce::service<hce::threadpool>::get().schedulers().size();
     size_t core_count = std::thread::hardware_concurrency();
     size_t concurrent_count = multiplier * core_count;
 
-    std::cout << key_value_str("core count", core_count) 
+    std::cout << key_value_str("threadpool scheduler count", threadpool_scheduler_count)
+              << ", "
+              << key_value_str("core count", core_count) 
               << ", " 
               << key_value_str("concurrent operation count", concurrent_count) 
               << std::endl;

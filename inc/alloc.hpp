@@ -303,7 +303,7 @@ namespace pool_allocator {
 /**
  @brief configures the default block limit of a pool allocator
  */
-size_t default_block_limit();
+size_t default_block_cache();
 
 }
 }
@@ -378,7 +378,7 @@ struct pool_allocator : public printable {
     };
 
     /// construct a pool_allocator with the specified block_limit
-    pool_allocator(size_t block_limit = config::pool_allocator::default_block_limit()) : 
+    pool_allocator(size_t block_limit = config::pool_allocator::default_block_cache()) : 
         block_limit_(block_limit)
     { }
 

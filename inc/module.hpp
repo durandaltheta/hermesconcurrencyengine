@@ -15,12 +15,19 @@ namespace hce {
  @brief an interface to be implementated by shared library code which can be imported and run in the host hce environment
  */
 struct module {
-    module();
+    struct lifecycle; // used internally
+
+    module(){}
     virtual ~module(){}
 
     /**
      The interpretation of the context pointer and the meaning of result of the 
      coroutine is implementation specific.
+
+     The given context pointer should be valid as long as necessary by the 
+     coroutine. Unless some special handling is implemented by the user, this 
+     generally means the pointer should point to valid memory until the module's 
+     awaitable (returned by hce::module::import()) is joined.
 
      @param context a pointer to be interpretted and used by the implementation
      @return a coroutine which will start and run the module implementation, returning a code

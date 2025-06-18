@@ -497,13 +497,19 @@ namespace hce {
  @brief an interface to be implementated by shared library code which can be imported and run in the host hce environment
  */
 struct module {
+    struct lifecycle; // used internally
+
     module();
     virtual ~module(){}
 
     /**
-     @brief the start point of the module returning its root coroutine
      The interpretation of the context pointer and the meaning of result of the 
      coroutine is implementation specific.
+
+     The given context pointer should be valid as long as necessary by the 
+     coroutine. Unless some special handling is implemented by the user, this 
+     generally means the pointer should point to valid memory until the module's 
+     awaitable (returned by hce::module::import()) is joined.
 
      @param context a pointer to be interpretted and used by the implementation
      @return a coroutine which will start and run the module implementation, returning a code
@@ -513,14 +519,13 @@ struct module {
     /**
      @brief import a shared library as an hce module and start it
 
-     The shared library will be opened, the module's environment pointers 
-     to services (threadpool, blocking, timing, etc) updated, a module 
-     constructed and and its `start()` implementation called and the resulting 
-     coroutine scheduled. The module will be destroyed and the library closed 
-     before the awaitable completes.
+     The shared library will be opened, a module constructed and and its 
+     `start()` implementation called and the resulting coroutine scheduled. The 
+     module will be destroyed and the library closed before the awaitable 
+     completes.
 
      In addition to the `start()` API, module code must provide the following 
-     extern "C" functions:
+     functions:
      ```
      // Return a pointer to the hce::module implementation. IE, the returned 
      // void* will be cast to an hce::module* and module->start() called.
@@ -657,9 +662,6 @@ However, `validate` is very useful for quickly configuring the project in variou
 `ALL` is useful for doing a broad sanity test to ensure everything is working before a public release.
 
 `validate` output is stored in a log in the project root named `validate.log`. 
-
-## Memory Options 
-This library implements *quite a few* configurable optimizations for dynamically allocated memory. See [the memory primer)(memory.md) for more information.
 
 ## Debug Logging
 This project utilizes the [emilk/loguru](https://github.com/emilk/loguru) project for debug logging, writing to stdout and stderr by default. Logging features are provided primarily for the development of this library, but work has been done to make it fairly robust and may be applicable for user development and production code debugging purposes. See the [logging primer](logging.md) for more information.

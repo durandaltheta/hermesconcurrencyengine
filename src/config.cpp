@@ -27,39 +27,10 @@
 #include "blocking.hpp"
 #include "channel.hpp"
 #include "threadpool.hpp"
-#include "thread_key_map.hpp"
 #include "lifecycle.hpp"
 
-hce::config::memory::cache::info*& this_thread_memory_cache_info_() {
-    struct init {
-        init() {
-            if(ptr.ref() == nullptr) {
-                ptr.ref() = hce::service<hce::lifecycle>::get().get_config().mem.system;
-            }
-        }
-
-        hce::thread::local::ptr<hce::thread::key::memory_cache_info> ptr;
-    };
-
-    thread_local init i;
-    return i.ptr.ref();
-}
-
-hce::config::memory::cache::info& hce::config::memory::cache::info::get() {
-    return *(this_thread_memory_cache_info_());
-
-}
-
-void hce::config::memory::cache::info::set(hce::config::memory::cache::info& i) {
-    this_thread_memory_cache_info_() = &i;
-}
-
-hce::config::memory::cache::info::indexer_function hce::config::memory::cache::info::indexer() {
-    return hce::service<hce::lifecycle>::get().get_config().mem.indexer;
-}
-
-size_t hce::config::pool_allocator::default_block_limit() {
-    return hce::service<hce::lifecycle>::get().get_config().alloc.pool_allocator_default_block_limit;
+size_t hce::config::pool_allocator::default_block_cache() {
+    return hce::service<hce::lifecycle>::get().get_config().alloc.pool_allocator_default_block_cache;
 }
 
 hce::config::scheduler::config hce::config::scheduler::global::config() {

@@ -20,11 +20,7 @@ namespace hce {
  memory is usable as a container key.
  */
 struct id : public printable {
-    inline std::string content() const {
-        std::stringstream ss;
-        ss << "get():" << get();
-        return ss.str();
-    }
+    std::string content() const;
 
     /**
      @brief construct the id
@@ -44,29 +40,22 @@ struct id : public printable {
     /**
      @return true if the id represents a constructed id, else false
      */
-    virtual inline operator bool() const { return (bool)get(); }
+    virtual operator bool() const;
 
     /**
      @return true if the id is less than the other id
      */
-    virtual inline bool operator<(const id& rhs) const { 
-        return get() < rhs.get(); 
-    }
+    virtual bool operator<(const id& rhs) const;
 
     /**
      @return true if the ids represent the same value, else false
      */
-    virtual inline bool operator ==(const id& rhs) const { 
-        return get() == rhs.get(); 
-    }
+    virtual bool operator ==(const id& rhs) const;
 
     /**
      @return true if the ids represent different values, else false
      */
-    virtual inline bool operator !=(const id& rhs) const {
-        return !(*this == rhs);
-    }
-
+    virtual bool operator !=(const id& rhs) const;
 };
 
 /**
@@ -75,30 +64,17 @@ struct id : public printable {
  This object is not copiable, only movable
  */
 struct uid : public id {
-    uid() { HCE_TRACE_CONSTRUCTOR(); }
+    uid();
     uid(const uid&) = delete;
     uid(uid&&) = default;
-
-    virtual ~uid() { HCE_TRACE_DESTRUCTOR(); }
-
+    virtual ~uid();
     uid& operator=(const uid&) = delete;
     uid& operator=(uid&&) = default;
-
-    static inline std::string info_name() { return "hce::uid"; }
-    inline std::string name() const { return uid::info_name(); }
-
-    inline void make() {
-        HCE_TRACE_METHOD_ENTER("make");
-        byte_ = hce::make_unique<std::byte>();
-    }
-
-    inline void reset() {
-        HCE_TRACE_METHOD_ENTER("reset");
-        byte_.reset();
-    }
-
-    inline void* get() const { return byte_.get(); }
-
+    static std::string info_name();
+    std::string name() const;
+    void make();
+    void reset();
+    void* get() const;
 private:
     hce::unique_ptr<std::byte> byte_;
 };
@@ -109,30 +85,17 @@ private:
  This object can be copied or moved.
  */
 struct sid : public id {
-    sid() { HCE_TRACE_CONSTRUCTOR(); }
+    sid();
     sid(const sid&) = default;
     sid(sid&&) = default;
-
-    virtual ~sid() { HCE_TRACE_DESTRUCTOR(); }
-
+    virtual ~sid();
     sid& operator=(const sid&) = default;
     sid& operator=(sid&&) = default;
-
-    static inline std::string info_name() { return "hce::sid"; }
-    inline std::string name() const { return sid::info_name(); }
-
-    inline void make() {
-        HCE_TRACE_METHOD_ENTER("make");
-        byte_ = hce::make_shared<std::byte>();
-    }
-
-    inline void reset() {
-        HCE_TRACE_METHOD_ENTER("reset");
-        byte_.reset();
-    }
-
-    inline void* get() const { return byte_.get(); }
-
+    static std::string info_name();
+    std::string name() const;
+    void make();
+    void reset();
+    void* get() const;
 private:
     std::shared_ptr<std::byte> byte_;
 };

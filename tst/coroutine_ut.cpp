@@ -3,6 +3,7 @@
 #include "loguru.hpp"
 #include "atomic.hpp"
 #include "coroutine.hpp"
+#include "awaitable.hpp"
 
 #include <string>
 #include <sstream>

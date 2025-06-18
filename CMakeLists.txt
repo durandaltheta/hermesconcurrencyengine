@@ -48,6 +48,7 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/timer.hpp
     ${HCE_INCLUDE_DIR}/synchronized_list.hpp
     ${HCE_INCLUDE_DIR}/coroutine.hpp
+    ${HCE_INCLUDE_DIR}/awaitable.hpp
     ${HCE_INCLUDE_DIR}/scheduler.hpp
     ${HCE_INCLUDE_DIR}/blocking.hpp
     #${HCE_INCLUDE_DIR}/mutex.hpp
@@ -55,9 +56,7 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/channel.hpp
     ${HCE_INCLUDE_DIR}/scope.hpp
     ${HCE_INCLUDE_DIR}/threadpool.hpp
-    ${HCE_INCLUDE_DIR}/thread_key_map.hpp
     ${HCE_INCLUDE_DIR}/lifecycle.hpp
-    ${HCE_INCLUDE_DIR}/environment.hpp
     ${HCE_INCLUDE_DIR}/module.hpp
     ${HCE_INCLUDE_DIR}/hce.hpp
 )
@@ -65,12 +64,16 @@ set(HCE_HEADER_FILES
 set(HCE_SOURCE_FILES
     ${LOGURU_DIR}/loguru.cpp
     ${HCE_SOURCE_DIR}/logging.cpp
-    ${HCE_SOURCE_DIR}/memory.cpp
+    ${HCE_SOURCE_DIR}/cleanup.cpp
+    ${HCE_SOURCE_DIR}/id.cpp
     ${HCE_SOURCE_DIR}/coroutine.cpp
+    ${HCE_SOURCE_DIR}/awaitable.cpp
     ${HCE_SOURCE_DIR}/scheduler.cpp
+    ${HCE_SOURCE_DIR}/blocking.cpp
     ${HCE_SOURCE_DIR}/timer.cpp
+    ${HCE_SOURCE_DIR}/thread.cpp
     ${HCE_SOURCE_DIR}/threadpool.cpp
-    ${HCE_SOURCE_DIR}/service.cpp
+    ${HCE_SOURCE_DIR}/services.cpp
     ${HCE_SOURCE_DIR}/lifecycle.cpp
     ${HCE_SOURCE_DIR}/module.cpp
     ${HCE_SOURCE_DIR}/config.cpp
@@ -82,78 +85,26 @@ if(NOT DEFINED TIME_SENSITIVE_TESTS_ENABLED OR "${TIME_SENSITIVE_TESTS_ENABLED}"
     set(TIME_SENSITIVE_TESTS_ENABLED "1")
 endif()
 
-# The number of buckets containing thread_local reusable allocated memory used 
-# by this library's memory allocation facilities. Reused allocations prevent 
-# needing to call process-wide locks.
-#
-# buckets are defined as incrementing holding powers of 2, each bucket one power 
-# higher than the previous:
-# - bucket 0 holds values of 1 byte
-# - bucket 1 holds values of 2 bytes
-# - bucket 2 holds values of 4 bytes
-# - bucket 3 holds values of 8 bytes
-# - etc.
-#
-# More buckets allows for reusable allocations of larger byte counts.
-#
-# Any requested allocated size larger than the largest bucket can provide will 
-# be allocated/deallocated directly with `malloc()`/`free()`.
-if(NOT DEFINED HCEMEMORYCACHEBUCKETCOUNT OR "${HCEMEMORYCACHEBUCKETCOUNT}" STREQUAL "")
-    set(HCEMEMORYCACHEBUCKETCOUNT "13")
+if(NOT DEFINED HCE_COMPILE_DEFINES)
+    set(HCE_COMPILE_DEFINES "")
 endif()
 
-# 512 bytes == 2^9. Buckets 10-HCEMEMORYCACHEBUCKETCOUNT will hold a maximum of 
-# 1 value, but buckets 0-9 will hold more.
-math(EXPR SYSTBYTELIMIT "${CMAKE_SIZEOF_VOID_P} * 64") 
-
-# All buckets are 2^HCEMEMORYCACHEBUCKETCOUNT bytes, equal to the block size of 
-# the largest bucket 
-math(EXPR SCHBYTELIMIT "1 << ${HCEMEMORYCACHEBUCKETCOUNT}")
-
-# The global scheduler gets double the cache size because of its expected larger 
-# load
-math(EXPR GLBBYTELIMIT "${SCHBYTELIMIT} * 2") 
-       
-# Start the compile definitions list
-set(HCE_COMPILE_DEFINES "HCEMEMORYCACHEBUCKETCOUNT=${HCEMEMORYCACHEBUCKETCOUNT}")
-
 # Define the pairs of variable names and their default values
-set(PAIRS
-# If the count of buckets is above 256 due to the user implementation they can 
-# configure the memory cache's index type to be larger than "unsigned char".
-#
-# This type is used in the header of every allocated value, hence why it is so 
-# small by default.
-        HCEMEMORYCACHEINDEXTYPE "uint8_t"
-
-# Each reusable memory bucket shares the same maximum count of bytes it can 
-# grow to store. This value is that limit. The maximum count of elements a 
-# bucket can contain is this value divided by the byte size of a bucket element.
-# So increasing this value increases the number of elements a bucket can store 
-# for reuse, but each bucket can contain different amounts of elements.
-        HCEMEMORYCACHESYSTEMBUCKETBYTELIMIT "${SYSTBYTELIMIT}"
-
-# the global scheduler thread gets a large amount of reusable memory because it 
-# is most likely to need it 
-        HCEMEMORYCACHEGLOBALBUCKETBYTELIMIT "${GLBBYTELIMIT}"
-
-# other schedulers get a high amount of reusable memory but less than the global thread
-        HCEMEMORYCACHESCHEDULERBUCKETBYTELIMIT "${SCHBYTELIMIT}"
-
-# the default block limit of reusable allocations of a pool allocator
-        HCEPOOLALLOCATORDEFAULTBLOCKLIMIT "64"
+set(PAIRS 
+# the default block cache of reusable allocations of a pool allocator
+        HCEPOOLALLOCATORDEFAULTBLOCKCACHE "64"
 
 # Default configuration of scheduler reusable coroutine handles. A sane value 
 # (roughly equal or above the median count of executing coroutines during busy 
 # periods) allows avoiding unnecessary re-allocation of handles. Handles are 
 # very small allocations (pointer sized).
-        HCEREUSABLECOROUTINEHANDLEDEFAULTSCHEDULERLIMIT "256"
+        HCEREUSABLECOROUTINEHANDLEDEFAULTSCHEDULERCACHE "256"
 
 # Count of coroutine handles the global scheduler will persist for reuse
-        HCEREUSABLECOROUTINEHANDLEGLOBALSCHEDULERLIMIT "512"
+        HCEREUSABLECOROUTINEHANDLEGLOBALSCHEDULERCACHE "512"
 
 # Count of coroutine handles threadpool schedulers will persist for reuse
-        HCEREUSABLECOROUTINEHANDLETHREADPOOLLIMIT "256"
+        HCEREUSABLECOROUTINEHANDLETHREADPOOLCACHE "256"
 
 # Count of reusable block worker threads shared amongst the whole process.
 #
@@ -208,11 +159,7 @@ while(i LESS len)
     math(EXPR i "${i} + 1")
 endwhile()
 
-if(BUILD_SHARED_LIBS)
-    add_library(hce SHARED ${HCE_HEADER_FILES} ${HCE_SOURCE_FILES})
-else()
-    add_library(hce STATIC ${HCE_HEADER_FILES} ${HCE_SOURCE_FILES})
-endif()
+add_library(hce SHARED ${HCE_HEADER_FILES} ${HCE_SOURCE_FILES})
 
 # Apply the shared/static setting
 set_target_properties(hce PROPERTIES
@@ -237,7 +184,6 @@ SplitOnWhitespace("${HCE_COMPILE_DEFINES}" PRETTY_HCE_COMPILE_DEFINES)
 message("-- HCE LIBRARY -- ")
 message("CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
 message("CMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}")
-message("BUILD_SHARED_LIBS=${BUILD_SHARED_LIBS}")
 message("TIME_SENSITIVE_TESTS_ENABLED=${TIME_SENSITIVE_TESTS_ENABLED}")
 message("-- HCE LIBRARY HEADERS -- ")
 

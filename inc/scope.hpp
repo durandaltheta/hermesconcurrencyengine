@@ -12,6 +12,7 @@
 #include "atomic.hpp"
 #include "alloc.hpp"
 #include "coroutine.hpp"
+#include "awaitable.hpp"
 #include "scheduler.hpp"
 #include "channel.hpp"
 

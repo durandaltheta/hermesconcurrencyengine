@@ -65,9 +65,13 @@ private:
 };
 
 extern "C" void* hce_module_create() {
-    return new module_impl;
+    HCE_INFO_FUNCTION_ENTER("hce_module_create");
+    auto mod = new module_impl;
+    HCE_INFO_FUNCTION_BODY("hce_module_create","module_impl@",mod);
+    return mod;
 }
 
 extern "C" void hce_module_destroy(void* module) {
+    HCE_INFO_FUNCTION_ENTER("hce_module_destroy",module);
     delete (module_impl*)module;
 }

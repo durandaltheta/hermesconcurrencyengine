@@ -1047,9 +1047,6 @@ struct logger {
 private:
     logger(){}
 
-    // thread_local loglevel
-    static int& tl_loglevel();
-
     // ingest a single item
     template <typename A>
     static inline void ingest_item_(std::stringstream& ss, A&& a) {

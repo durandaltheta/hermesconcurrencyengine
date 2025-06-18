@@ -348,6 +348,7 @@ class Tests:
     parallel = None
     log = None
     mem = None 
+    mem_performance = None 
     jitter = None
     performance = None
     release = None
@@ -358,6 +359,7 @@ class Tests:
         self.parallel= Test(Build('parallel', cross, toolchain_name, BuildType.DEBUG, Timing.ENABLED, Log.INFO, Optimization.LOW, Concurrency.PARALLEL, AddressSanitation.DISABLED))
         self.log = Test(Build('log', cross, toolchain_name, BuildType.DEBUG, Timing.DISABLED, Log.MAX, Optimization.LOW, Concurrency.CONCURRENT, AddressSanitation.DISABLED))
         self.mem = Test(Build('mem', cross, toolchain_name, BuildType.DEBUG, Timing.ENABLED, Log.INFO, Optimization.LOW, Concurrency.PARALLEL, AddressSanitation.ENABLED))
+        self.mem_performance = Test(Build('mem_performance', cross, toolchain_name, BuildType.DEBUG, Timing.ENABLED, Log.INFO, Optimization.HIGH, Concurrency.PARALLEL, AddressSanitation.ENABLED))
         self.jitter = jitterTest('jitter', cross, toolchain_name, BuildType.DEBUG, Optimization.LOW)
         self.performance = Test(Build('performance', cross, toolchain_name, BuildType.RELEASE, Timing.ENABLED, Log.RELEASE, Optimization.HIGH, Concurrency.PARALLEL, AddressSanitation.DISABLED))
         self.release = Test(Build('release', cross, toolchain_name, BuildType.RELEASE, Timing.ENABLED, Log.RELEASE, Optimization.HIGH, Concurrency.CONCURRENT, AddressSanitation.DISABLED))
@@ -367,6 +369,7 @@ class Tests:
             'parallel': self.parallel,
             'log': self.log,
             'mem': self.mem,
+            'mem_performance': self.mem_performance,
             'jitter': self.jitter,
             'performance': self.performance,
             'release': self.release

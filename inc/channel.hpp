@@ -364,6 +364,10 @@ private:
             parent_(p)
         { }
 
+        virtual ~send_interface() {
+            this->clean();
+        }
+
         static inline std::string info_name() {
             return unbuffered<T,LOCK,ALLOCATOR>::info_name() + 
                    "::send_interface";
@@ -397,6 +401,10 @@ private:
             detail::base_recv_interface<LOCK>(p.lk_, destination),
             parent_(p)
         { }
+
+        virtual ~recv_interface() {
+            this->clean();
+        }
 
         static inline std::string info_name() {
             return unbuffered<T,LOCK,ALLOCATOR>::info_name() + 
@@ -603,6 +611,10 @@ private:
             parent_(p)
         { }
 
+        virtual ~send_interface() {
+            this->clean();
+        }
+
         static inline std::string info_name() {
             return buffered<T,LOCK,ALLOCATOR>::info_name() + 
                    "::send_interface";
@@ -642,6 +654,10 @@ private:
             detail::base_recv_interface<LOCK>(p.lk_, destination),
             parent_(p)
         { }
+
+        virtual ~recv_interface() {
+            this->clean();
+        }
 
         static inline std::string info_name() {
             return buffered<T,LOCK,ALLOCATOR>::info_name() + 
@@ -850,6 +866,10 @@ private:
             parent_(p)
         { }
 
+        virtual ~send_interface() {
+            this->clean();
+        }
+
         static inline std::string info_name() {
             return unlimited<T,LOCK,ALLOCATOR>::info_name() + 
                    "::send_interface";
@@ -885,6 +905,10 @@ private:
             detail::base_recv_interface<LOCK>(p.lk_, destination),
             parent_(p)
         { }
+
+        virtual ~recv_interface() {
+            this->clean();
+        }
 
         static inline std::string info_name() {
             return unlimited<T,LOCK,ALLOCATOR>::info_name() + 

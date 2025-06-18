@@ -4,6 +4,33 @@
 
 #include "threadpool.hpp"
 #include "lifecycle.hpp"
+
+std::string hce::threadpool::info_name() { return "hce::threadpool"; }
+std::string hce::threadpool::name() const { return hce::threadpool::info_name(); }
+
+std::string hce::threadpool::content() const {
+    std::stringstream ss;
+    auto it = schedulers_.cbegin();
+    auto end = schedulers_.cend();
+
+    ss << **it;
+    ++it;
+
+    while(it!=end) {
+        ss << ", " << **it;
+        ++it;
+    }
+
+    return ss.str(); 
+}
+
+/**
+ @return a const reference to the managed vector of threadpool schedulers
+ */
+const std::vector<std::shared_ptr<hce::scheduler>>& 
+hce::threadpool::schedulers() const {
+    return schedulers_;
+}
     
 hce::scheduler& hce::threadpool::lightest() {
     /*
@@ -76,3 +103,49 @@ hce::scheduler& hce::threadpool::lightest() {
 
     return *lightest_scheduler;
 }
+
+hce::threadpool::threadpool() : 
+    // initialize const vector
+    schedulers_([]() -> std::vector<std::shared_ptr<hce::scheduler>> { 
+        // acquire the selected worker count from compiler define
+        size_t worker_count = hce::config::threadpool::count();
+
+        if(worker_count == 0) {
+            // try to match worker_count to CPU count
+            worker_count = std::thread::hardware_concurrency(); 
+
+            // enforce a minimum of 1 worker threads
+            if(worker_count == 0) { 
+                worker_count = 1; 
+            }
+        }
+
+        // construct the initial vector given worker size
+        std::vector<std::shared_ptr<hce::scheduler>> schedulers(worker_count);
+
+        // the first scheduler is always the default global scheduler
+        schedulers[0] = hce::service<hce::scheduler::global>::get().get_scheduler();
+
+        // construct the rest of the schedulers
+        for(size_t i=1; i<schedulers.size(); ++i) {
+            // get an hce::scheduler::lifecycle
+            auto lf = hce::scheduler::make(hce::config::threadpool::config());
+
+            // assign the scheduler to the vector
+            schedulers[i] = lf->get_scheduler();
+
+            // register the worker lifecycle
+            hce::service<hce::scheduler::lifecycle::manager>::get().registration(
+                std::move(lf));
+        }
+
+        // return the completed vector
+        return schedulers;
+    }())
+{ 
+    // set the threadpool's algorithm
+    algorithm_ = hce::config::threadpool::algorithm();
+    HCE_HIGH_CONSTRUCTOR();
+}
+    
+hce::threadpool::~threadpool(){ HCE_HIGH_DESTRUCTOR(); }
