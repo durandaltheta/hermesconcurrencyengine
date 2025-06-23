@@ -141,8 +141,9 @@ struct joiner :
     joiner(hce::co<T>& co) :
         hce::awaitable::spinlock_lockable<
             typename hce::awt<T>::interface>(
-                hce::awaitable::await::policy::defer,
-                hce::awaitable::resume::policy::lock),
+                hce::awaitable::await::policy::defer_lock,
+                hce::awaitable::resumed::policy::release_lock,
+                hce::awaitable::resume::policy::guard_lock),
         address_(co.address())
     { 
         HCE_TRACE_CONSTRUCTOR(co);
@@ -224,8 +225,9 @@ struct joiner<void> :
     joiner(hce::co<void>& co) :
         hce::awaitable::spinlock_lockable<
             typename hce::awt<void>::interface>(
-                hce::awaitable::await::policy::defer,
-                hce::awaitable::resume::policy::lock),
+                hce::awaitable::await::policy::defer_lock,
+                hce::awaitable::resumed::policy::release_lock,
+                hce::awaitable::resume::policy::guard_lock),
         address_(co.address())
     { 
         HCE_TRACE_CONSTRUCTOR(co);

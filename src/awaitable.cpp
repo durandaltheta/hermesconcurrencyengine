@@ -49,13 +49,14 @@ void hce::detail::awaitable::yield::await_suspend(std::coroutine_handle<> h) {
 }
 
 hce::awaitable::interface::interface(hce::awaitable::await::policy ap, 
+                                     hce::awaitable::resumed::policy rdp,
                                      hce::awaitable::resume::policy rp) : 
     /*
      This initializes the state bits. Specifically the strange 
-     `((ap == await::policy::adopt) << 3)` statements set the "locked" bit based 
+     `ap == await::policy::adopt_lock` statement sets the "locked" bit based 
      on if the policy indicates the lock should be treated as locked.
      */
-    state_(((ap == await::policy::adopt) << 3) | ap | rp)
+    state_((ap == await::policy::adopt_lock) | ap | rdp | rp)
 { 
     HCE_LOW_CONSTRUCTOR();
 }
@@ -98,7 +99,7 @@ bool hce::awaitable::interface::await_ready() {
     HCE_LOW_METHOD_ENTER("await_ready");
 
     // acquire the lock if implementation was not constructed with ownership
-    if(await_policy() == hce::awaitable::await::policy::defer) { 
+    if(await_policy() == hce::awaitable::await::policy::defer_lock) { 
         lock_(); 
     }
 
@@ -166,13 +167,19 @@ void hce::awaitable::interface::await_suspend(std::coroutine_handle<> h){
         // we are now re-locked and resumed
     }
 
-    // in both cases we need to exit this function unlocked
-    unlock_();
+    if(resumed_policy() == hce::awaitable::resumed::policy::release_lock) {
+        unlock_();
+    }
+}
+        
+hce::awaitable::interface::deleter_t hce::awaitable::interface::deleter() {
+    return default_deleter_;
 }
 
 void hce::awaitable::interface::clean() {
-    // ensure our lock is released when the awaitable instance is cleaned up
-    if(locked_()) { 
+    // sanity guard to ensure our lock is released when the awaitable instance 
+    // is cleaned up
+    if(locked()) { 
         unlock_();
     }
 }
@@ -199,6 +206,14 @@ hce::awaitable::await::policy hce::awaitable::interface::await_policy() const {
     return p; 
 }
 
+hce::awaitable::resumed::policy hce::awaitable::interface::resumed_policy() const { 
+    hce::awaitable::resumed::policy p = 
+        (hce::awaitable::resumed::policy)
+        (state_ & hce::awaitable::interface::await_policy_mask_);
+    HCE_TRACE_METHOD_BODY("await_policy",p);
+    return p; 
+}
+
 hce::awaitable::resume::policy hce::awaitable::interface::resume_policy() const { 
     hce::awaitable::resume::policy p = 
         (hce::awaitable::resume::policy)
@@ -217,13 +232,13 @@ hce::awaitable::resume::policy hce::awaitable::interface::resume_policy() const 
 
  @param m arbitary memory passed to on_resume()
  */
-void hce::awaitable::interface::resume(void* m){
+void hce::awaitable::interface::resume(void* m) {
     HCE_LOW_METHOD_ENTER("resume");
 
     auto rp = resume_policy();
 
     // acquire the lock
-    if(rp == hce::awaitable::resume::policy::lock){ lock_(); }
+    if(rp != hce::awaitable::resume::policy::no_lock){ lock_(); }
 
     // call the custom resumption code
     this->on_resume(m); 
@@ -240,7 +255,7 @@ void hce::awaitable::interface::resume(void* m){
             auto h = data.handle;
             has_pointer_(false);
 
-            if(rp != hce::awaitable::resume::policy::no_lock) { 
+            if(rp == hce::awaitable::resume::policy::guard_lock) { 
                 unlock_(); 
             }
 
@@ -250,17 +265,31 @@ void hce::awaitable::interface::resume(void* m){
             HCE_TRACE_METHOD_BODY("resume","unblock");
             has_pointer_(false);
 
-            if(rp == hce::awaitable::resume::policy::no_lock) { 
-                get_data_().this_thread->unblock(); 
-            } else { 
+            if(rp == hce::awaitable::resume::policy::guard_lock) { 
                 get_data_().this_thread->unblock(*this); 
+            } else { 
+                get_data_().this_thread->unblock(); 
             }
         }
     } else [[likely]] {
         HCE_TRACE_METHOD_BODY("resume","not blocked");
         // this was called before blocking occurred
-        if(rp != hce::awaitable::resume::policy::no_lock) { unlock_(); }
+        if(rp == hce::awaitable::resume::policy::guard_lock) { unlock_(); }
     }
+}
+
+bool hce::awaitable::interface::locked() const {
+    return state_ & hce::awaitable::interface::locked_mask_;
+}
+
+void hce::awaitable::interface::locked(bool b) {
+    state_ = b 
+        ? state_ | hce::awaitable::interface::locked_mask_
+        : state_ & ~hce::awaitable::interface::locked_mask_;
+}
+
+void hce::awaitable::interface::default_deleter_(interface* i){
+    delete i;
 }
 
 bool hce::awaitable::interface::awaited_() const {
@@ -293,16 +322,6 @@ void hce::awaitable::interface::is_coroutine_(bool b) {
         : state_ & ~hce::awaitable::interface::is_coroutine_mask_;
 }
 
-bool hce::awaitable::interface::locked_() const {
-    return state_ & hce::awaitable::interface::locked_mask_;
-}
-
-void hce::awaitable::interface::locked_(bool b) {
-    state_ = b 
-        ? state_ | hce::awaitable::interface::locked_mask_
-        : state_ & ~hce::awaitable::interface::locked_mask_;
-}
-
 hce::awaitable::interface::data& hce::awaitable::interface::get_data_() {
     return *((hce::awaitable::interface::data*)&(data_));
 }
@@ -311,11 +330,11 @@ void hce::awaitable::interface::lock_() {
     HCE_TRACE_METHOD_ENTER("lock");
     // wrap actual lock/unlock calls with state management
     this->lock(); 
-    locked_(true);
+    locked(true);
 }
 
 void hce::awaitable::interface::unlock_() { 
     HCE_TRACE_METHOD_ENTER("unlock");
-    locked_(false);
+    locked(false);
     this->unlock(); 
 }

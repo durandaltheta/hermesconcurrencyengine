@@ -124,8 +124,7 @@ struct scope : public hce::printable {
     }
 
 private:
-    typedef typename Allocator::template rebind<hce::awaitable::interface*>::other alloc_t;
-    typedef hce::channel::unlimited<hce::awaitable::interface*,Lock,alloc_t> channel_t;
+    typedef hce::channel::unlimited<hce::awaitable::interface*,Lock> channel_t;
 
     template <typename T, typename... Awts >
     inline void add_(hce::awt<T> awt, Awts&&... awts) {

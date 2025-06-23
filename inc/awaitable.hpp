@@ -193,18 +193,26 @@ struct awaitable : public printable {
         /// determines how locking is accomplished by an awaiter of an awaitable
         enum policy {
             // begin at bit 5
-            adopt = 0x10, //< assume the lock is already locked
-            defer //< assume the lock is unlocked but lock it when necessary
+            adopt_lock = 0x00, //< assume the lock is already locked
+            defer_lock = 0x20 //< assume the lock is unlocked but lock it when necessary
+        };
+    };
+
+    struct resumed {
+        /// determines how locking is accomplished by a resumed awaiter of an awaitable
+        enum policy {
+            // begin at bit 6
+            release_lock = 0x00, //< release the lock when woken up
+            hold_lock = 0x40 //< hold the lock when woken up
         };
     };
 
     struct resume {
         /// determines how locking is accomplished by a caller of awaitable::resume()
         enum policy {
-            // begin at bit 6
-            adopt = 0x20, //< assume lock is held during resume(), unlocking when done
-            lock, //< lock during resume(), unlocking when done
-            no_lock //< neither lock nor unlock during resume()
+            // begin at bit 7
+            guard_lock = 0x00, //< lock during resume(), unlocking when done
+            no_lock = 0x80 //< neither lock nor unlock during resume()
         };
     };
 
@@ -240,19 +248,14 @@ struct awaitable : public printable {
      objects.
      */
     struct interface : public printable {
-        interface(await::policy ap, resume::policy rp);
+        /// function type used for deleting interface instance
+        typedef void (*deleter_t)(interface*);
+
+        interface(await::policy ap, resumed::policy rdp, resume::policy rp);
         interface(const interface& rhs) = delete;
         interface(interface&& rhs) = delete;
 
         virtual ~interface();
-
-        inline void* operator new(std::size_t n) noexcept {
-            return hce::memory::allocate(n);
-        }
-
-        inline void operator delete(void* ptr) noexcept {
-            hce::memory::deallocate(ptr);
-        }
         
         interface& operator=(const interface& rhs) = delete;
         interface& operator=(interface&& rhs) = delete;
@@ -264,6 +267,32 @@ struct awaitable : public printable {
 
         /// called by awaitable's await_suspend()
         virtual void await_suspend(std::coroutine_handle<> h) final;
+
+        /**
+         The default implementation executes `delete` keyword on the instance.
+
+         Can be customized to pass the interface pointer to some other code in 
+         scenarios where allocated memory should reused. 
+
+         @return the function which deletes this interface instance 
+         */
+        virtual deleter_t deleter();
+
+        /**
+         Map calls to allocation portion of `new` keyword to framework 
+         allocation function.
+         */
+        inline void* operator new(std::size_t n) noexcept {
+            return hce::memory::allocate(n);
+        }
+
+        /**
+         Map calls to deallocation portion of `delete` keyword to framework 
+         deallocation function.
+         */
+        inline void operator delete(void* ptr) noexcept {
+            hce::memory::deallocate(ptr);
+        }
 
         /**
          Do necessary cleanup operations while all memory is valid. Must be 
@@ -297,6 +326,14 @@ struct awaitable : public printable {
 
         /**
          This value is necessary to introspect when determining how lock() needs
+         to be called by awoken coroutine/thread from await_suspend.
+
+         @return the lock policy for the woken code
+         */
+        hce::awaitable::resumed::policy resumed_policy() const;
+
+        /**
+         This value is necessary to introspect when determining how lock() needs
          to be called by the `resume()`er.
 
          @return the lock policy for the `resume()`er
@@ -314,6 +351,23 @@ struct awaitable : public printable {
          @param m arbitary memory passed to on_resume()
          */
         void resume(void* m);
+
+        /**
+         @brief report the locked state
+
+         hce::awaitable::interface::cleanup() will call unlock() if locked() == 
+         true.
+         */
+        bool locked() const;
+
+        /**
+         @brief set the locked state
+
+         This is typically managed internally, but if some handler or other 
+         awaitable::interface implementation code locks or unlocks this may be 
+         required to set manually.
+         */
+        void locked(bool b);
 
         /// acquire the awaitable's lock
         virtual void lock() = 0;
@@ -370,17 +424,25 @@ struct awaitable : public printable {
 
             // used if is_coroutine_() == true
             std::coroutine_handle<> handle;
+
             // used if is_coroutine_() == false
             detail::awaitable::this_thread* this_thread;
         };
 
-        static constexpr uint8_t awaited_mask_ = 1u << 0;
-        static constexpr uint8_t has_pointer_mask_ = 1u << 1;
-        static constexpr uint8_t is_coroutine_mask_ = 1u << 2;
-        static constexpr uint8_t locked_mask_ = 1u << 3;
-        static constexpr uint8_t await_policy_mask_ = 1u << 4;
-        static constexpr uint8_t resume_policy_mask_ = 0x60;
-        static constexpr uint8_t ready_mask_ = 1u << 7;
+        // bit masks
+        static constexpr uint8_t locked_mask_ = 1u << 0;
+        static constexpr uint8_t awaited_mask_ = 1u << 1;
+        static constexpr uint8_t ready_mask_ = 1u << 2;
+        static constexpr uint8_t has_pointer_mask_ = 1u << 3;
+        static constexpr uint8_t is_coroutine_mask_ = 1u << 4;
+        static constexpr uint8_t await_policy_mask_ = 1u << 5;
+        static constexpr uint8_t resumed_policy_mask_ = 1u << 6;
+        static constexpr uint8_t resume_policy_mask_ = 1u << 7;
+
+        static constexpr uint8_t aligned_data_size = 
+            ((sizeof(data)) + alignof(data) - 1) & ~(alignof(data) - 1);
+
+        static void default_deleter_(interface*);
 
         bool awaited_() const;
         void awaited_(bool b);
@@ -388,8 +450,6 @@ struct awaitable : public printable {
         void has_pointer_(bool b);
         bool is_coroutine_() const;
         void is_coroutine_(bool b);
-        bool locked_() const;
-        void locked_(bool b);
         data& get_data_();
         void lock_();
         void unlock_();
@@ -401,7 +461,7 @@ struct awaitable : public printable {
         uint8_t state_ = 0;
 
         // data is uninitialized bytes until has_pointer_() == true
-        std::byte data_[sizeof(data)];
+        std::byte data_[sizeof(aligned_data_size)];
     };
    
     /**
@@ -421,7 +481,10 @@ struct awaitable : public printable {
             lk_(&lk)
         { }
 
+        /// lock the lock
         inline void lock() final { lk_->lock(); }
+
+        /// unlock the lock
         inline void unlock() final { lk_->unlock(); }
 
     private:
@@ -472,7 +535,7 @@ struct awaitable : public printable {
         inline void unlock() final { }
     };
 
-    awaitable() : impl_(nullptr) {
+    awaitable() : impl_(nullptr,nullptr) {
         HCE_TRACE_CONSTRUCTOR();
     }
 
@@ -580,18 +643,11 @@ protected:
      */
     template <typename IMPLEMENTATION>
     awaitable(IMPLEMENTATION* i) : 
-        impl_(dynamic_cast<awaitable::interface*>(i))
+        impl_(dynamic_cast<awaitable::interface*>(i), i->deleter())
     { }
 
 private:
-    struct interface_deleter {
-        inline void operator()(interface* ptr) const noexcept {
-            ptr->~interface(); // call destructor
-            ptr->operator delete(ptr);  // call custom delete 
-        }
-    };
-
-    std::unique_ptr<interface, interface_deleter> impl_;
+    std::unique_ptr<interface, interface::deleter_t> impl_;
 };
 
 /**

@@ -10,8 +10,8 @@
 // local
 #include "utility.hpp"
 #include "logging.hpp"
-#include "memory.hpp"
 #include "atomic.hpp"
+#include "memory.hpp"
 #include "alloc.hpp"
 #include "circular_buffer.hpp"
 #include "list.hpp"
@@ -159,20 +159,21 @@ private:
     void* source_;
 };
 
-template <typename LOCK>
+template <typename Lock>
 struct base_send_interface : 
     public hce::scheduler::reschedule<
         hce::awaitable::lockable<
-            LOCK,
+            Lock,
             awt_interface<bool>>>
 {
-    base_send_interface(LOCK& lk, transfer t) : 
+    base_send_interface(Lock& lk, transfer t) : 
         hce::scheduler::reschedule<
             hce::awaitable::lockable<
-                LOCK,
+                Lock,
                 awt_interface<bool>>>(
                     lk,
-                    hce::awaitable::await::policy::defer,
+                    hce::awaitable::await::policy::defer_lock,
+                    hce::awaitable::resumed::policy::hold_lock,
                     hce::awaitable::resume::policy::no_lock),
         tx(t)
     { }
@@ -196,20 +197,21 @@ struct base_send_interface :
     transfer tx;
 };
 
-template <typename LOCK>
+template <typename Lock>
 struct base_recv_interface : 
     public hce::scheduler::reschedule<
         hce::awaitable::lockable<
-            LOCK,
+            Lock,
             awt_interface<bool>>>
 {
-    base_recv_interface(LOCK& lk, void* d) : 
+    base_recv_interface(Lock& lk, void* d) : 
         hce::scheduler::reschedule<
             hce::awaitable::lockable<
-                LOCK,
+                Lock,
                 awt_interface<bool>>>(
                     lk,
-                    hce::awaitable::await::policy::defer,
+                    hce::awaitable::await::policy::defer_lock,
+                    hce::awaitable::resumed::policy::hold_lock,
                     hce::awaitable::resume::policy::no_lock),
         destination(d)
     { }
@@ -233,43 +235,70 @@ struct base_recv_interface :
     void* destination = nullptr;
 };
 
+/*
+ Template awaitable deleters which handle the subtle locking mechanics required 
+ to reuse channel awaitable allocated memory while still properly destructing 
+ instances. This is intended to be returned from the hce::awaitable::interface 
+ implementation's virtual overload of hce::awaitable::interface::deleter().
+ */
+struct deleter {
+    template <typename Sender>
+    static void sender(hce::awaitable::interface* i) {
+        Sender* si = (Sender*)i;
+        auto& parent = si->parent_;
+        si->~Sender();
+        parent.send_alloc_.deallocate(si,1);
+        parent.lk_.unlock();
+    }
+
+    template <typename Receiver>
+    static void receiver(hce::awaitable::interface* i) {
+        Receiver* ri = (Receiver*)i;
+        auto& parent = ri->parent_;
+        ri->~Receiver();
+        parent.recv_alloc_.deallocate(ri,1);
+        parent.lk_.unlock();
+    }
+};
+
 }
 
 /// unbuffered interface implementation
-template <typename T, typename LOCK=hce::spinlock, typename ALLOCATOR=hce::pool_allocator<T>>
+template <typename T, typename Lock=hce::spinlock>
 struct unbuffered : public interface<T> {
     typedef T value_type;
+    typedef hce::pool_allocator<T> Allocator;
 
-    unbuffered() {
+    unbuffered(size_t expected_sender_count = 1, size_t expected_receiver_count = 1) :
+        // allocator pool size reflects the expectation that the common usecase 
+        // is 1 sender and 1 receiver 
+        send_alloc_(expected_sender_count),
+        recv_alloc_(expected_receiver_count),
+        parked_send_(Allocator(expected_sender_count)),
+        parked_recv_(Allocator(expected_receiver_count))
+    {
         HCE_LOW_CONSTRUCTOR(); 
     }
 
-    unbuffered(const ALLOCATOR& allocator) : 
-        parked_send_(allocator),
-        parked_recv_(allocator)
-    { 
-        HCE_LOW_CONSTRUCTOR(); 
-    }
-
-    unbuffered(const unbuffered<T,LOCK,ALLOCATOR>&) = delete;
-    unbuffered(unbuffered<T,LOCK,ALLOCATOR>&&) = delete;
+    unbuffered(const unbuffered<T,Lock>&) = delete;
+    unbuffered(unbuffered<T,Lock>&&) = delete;
     
     inline virtual ~unbuffered(){ HCE_LOW_DESTRUCTOR(); }
 
-    unbuffered<T,LOCK,ALLOCATOR>& operator=(const unbuffered<T,LOCK,ALLOCATOR>&) = delete;
-    unbuffered<T,LOCK,ALLOCATOR>& operator=(unbuffered<T,LOCK,ALLOCATOR>&&) = delete;
+    unbuffered<T,Lock>& operator=(const unbuffered<T,Lock>&) = delete;
+    unbuffered<T,Lock>& operator=(unbuffered<T,Lock>&&) = delete;
 
     static inline std::string info_name() { 
-        return type::templatize<T,LOCK,ALLOCATOR>("hce::channel::unbuffered"); 
+        return type::templatize<T,Lock>("hce::channel::unbuffered"); 
     }
 
     inline std::string name() const { 
-        return unbuffered<T,LOCK,ALLOCATOR>::info_name(); 
+        return unbuffered<T,Lock>::info_name(); 
     }
 
     inline const std::type_info& type_info() const {
         HCE_TRACE_METHOD_ENTER("type_info");
-        return typeid(unbuffered<T,LOCK,ALLOCATOR>); 
+        return typeid(unbuffered<T,Lock>); 
     }
 
     inline int size() const { 
@@ -285,14 +314,14 @@ struct unbuffered : public interface<T> {
     inline bool closed() const {
         HCE_MIN_METHOD_ENTER("closed");
 
-        std::lock_guard<LOCK> lk(lk_);
+        std::lock_guard<Lock> lk(lk_);
         return closed_flag_;
     }
 
     inline void close() {
         HCE_LOW_METHOD_ENTER("close");
 
-        std::lock_guard<LOCK> lk(lk_);
+        std::lock_guard<Lock> lk(lk_);
         if(!closed_flag_) [[likely]] {
             closed_flag_ = true;
 
@@ -310,22 +339,25 @@ struct unbuffered : public interface<T> {
 
     inline awt<bool> send(const T& s) {
         HCE_LOW_METHOD_ENTER("send",(void*)&s);
-
-        return hce::awt<bool>(new send_interface(
-            *this, detail::transfer(detail::pointer_send<const T&>,&s)));
+        send_interface* si = send_alloc_.allocate(1);
+        ::new(si) send_interface(*this, detail::transfer(detail::pointer_send<const T&>,&s));
+        return hce::awt<bool>(si);
     }
 
     inline awt<bool> send(T&& s) {
         HCE_LOW_METHOD_ENTER("send",(void*)&s);
 
-        return hce::awt<bool>(new send_interface(
-            *this, detail::transfer(detail::pointer_send<T&&>,&s)));
+        send_interface* si = send_alloc_.allocate(1);
+        ::new(si) send_interface(*this, detail::transfer(detail::pointer_send<T&&>,&s));
+        return hce::awt<bool>(si);
     }
 
     inline awt<bool> recv(T& r) {
         HCE_LOW_METHOD_ENTER("recv",(void*)&r);
 
-        return hce::awt<bool>(new recv_interface(*this, (void*)&r));
+        recv_interface* ri = recv_alloc_.allocate(1);
+        ::new(ri) recv_interface(*this, (void*)&r);
+        return hce::awt<bool>(ri);
     }
 
     inline hce::yield<result> try_send(const T& s) {
@@ -341,7 +373,7 @@ struct unbuffered : public interface<T> {
     inline hce::yield<result> try_recv(T& r) {
         HCE_LOW_METHOD_ENTER("try_recv",(void*)&r);
 
-        std::lock_guard<LOCK> lk(lk_);
+        std::lock_guard<Lock> lk(lk_);
 
         if(closed_flag_) [[unlikely]] { 
             return { result::closed }; 
@@ -354,13 +386,11 @@ struct unbuffered : public interface<T> {
     }
 
 private:
-    typedef unbuffered<T,LOCK,ALLOCATOR> PARENT;
+    typedef unbuffered<T,Lock> PARENT;
 
-    struct send_interface : 
-        public detail::base_send_interface<LOCK> 
-    {
+    struct send_interface : public detail::base_send_interface<Lock> {
         send_interface(PARENT& p, detail::transfer tx) :
-            detail::base_send_interface<LOCK>(p.lk_, tx),
+            detail::base_send_interface<Lock>(p.lk_, tx),
             parent_(p)
         { }
 
@@ -369,11 +399,15 @@ private:
         }
 
         static inline std::string info_name() {
-            return unbuffered<T,LOCK,ALLOCATOR>::info_name() + 
+            return unbuffered<T,Lock>::info_name() + 
                    "::send_interface";
         };
 
         inline std::string name() const { return send_interface::info_name(); }
+
+        inline hce::awaitable::interface::deleter_t deleter() {
+            return detail::deleter::sender<send_interface>;
+        }
 
         inline bool on_ready() {
             if(parent_.closed_flag_) [[unlikely]] {
@@ -394,11 +428,12 @@ private:
 
     private:
         PARENT& parent_;
+        friend detail::deleter;
     };
 
-    struct recv_interface : public detail::base_recv_interface<LOCK> {
+    struct recv_interface : public detail::base_recv_interface<Lock> {
         recv_interface(PARENT& p, void* destination) :
-            detail::base_recv_interface<LOCK>(p.lk_, destination),
+            detail::base_recv_interface<Lock>(p.lk_, destination),
             parent_(p)
         { }
 
@@ -407,11 +442,15 @@ private:
         }
 
         static inline std::string info_name() {
-            return unbuffered<T,LOCK,ALLOCATOR>::info_name() + 
+            return unbuffered<T,Lock>::info_name() + 
                    "::recv_interface";
         };
 
         inline std::string name() const { return recv_interface::info_name(); }
+
+        inline hce::awaitable::interface::deleter_t deleter() {
+            return detail::deleter::receiver<recv_interface>;
+        }
 
         inline bool on_ready() {
             if(parent_.closed_flag_) [[unlikely]] { 
@@ -432,11 +471,12 @@ private:
 
     private:
         PARENT& parent_;
+        friend detail::deleter;
     };
     
     template <typename U>
     inline hce::yield<result> try_send_(U&& s) {
-        std::lock_guard<LOCK> lk(lk_);
+        std::lock_guard<Lock> lk(lk_);
 
         if(closed_flag_) [[unlikely]] { 
             HCE_TRACE_METHOD_BODY("try_send","closed");
@@ -451,79 +491,79 @@ private:
         } else [[unlikely]] { return { result::failure }; }
     }
 
-    mutable LOCK lk_;
+    mutable Lock lk_;
     bool closed_flag_ = false;
-    hce::list<awt<bool>::interface*,ALLOCATOR> parked_send_;
-    hce::list<awt<bool>::interface*,ALLOCATOR> parked_recv_;
+    typename Allocator::template rebind<send_interface>::other send_alloc_; 
+    typename Allocator::template rebind<recv_interface>::other recv_alloc_; 
+    hce::list<awt<bool>::interface*,Allocator> parked_send_;
+    hce::list<awt<bool>::interface*,Allocator> parked_recv_;
+    friend detail::deleter;
 };
 
 /// buffered interface implementation
-template <typename T, typename LOCK=hce::spinlock, typename ALLOCATOR=hce::pool_allocator<T>>
+template <typename T, typename Lock=hce::spinlock>
 struct buffered : public interface<T> {
     typedef T value_type;
+    typedef hce::pool_allocator<T> Allocator;
 
-    buffered(int sz) : 
-        buf_(sz ? (size_t)sz : (size_t)1),
-        parked_send_(),
-        parked_recv_()
+    buffered(int buffer_size, 
+             size_t expected_sender_count = 1, 
+             size_t expected_receiver_count = 1) : 
+        buf_(buffer_size ? (size_t)buffer_size : (size_t)1),
+        send_alloc_(expected_sender_count),
+        recv_alloc_(expected_receiver_count),
+        parked_send_(Allocator(expected_sender_count)),
+        parked_recv_(Allocator(expected_receiver_count))
     { 
         HCE_LOW_CONSTRUCTOR();
     }
 
-    buffered(int sz, const ALLOCATOR& allocator) : 
-        buf_(sz ? (size_t)sz : (size_t)1),
-        parked_send_(allocator),
-        parked_recv_(allocator)
-    { 
-        HCE_LOW_CONSTRUCTOR();
-    }
-
-    buffered(const buffered<T,LOCK,ALLOCATOR>&) = delete;
-    buffered(buffered<T,LOCK,ALLOCATOR>&&) = delete;
+    buffered(const buffered<T,Lock>&) = delete;
+    buffered(buffered<T,Lock>&&) = delete;
 
     inline virtual ~buffered(){ HCE_LOW_DESTRUCTOR(); }
 
-    buffered<T,LOCK,ALLOCATOR>& operator=(const buffered<T,LOCK,ALLOCATOR>&) = delete;
-    buffered<T,LOCK,ALLOCATOR>& operator=(buffered<T,LOCK,ALLOCATOR>&&) = delete;
+    buffered<T,Lock>& operator=(const buffered<T,Lock>&) = delete;
+    buffered<T,Lock>& operator=(buffered<T,Lock>&&) = delete;
 
     static inline std::string info_name() { 
-        return type::templatize<T,LOCK,ALLOCATOR>("hce::channel::buffered"); 
+        return type::templatize<T,Lock>("hce::channel::buffered"); 
     }
 
     inline std::string name() const { 
-        return buffered<T,LOCK,ALLOCATOR>::info_name(); 
+        return buffered<T,Lock>::info_name(); 
     }
 
     inline const std::type_info& type_info() const {
         HCE_TRACE_METHOD_ENTER("type_info");
-        return typeid(buffered<T,LOCK,ALLOCATOR>); 
+        return typeid(buffered<T,Lock>); 
     }
 
     inline int size() const {
         HCE_MIN_METHOD_ENTER("size");
 
-        std::lock_guard<LOCK> lk(lk_);
+        std::lock_guard<Lock> lk(lk_);
         return (int)buf_.size();
     }
 
     inline int used() const {
         HCE_MIN_METHOD_ENTER("used");
 
-        std::lock_guard<LOCK> lk(lk_);
+        std::lock_guard<Lock> lk(lk_);
         return (int)buf_.used();
     }
 
     inline bool closed() const {
         HCE_MIN_METHOD_ENTER("closed");
 
-        std::lock_guard<LOCK> lk(lk_);
+        std::lock_guard<Lock> lk(lk_);
         return closed_flag_;
     }
 
     inline void close() {
         HCE_LOW_METHOD_ENTER("close");
 
-        std::lock_guard<LOCK> lk(lk_);
+        std::lock_guard<Lock> lk(lk_);
 
         if(!closed_flag_) [[unlikely]] {
             closed_flag_ = true;
@@ -543,21 +583,33 @@ struct buffered : public interface<T> {
     inline awt<bool> send(const T& s) {
         HCE_LOW_METHOD_ENTER("send",(void*)&s);
 
-        return hce::awt<bool>(new send_interface(
-            *this, detail::transfer(detail::circular_buffer_send<const T&>,(void*)&s)));
+        send_interface* si = send_alloc_.allocate(1);
+        ::new(si) send_interface(
+            *this, 
+            detail::transfer(
+                detail::circular_buffer_send<const T&>,
+                (void*)&s));
+        return hce::awt<bool>(si);
     }
 
     inline awt<bool> send(T&& s) {
         HCE_LOW_METHOD_ENTER("send",(void*)&s);
 
-        return hce::awt<bool>(new send_interface(
-            *this, detail::transfer(detail::circular_buffer_send<T&&>,(void*)&s)));
+        send_interface* si = send_alloc_.allocate(1);
+        ::new(si) send_interface(
+            *this, 
+            detail::transfer(
+                detail::circular_buffer_send<T&&>,
+                (void*)&s));
+        return hce::awt<bool>(si);
     }
 
     inline awt<bool> recv(T& r) {
         HCE_LOW_METHOD_ENTER("recv",(void*)&r);
 
-        return hce::awt<bool>(new recv_interface(*this, (void*)&r));
+        recv_interface* ri = recv_alloc_.allocate(1);
+        ::new(ri) recv_interface(*this, (void*)&r);
+        return hce::awt<bool>(ri);
     }
 
     inline hce::yield<result> try_send(const T& t) {
@@ -577,7 +629,7 @@ struct buffered : public interface<T> {
     inline hce::yield<result> try_recv(T& r) {
         HCE_LOW_METHOD_ENTER("try_recv",(void*)&r);
 
-        std::lock_guard<LOCK> lk(lk_);
+        std::lock_guard<Lock> lk(lk_);
 
         if(buf_.empty()) [[unlikely]] {
             if(closed_flag_) [[unlikely]] { 
@@ -603,11 +655,11 @@ struct buffered : public interface<T> {
     }
 
 private:
-    typedef buffered<T,LOCK,ALLOCATOR> PARENT;
+    typedef buffered<T,Lock> PARENT;
 
-    struct send_interface : public detail::base_send_interface<LOCK> {
+    struct send_interface : public detail::base_send_interface<Lock> {
         send_interface(PARENT& p, detail::transfer tx) :
-            detail::base_send_interface<LOCK>(p.lk_, tx),
+            detail::base_send_interface<Lock>(p.lk_, tx),
             parent_(p)
         { }
 
@@ -616,11 +668,15 @@ private:
         }
 
         static inline std::string info_name() {
-            return buffered<T,LOCK,ALLOCATOR>::info_name() + 
+            return buffered<T,Lock>::info_name() + 
                    "::send_interface";
         };
 
         inline std::string name() const { return send_interface::info_name(); }
+
+        inline hce::awaitable::interface::deleter_t deleter() {
+            return detail::deleter::sender<send_interface>;
+        }
 
         inline bool on_ready() {
             if(parent_.closed_flag_) [[unlikely]] {
@@ -647,11 +703,12 @@ private:
 
     private:
         PARENT& parent_;
+        friend detail::deleter;
     };
 
-    struct recv_interface : public detail::base_recv_interface<LOCK> {
+    struct recv_interface : public detail::base_recv_interface<Lock> {
         recv_interface(PARENT& p, void* destination) :
-            detail::base_recv_interface<LOCK>(p.lk_, destination),
+            detail::base_recv_interface<Lock>(p.lk_, destination),
             parent_(p)
         { }
 
@@ -660,11 +717,15 @@ private:
         }
 
         static inline std::string info_name() {
-            return buffered<T,LOCK,ALLOCATOR>::info_name() + 
+            return buffered<T,Lock>::info_name() + 
                    "::recv_interface";
         };
 
         inline std::string name() const { return recv_interface::info_name(); }
+
+        inline hce::awaitable::interface::deleter_t deleter() {
+            return detail::deleter::receiver<recv_interface>;
+        }
 
         inline bool on_ready() {
             if(parent_.buf_.empty()) [[unlikely]] {
@@ -693,11 +754,12 @@ private:
 
     private:
         PARENT& parent_;
+        friend detail::deleter;
     };
 
     template <typename U>
     inline hce::yield<result> try_send_(U&& s) {
-        std::lock_guard<LOCK> lk(lk_);
+        std::lock_guard<Lock> lk(lk_);
 
         if(closed_flag_) [[unlikely]] { 
             HCE_TRACE_METHOD_BODY("try_send","closed");
@@ -718,48 +780,49 @@ private:
         }
     }
 
-    mutable LOCK lk_;
+    mutable Lock lk_;
     bool closed_flag_ = false;
     hce::circular_buffer<T> buf_;
-    hce::list<awt<bool>::interface*,ALLOCATOR> parked_send_;
-    hce::list<awt<bool>::interface*,ALLOCATOR> parked_recv_;
+    typename Allocator::template rebind<send_interface>::other send_alloc_; 
+    typename Allocator::template rebind<recv_interface>::other recv_alloc_; 
+    hce::list<awt<bool>::interface*,Allocator> parked_send_;
+    hce::list<awt<bool>::interface*,Allocator> parked_recv_;
+    friend detail::deleter;
 };
 
 /// unlimited interface implementation
-template <typename T, typename LOCK=hce::spinlock, typename ALLOCATOR=hce::pool_allocator<T>>
+template <typename T, typename Lock=hce::spinlock>
 struct unlimited : public interface<T> {
     typedef T value_type;
+    typedef hce::pool_allocator<T> Allocator;
 
-    unlimited() { 
-        HCE_LOW_CONSTRUCTOR();
-    }
-
-    unlimited(const ALLOCATOR& allocator) : 
-        queue_(allocator),
-        parked_recv_(allocator)
+    unlimited(size_t expected_sender_count = 1, size_t expected_receiver_count = 1) :
+        send_alloc_(expected_sender_count),
+        recv_alloc_(expected_receiver_count),
+        parked_recv_(Allocator(expected_receiver_count))
     { 
         HCE_LOW_CONSTRUCTOR();
     }
 
-    unlimited(const unlimited<T,LOCK,ALLOCATOR>&) = delete;
-    unlimited(unlimited<T,LOCK,ALLOCATOR>&&) = delete;
+    unlimited(const unlimited<T,Lock>&) = delete;
+    unlimited(unlimited<T,Lock>&&) = delete;
 
     inline virtual ~unlimited(){ HCE_LOW_DESTRUCTOR(); }
 
-    unlimited<T,LOCK,ALLOCATOR>& operator=(const unlimited<T,LOCK,ALLOCATOR>&) = delete;
-    unlimited<T,LOCK,ALLOCATOR>& operator=(unlimited<T,LOCK,ALLOCATOR>&&) = delete;
+    unlimited<T,Lock>& operator=(const unlimited<T,Lock>&) = delete;
+    unlimited<T,Lock>& operator=(unlimited<T,Lock>&&) = delete;
 
     static inline std::string info_name() { 
-        return type::templatize<T,LOCK,ALLOCATOR>("hce::channel::unlimited"); 
+        return type::templatize<T,Lock>("hce::channel::unlimited"); 
     }
 
     inline std::string name() const { 
-        return unlimited<T,LOCK,ALLOCATOR>::info_name(); 
+        return unlimited<T,Lock>::info_name(); 
     }
 
     inline const std::type_info& type_info() const {
         HCE_TRACE_METHOD_ENTER("type_info");
-        return typeid(unlimited<T,LOCK,ALLOCATOR>); 
+        return typeid(unlimited<T,Lock>); 
     }
 
     inline int size() const {
@@ -770,21 +833,21 @@ struct unlimited : public interface<T> {
     inline int used() const {
         HCE_MIN_METHOD_ENTER("used");
 
-        std::lock_guard<LOCK> lk(lk_);
+        std::lock_guard<Lock> lk(lk_);
         return (int)queue_.size();
     }
 
     inline bool closed() const {
         HCE_MIN_METHOD_ENTER("closed");
 
-        std::lock_guard<LOCK> lk(lk_);
+        std::lock_guard<Lock> lk(lk_);
         return closed_flag_;
     }
 
     inline void close() {
         HCE_LOW_METHOD_ENTER("close");
 
-        std::lock_guard<LOCK> lk(lk_);
+        std::lock_guard<Lock> lk(lk_);
 
         if(!closed_flag_) [[unlikely]] {
             closed_flag_ = true;
@@ -799,16 +862,22 @@ struct unlimited : public interface<T> {
 
     inline awt<bool> send(const T& s) {
         HCE_LOW_METHOD_ENTER("send",(void*)&s);
-        return awt<bool>(new send_interface(
+
+        send_interface* si = send_alloc_.allocate(1);
+        ::new(si) send_interface(
             *this, 
-            detail::transfer(detail::list_send<const T&,hce::list<T,ALLOCATOR>>,&s)));
+            detail::transfer(detail::list_send<const T&,hce::list<T,Allocator>>,&s));
+        return awt<bool>(si);
     }
 
     inline awt<bool> send(T&& s) {
         HCE_LOW_METHOD_ENTER("send",(void*)&s);
-        return awt<bool>(new send_interface(
+
+        send_interface* si = send_alloc_.allocate(1);
+        ::new(si) send_interface(
             *this, 
-            detail::transfer(detail::list_send<T&&,hce::list<T,ALLOCATOR>>,&s)));
+            detail::transfer(detail::list_send<T&&,hce::list<T,Allocator>>,&s));
+        return awt<bool>(si);
     }
 
     /**
@@ -817,7 +886,10 @@ struct unlimited : public interface<T> {
      */
     inline awt<bool> recv(T& r) {
         HCE_LOW_METHOD_ENTER("recv",(void*)&r);
-        return awt<bool>(new recv_interface(*this, (void*)&r));
+
+        recv_interface* ri = recv_alloc_.allocate(1);
+        ::new(ri) recv_interface(*this, (void*)&r);
+        return hce::awt<bool>(ri);
     }
 
     inline hce::yield<result> try_send(const T& t) {
@@ -837,7 +909,7 @@ struct unlimited : public interface<T> {
     inline hce::yield<result> try_recv(T& r) {
         HCE_LOW_METHOD_ENTER("try_recv",(void*)&r);
 
-        std::lock_guard<LOCK> lk(lk_);
+        std::lock_guard<Lock> lk(lk_);
 
         if(queue_.empty()) [[unlikely]] {
             if(closed_flag_) [[unlikely]] { 
@@ -858,11 +930,11 @@ struct unlimited : public interface<T> {
     }
 
 private:
-    typedef unlimited<T,LOCK,ALLOCATOR> PARENT;
+    typedef unlimited<T,Lock> PARENT;
 
-    struct send_interface : public detail::base_send_interface<LOCK> {
+    struct send_interface : public detail::base_send_interface<Lock> {
         send_interface(PARENT& p, detail::transfer tx) :
-            detail::base_send_interface<LOCK>(p.lk_, tx),
+            detail::base_send_interface<Lock>(p.lk_, tx),
             parent_(p)
         { }
 
@@ -871,11 +943,15 @@ private:
         }
 
         static inline std::string info_name() {
-            return unlimited<T,LOCK,ALLOCATOR>::info_name() + 
+            return unlimited<T,Lock>::info_name() + 
                    "::send_interface";
         };
 
         inline std::string name() const { return send_interface::info_name(); }
+
+        inline hce::awaitable::interface::deleter_t deleter() {
+            return detail::deleter::sender<send_interface>;
+        }
 
         inline bool on_ready() { 
             if(parent_.closed_flag_) [[unlikely]] {
@@ -887,7 +963,7 @@ private:
                 this->success = true;
 
                 if(parent_.parked_recv_.size()) [[unlikely]] {
-                    detail::transfer tx(&detail::list_recv<T,hce::list<T,ALLOCATOR>>,&(parent_.queue_));
+                    detail::transfer tx(&detail::list_recv<T,hce::list<T,Allocator>>,&(parent_.queue_));
                     parent_.parked_recv_.front()->resume((void*)&tx);
                     parent_.parked_recv_.pop();
                 }
@@ -898,11 +974,12 @@ private:
 
     private:
         PARENT& parent_;
+        friend detail::deleter;
     };
 
-    struct recv_interface : public detail::base_recv_interface<LOCK> {
+    struct recv_interface : public detail::base_recv_interface<Lock> {
         recv_interface(PARENT& p, void* destination) :
-            detail::base_recv_interface<LOCK>(p.lk_, destination),
+            detail::base_recv_interface<Lock>(p.lk_, destination),
             parent_(p)
         { }
 
@@ -911,11 +988,15 @@ private:
         }
 
         static inline std::string info_name() {
-            return unlimited<T,LOCK,ALLOCATOR>::info_name() + 
+            return unlimited<T,Lock>::info_name() + 
                    "::recv_interface";
         };
 
         inline std::string name() const { return recv_interface::info_name(); }
+
+        inline hce::awaitable::interface::deleter_t deleter() {
+            return detail::deleter::receiver<recv_interface>;
+        }
 
         inline bool on_ready() {
             if(parent_.queue_.empty()) [[unlikely]] {
@@ -929,7 +1010,7 @@ private:
                 }
             } else [[likely]] {
                 HCE_TRACE_METHOD_BODY("recv_","done");
-                detail::transfer tx(&detail::list_recv<T,hce::list<T,ALLOCATOR>>,&(parent_.queue_));
+                detail::transfer tx(&detail::list_recv<T,hce::list<T,Allocator>>,&(parent_.queue_));
                 tx.send(this->destination);
                 this->success = true;
                 return true;
@@ -938,11 +1019,12 @@ private:
 
     private:
         PARENT& parent_;
+        friend detail::deleter;
     };
     
     template <typename U>
     inline hce::yield<result> try_send_(U&& s) {
-        std::lock_guard<LOCK> lk(lk_);
+        std::lock_guard<Lock> lk(lk_);
 
         if(closed_flag_) [[unlikely]] { 
             HCE_TRACE_METHOD_BODY("try_send","closed");
@@ -952,7 +1034,7 @@ private:
             queue_.push_back(std::forward<U>(s));
 
             if(parked_recv_.size()) [[unlikely]] {
-                detail::transfer tx(&detail::list_recv<T,hce::list<T,ALLOCATOR>>, &queue_);
+                detail::transfer tx(&detail::list_recv<T,hce::list<T,Allocator>>, &queue_);
                 parked_recv_.front()->resume((void*)&tx);
                 parked_recv_.pop();
             }
@@ -962,12 +1044,15 @@ private:
         } 
     }
 
-    mutable LOCK lk_;
+    mutable Lock lk_;
     bool closed_flag_ = false;
-    hce::list<T,ALLOCATOR> queue_;
+    hce::list<T,Allocator> queue_;
+    typename Allocator::template rebind<send_interface>::other send_alloc_; 
+    typename Allocator::template rebind<recv_interface>::other recv_alloc_; 
 
     // send() never blocks, so only has parked recv queue
-    hce::list<awt<bool>::interface*,ALLOCATOR> parked_recv_;
+    hce::list<awt<bool>::interface*,Allocator> parked_recv_;
+    friend detail::deleter;
 };
 
 }
@@ -1034,13 +1119,13 @@ struct chan : public channel::interface<T> {
      - sz < 0: unlimited implementation
      - otherwise buffered implementation with a buffer of sz 
 
-     Specify a LOCK type of `hce::lockfree` to make the implementation lockfree 
+     Specify a Lock type of `hce::lockfree` to make the implementation lockfree 
      (only safe when all instances of the chan are used from the same system 
      thread). Lockfree channels are a *very* fast way to communicate between two 
      coroutines running on the same scheduler (that is, the *same* thread of 
      execution).
 
-     Alternatively, specify a LOCK type of `std::mutex` to potentially improve  
+     Alternatively, specify a Lock type of `std::mutex` to potentially improve  
      communication congestion between a large number of system threads (not 
      coroutines running on a small number of threads). `std::mutex` will allow a
      blocked thread to wait on a condition instead of spinlocking.
@@ -1052,24 +1137,22 @@ struct chan : public channel::interface<T> {
      @param sz the size of implementation buffer 
      @param as optional arguments for implementation constructor
      */
-    template <typename LOCK=hce::spinlock, 
-              typename ALLOCATOR=hce::pool_allocator<T>,
-              typename... As>
+    template <typename Lock=hce::spinlock, typename... As>
     inline chan<T>& construct(int sz=0, As&&... as) {
         HCE_MIN_METHOD_ENTER("construct",sz,as...);
 
         if(sz == 0) {
             context_ = std::shared_ptr<channel::interface<T>>(
                 static_cast<channel::interface<T>*>(
-                    new hce::channel::unbuffered<T,LOCK,ALLOCATOR>(std::forward<As>(as)...)));
+                    new hce::channel::unbuffered<T,Lock>(std::forward<As>(as)...)));
         } else if(sz < 0) {
             context_ = std::shared_ptr<channel::interface<T>>(
                 static_cast<channel::interface<T>*>(
-                    new hce::channel::unlimited<T,LOCK,ALLOCATOR>(std::forward<As>(as)...)));
+                    new hce::channel::unlimited<T,Lock>(std::forward<As>(as)...)));
         } else {
             context_ = std::shared_ptr<channel::interface<T>>(
                 static_cast<channel::interface<T>*>(
-                    new hce::channel::buffered<T,LOCK,ALLOCATOR>(sz, std::forward<As>(as)...)));
+                    new hce::channel::buffered<T,Lock>(sz, std::forward<As>(as)...)));
         }
 
         return *this;
@@ -1079,15 +1162,13 @@ struct chan : public channel::interface<T> {
      @brief inline construct a new chan<T> and its context
      @return the constructed chan<T>
      */
-    template <typename LOCK=hce::spinlock, 
-              typename ALLOCATOR=hce::pool_allocator<T>, 
-              typename... As>
+    template <typename Lock=hce::spinlock, typename... As>
     inline static chan<T> make(As&&... as) {
         HCE_MIN_FUNCTION_ENTER(
             chan<T>::info_name() +
-            type::templatize<LOCK,ALLOCATOR>("::make"), as...);
+            type::templatize<Lock>("::make"), as...);
         chan<T> ch;
-        ch.construct<LOCK,ALLOCATOR>(std::forward<As>(as)...);
+        ch.construct<Lock>(std::forward<As>(as)...);
         return ch;
     }
        

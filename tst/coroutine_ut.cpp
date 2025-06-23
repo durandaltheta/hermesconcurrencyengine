@@ -168,8 +168,9 @@ TEST(coroutine, co_await_void) {
                     hce::spinlock,
                     hce::awt<void>::interface>(
                         lk_,
-                        hce::awaitable::await::policy::defer,
-                        hce::awaitable::resume::policy::lock),
+                        hce::awaitable::await::policy::defer_lock,
+                        hce::awaitable::resumed::policy::release_lock,
+                        hce::awaitable::resume::policy::guard_lock),
                 hdl_(hdl),
                 ready_(ready)
             { }
@@ -256,8 +257,9 @@ TEST(coroutine, co_await_int) {
                     hce::spinlock,
                     hce::awt<int>::interface>(
                         lk_,
-                        hce::awaitable::await::policy::defer,
-                        hce::awaitable::resume::policy::lock),
+                        hce::awaitable::await::policy::defer_lock,
+                        hce::awaitable::resumed::policy::release_lock,
+                        hce::awaitable::resume::policy::guard_lock),
                 hdl_(hdl),
                 ready_(ready),
                 i_(i)
@@ -351,8 +353,9 @@ TEST(coroutine, co_await_string) {
                     hce::spinlock,
                     hce::awt<std::string>::interface>(
                         lk_,
-                        hce::awaitable::await::policy::defer,
-                        hce::awaitable::resume::policy::lock),
+                        hce::awaitable::await::policy::defer_lock,
+                        hce::awaitable::resumed::policy::release_lock,
+                        hce::awaitable::resume::policy::guard_lock),
                 hdl_(hdl),
                 ready_(ready),
                 s_(std::to_string(i))

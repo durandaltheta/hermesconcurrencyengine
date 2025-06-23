@@ -39,8 +39,9 @@ hce::timer::awaitable::awaitable() :
             hce::spinlock,
             hce::awt<bool>::interface>>(
                 slk_,
-                hce::awaitable::await::policy::defer,
-                hce::awaitable::resume::policy::lock),
+                hce::awaitable::await::policy::defer_lock,
+                hce::awaitable::resumed::policy::release_lock,
+                hce::awaitable::resume::policy::guard_lock),
     result_(false)
 { 
     HCE_MED_CONSTRUCTOR();
@@ -62,7 +63,9 @@ std::string hce::timer::awaitable::info_name() {
     return "hce::timer::awaitable"; 
 }
 
-std::string hce::timer::awaitable::name() const { return hce::timer::awaitable::info_name(); }
+std::string hce::timer::awaitable::name() const { 
+    return hce::timer::awaitable::info_name(); 
+}
 
 void hce::timer::awaitable::on_resume(void* m) { 
     HCE_MED_METHOD_ENTER("on_resume",m);

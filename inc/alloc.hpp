@@ -43,13 +43,7 @@ inline T* allocate(std::size_t n=1) {
 }
 
 /**
- @brief high level, alignment aware, `hce::allocate<T>()`ed memory deallocation
-
- Memory `p` can be optionally deleted by regular `delete` or `std::free()`. The 
- advantage of using this mechanism is that the implementation of 
- `memory::deallocate()` can cache allocated values in a thread_local mechanism 
- for reuse on calls to `memory::allocate()`. 
-
+ @brief high level memory deallocation
  @param p pointer to allocated memory
  */
 template <typename U>
@@ -148,6 +142,15 @@ struct allocator {
 };
 
 namespace alloc {
+
+/**
+ @brief basic functor usable in std::unique_ptr<void,basic_deleter> type operations
+ */
+struct basic_deleter {
+    inline void operator()(void* ptr) const noexcept {
+        hce::deallocate(ptr);
+    }
+};
 
 /// std::unique_ptr deleter function template
 template <typename T, std::size_t sz>

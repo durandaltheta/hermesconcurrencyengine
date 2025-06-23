@@ -46,8 +46,9 @@ struct sync_partial :
     template <typename... As>
     sync_partial(As&&... as) : 
         hce::awaitable::lockfree_lockable<hce::awt_interface<T>>(
-                hce::awaitable::await::policy::defer,
-                hce::awaitable::resume::policy::lock),
+                hce::awaitable::await::policy::defer_lock,
+                hce::awaitable::resumed::policy::release_lock,
+                hce::awaitable::resume::policy::guard_lock),
         t_(std::forward<As>(as)...) 
     { }
 
@@ -66,8 +67,9 @@ struct sync_partial<void> : public
     sync_partial() :
         hce::awaitable::lockfree_lockable<
             hce::awt_interface<void>>(
-                hce::awaitable::await::policy::defer,
-                hce::awaitable::resume::policy::lock)
+                hce::awaitable::await::policy::defer_lock,
+                hce::awaitable::resumed::policy::release_lock,
+                hce::awaitable::resume::policy::guard_lock)
     { }
 
     inline bool on_ready() { return true; }
@@ -83,8 +85,9 @@ struct async_partial :
     async_partial() : 
         hce::awaitable::spinlock_lockable<
             hce::awt_interface<T>>(
-                hce::awaitable::await::policy::defer,
-                hce::awaitable::resume::policy::lock)
+                hce::awaitable::await::policy::defer_lock,
+                hce::awaitable::resumed::policy::release_lock,
+                hce::awaitable::resume::policy::guard_lock)
     { }
 
     // this will never be called *except* in cases where m!=nullptr
@@ -106,8 +109,9 @@ struct async_partial<void> :
     async_partial() : 
         hce::awaitable::spinlock_lockable<
             hce::awt_interface<void>>(
-                hce::awaitable::await::policy::defer,
-                hce::awaitable::resume::policy::lock)
+                hce::awaitable::await::policy::defer_lock,
+                hce::awaitable::resumed::policy::release_lock,
+                hce::awaitable::resume::policy::guard_lock)
     { }
 
     inline void on_resume(void* m) { this->ready(true); }

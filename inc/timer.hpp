@@ -199,7 +199,6 @@ private:
         virtual ~awaitable();
         static std::string info_name();
         std::string name() const;
-        bool on_ready();
         void on_resume(void* m);
         bool get_result();
 
