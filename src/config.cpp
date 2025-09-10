@@ -29,8 +29,8 @@
 #include "threadpool.hpp"
 #include "lifecycle.hpp"
 
-size_t hce::config::pool_allocator::default_block_cache() {
-    return hce::service<hce::lifecycle>::get().get_config().alloc.pool_allocator_default_block_cache;
+size_t hce::config::pool_allocator::default_cache_size() {
+    return hce::service<hce::lifecycle>::get().get_config().alloc.pool_allocator_default_cache_size;
 }
 
 hce::config::scheduler::config hce::config::scheduler::global::config() {

@@ -173,7 +173,7 @@ struct base_send_interface :
                 awt_interface<bool>>>(
                     lk,
                     hce::awaitable::await::policy::defer_lock,
-                    hce::awaitable::resumed::policy::hold_lock,
+                    hce::awaitable::resumed::policy::locked,
                     hce::awaitable::resume::policy::no_lock),
         tx(t)
     { }
@@ -211,7 +211,7 @@ struct base_recv_interface :
                 awt_interface<bool>>>(
                     lk,
                     hce::awaitable::await::policy::defer_lock,
-                    hce::awaitable::resumed::policy::hold_lock,
+                    hce::awaitable::resumed::policy::locked,
                     hce::awaitable::resume::policy::no_lock),
         destination(d)
     { }

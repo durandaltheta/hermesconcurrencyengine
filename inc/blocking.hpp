@@ -47,8 +47,8 @@ struct sync_partial :
     sync_partial(As&&... as) : 
         hce::awaitable::lockfree_lockable<hce::awt_interface<T>>(
                 hce::awaitable::await::policy::defer_lock,
-                hce::awaitable::resumed::policy::release_lock,
-                hce::awaitable::resume::policy::guard_lock),
+                hce::awaitable::resumed::policy::unlocked,
+                hce::awaitable::resume::policy::lock),
         t_(std::forward<As>(as)...) 
     { }
 
@@ -68,8 +68,8 @@ struct sync_partial<void> : public
         hce::awaitable::lockfree_lockable<
             hce::awt_interface<void>>(
                 hce::awaitable::await::policy::defer_lock,
-                hce::awaitable::resumed::policy::release_lock,
-                hce::awaitable::resume::policy::guard_lock)
+                hce::awaitable::resumed::policy::unlocked,
+                hce::awaitable::resume::policy::lock)
     { }
 
     inline bool on_ready() { return true; }
@@ -86,8 +86,8 @@ struct async_partial :
         hce::awaitable::spinlock_lockable<
             hce::awt_interface<T>>(
                 hce::awaitable::await::policy::defer_lock,
-                hce::awaitable::resumed::policy::release_lock,
-                hce::awaitable::resume::policy::guard_lock)
+                hce::awaitable::resumed::policy::unlocked,
+                hce::awaitable::resume::policy::lock)
     { }
 
     // this will never be called *except* in cases where m!=nullptr
@@ -110,8 +110,8 @@ struct async_partial<void> :
         hce::awaitable::spinlock_lockable<
             hce::awt_interface<void>>(
                 hce::awaitable::await::policy::defer_lock,
-                hce::awaitable::resumed::policy::release_lock,
-                hce::awaitable::resume::policy::guard_lock)
+                hce::awaitable::resumed::policy::unlocked,
+                hce::awaitable::resume::policy::lock)
     { }
 
     inline void on_resume(void* m) { this->ready(true); }

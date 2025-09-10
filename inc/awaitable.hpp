@@ -46,6 +46,9 @@ struct this_thread : public printable {
     // get the this_thread object associated with the calling thread
     static this_thread* get();
 
+    // return true if the thread this belongs to is blocked
+    inline bool blocked() { return blocked_; }
+
     // can only block the calling thread
     template <typename LOCK>
     static inline void block(LOCK& lk) {
@@ -59,17 +62,17 @@ struct this_thread : public printable {
     // unblock an arbitrary this_thread without lock synchronization
     inline void unblock() {
         HCE_TRACE_METHOD_ENTER("unblock");
-        ready = true;
-        cv.notify_one();
+        ready_ = true;
+        cv_.notify_one();
     }
 
     // unblock an arbitrary this_thread with lock synchronization
     template <typename LOCK>
     inline void unblock(LOCK& lk) {
         HCE_TRACE_METHOD_ENTER("unblock",hce::type::name<LOCK>());
-        ready = true;
+        ready_ = true;
         lk.unlock();
-        cv.notify_one();
+        cv_.notify_one();
     }
 
 private:
@@ -77,15 +80,19 @@ private:
 
     template <typename LOCK>
     inline void block_(LOCK& lk) {
-        while(!ready) { 
-            cv.wait(lk); 
+        blocked_ = true;
+
+        while(!ready_) { 
+            cv_.wait(lk); 
         }
 
-        ready = false; // reset flag
+        blocked_ = false;
+        ready_ = false; // reset flag
     }
 
-    bool ready = false;
-    std::condition_variable_any cv;
+    bool ready_ = false;
+    bool blocked_ = false;
+    std::condition_variable_any cv_;
 };
 
 }
@@ -193,17 +200,17 @@ struct awaitable : public printable {
         /// determines how locking is accomplished by an awaiter of an awaitable
         enum policy {
             // begin at bit 5
-            adopt_lock = 0x00, //< assume the lock is already locked
-            defer_lock = 0x20 //< assume the lock is unlocked but lock it when necessary
+            defer_lock = 0x00, //< assume the lock is unlocked but lock it when necessary
+            adopt_lock = 0x20 //< assume the lock is already locked
         };
     };
 
     struct resumed {
-        /// determines how locking is accomplished by a resumed awaiter of an awaitable
+        /// determines the state of the lock when awaiter of an awaitable resumes control
         enum policy {
             // begin at bit 6
-            release_lock = 0x00, //< release the lock when woken up
-            hold_lock = 0x40 //< hold the lock when woken up
+            unlocked = 0x00, //< lock is not held when awaiter resumes
+            locked = 0x40 //< lock is held when awaiter resumes
         };
     };
 
@@ -211,8 +218,8 @@ struct awaitable : public printable {
         /// determines how locking is accomplished by a caller of awaitable::resume()
         enum policy {
             // begin at bit 7
-            guard_lock = 0x00, //< lock during resume(), unlocking when done
-            no_lock = 0x80 //< neither lock nor unlock during resume()
+            no_lock = 0x00, //< do not lock during resume() 
+            lock = 0x80 //< lock during resume()
         };
     };
 
@@ -361,19 +368,25 @@ struct awaitable : public printable {
         bool locked() const;
 
         /**
-         @brief set the locked state
+         @brief API to attempt to acquire the awaitable's lock  
 
-         This is typically managed internally, but if some handler or other 
-         awaitable::interface implementation code locks or unlocks this may be 
-         required to set manually.
+         This call is sanitized to ensure double locking cannot happen, and to 
+         block locking in certain internal only edgecases.
          */
-        void locked(bool b);
+        void lock();
 
-        /// acquire the awaitable's lock
-        virtual void lock() = 0;
+        /**
+         @brief API to attempt to release the awaitable's lock 
+         
+         This call is sanitized to ensure double unlocking cannot happen.
+         */
+        void unlock();
 
-        /// release the awaitable's lock
-        virtual void unlock() = 0;
+        /// underlying implementation to acquire the lock object
+        virtual void lock_impl() = 0;
+
+        /// underlying implementation to release the lock object
+        virtual void unlock_impl() = 0;
 
         /**
          This is called during resume() with the suspended coroutine handle, and
@@ -416,6 +429,7 @@ struct awaitable : public printable {
         virtual void on_resume(void* m) = 0;
 
     private:
+        // all union types are POD, don't need destructors
         union data {
             // Constructors to initialize specific members
             data() {} // Default constructor (optional, but harmless)
@@ -430,14 +444,14 @@ struct awaitable : public printable {
         };
 
         // bit masks
-        static constexpr uint8_t locked_mask_ = 1u << 0;
-        static constexpr uint8_t awaited_mask_ = 1u << 1;
-        static constexpr uint8_t ready_mask_ = 1u << 2;
-        static constexpr uint8_t has_pointer_mask_ = 1u << 3;
-        static constexpr uint8_t is_coroutine_mask_ = 1u << 4;
-        static constexpr uint8_t await_policy_mask_ = 1u << 5;
-        static constexpr uint8_t resumed_policy_mask_ = 1u << 6;
-        static constexpr uint8_t resume_policy_mask_ = 1u << 7;
+        static constexpr uint8_t locked_mask_ = 0x1; // bit 0
+        static constexpr uint8_t awaited_mask_ = 0x2; // bit 1
+        static constexpr uint8_t ready_mask_ = 0x4; // bit 2
+        static constexpr uint8_t has_pointer_mask_ = 0x8; // bit 3
+        static constexpr uint8_t is_coroutine_mask_ = 0x10; // bit 4
+        static constexpr uint8_t await_policy_mask_ = 0x20; // bit 5
+        static constexpr uint8_t resumed_policy_mask_ = 0x40; // bit 6
+        static constexpr uint8_t resume_policy_mask_ = 0x80; // bit 7
 
         static constexpr uint8_t aligned_data_size = 
             ((sizeof(data)) + alignof(data) - 1) & ~(alignof(data) - 1);
@@ -451,8 +465,9 @@ struct awaitable : public printable {
         bool is_coroutine_() const;
         void is_coroutine_(bool b);
         data& get_data_();
-        void lock_();
-        void unlock_();
+        bool can_lock_(); // return whether it is possible to lock
+        bool can_unlock_(); // return whether it is possible to unlock
+        void locked_(bool b);
 
         // `hce::awaitable::interface`s instances are created frequently, and 
         // should use as little memory by default as possible, hence the state 
@@ -482,10 +497,10 @@ struct awaitable : public printable {
         { }
 
         /// lock the lock
-        inline void lock() final { lk_->lock(); }
+        inline void lock_impl() final { lk_->lock(); }
 
         /// unlock the lock
-        inline void unlock() final { lk_->unlock(); }
+        inline void unlock_impl() final { lk_->unlock(); }
 
     private:
         Lock* lk_;
@@ -507,8 +522,8 @@ struct awaitable : public printable {
 
         virtual ~spinlock_lockable() {}
 
-        inline void lock() final { lk_.lock(); }
-        inline void unlock() final { lk_.unlock(); }
+        inline void lock_impl() final { lk_.lock(); }
+        inline void unlock_impl() final { lk_.unlock(); }
 
     private:
         hce::spinlock lk_;
@@ -531,8 +546,8 @@ struct awaitable : public printable {
         
         virtual ~lockfree_lockable() {}
 
-        inline void lock() final { }
-        inline void unlock() final { }
+        inline void lock_impl() final { }
+        inline void unlock_impl() final { }
     };
 
     awaitable() : impl_(nullptr,nullptr) {
@@ -830,6 +845,25 @@ struct awt<void> : public awaitable {
  */
 template <typename T>
 using awt_interface = typename hce::awt<T>::interface;
+
+/**
+ @brief convert an awaitable that returns some type T to one that returns nothing 
+
+ The awaitable still operates otherwise as normal but no type will be returned 
+ from `co_await`ing it.
+
+ @return a rewrapped awaitable::interface in an awt<void>
+ */
+template <typename T>
+inline awt<void> to_awt_void(awt<T> a) {
+    return awt<void>(a.release());
+}
+
+/// Exception case where input is already an awt<void> is a simple passthrough 
+template <>
+inline awt<void> to_awt_void(awt<void> a) {
+    return std::move(a);
+}
 
 }
 

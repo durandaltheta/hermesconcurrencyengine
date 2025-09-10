@@ -51,10 +51,10 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/awaitable.hpp
     ${HCE_INCLUDE_DIR}/scheduler.hpp
     ${HCE_INCLUDE_DIR}/blocking.hpp
-    #${HCE_INCLUDE_DIR}/mutex.hpp
+    ${HCE_INCLUDE_DIR}/mutex.hpp
     #${HCE_INCLUDE_DIR}/condition_variable.hpp
     ${HCE_INCLUDE_DIR}/channel.hpp
-    ${HCE_INCLUDE_DIR}/scope.hpp
+    #${HCE_INCLUDE_DIR}/scope.hpp
     ${HCE_INCLUDE_DIR}/threadpool.hpp
     ${HCE_INCLUDE_DIR}/lifecycle.hpp
     ${HCE_INCLUDE_DIR}/module.hpp
@@ -70,6 +70,7 @@ set(HCE_SOURCE_FILES
     ${HCE_SOURCE_DIR}/awaitable.cpp
     ${HCE_SOURCE_DIR}/scheduler.cpp
     ${HCE_SOURCE_DIR}/blocking.cpp
+    ${HCE_SOURCE_DIR}/mutex.cpp
     ${HCE_SOURCE_DIR}/timer.cpp
     ${HCE_SOURCE_DIR}/thread.cpp
     ${HCE_SOURCE_DIR}/threadpool.cpp
@@ -91,8 +92,8 @@ endif()
 
 # Define the pairs of variable names and their default values
 set(PAIRS 
-# the default block cache of reusable allocations of a pool allocator
-        HCEPOOLALLOCATORDEFAULTBLOCKCACHE "64"
+# the default cache size of reusable allocations of a pool allocator
+        HCEPOOLALLOCATORDEFAULTCACHESIZE "64"
 
 # Default configuration of scheduler reusable coroutine handles. A sane value 
 # (roughly equal or above the median count of executing coroutines during busy 

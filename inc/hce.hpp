@@ -21,7 +21,7 @@
 #include "scheduler.hpp"
 #include "blocking.hpp"
 #include "timer.hpp"
-//#include "mutex.hpp"
+#include "mutex.hpp"
 //#include "condition_variable.hpp"
 #include "channel.hpp"
 #include "scope.hpp"

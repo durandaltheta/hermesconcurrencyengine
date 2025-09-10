@@ -20,13 +20,13 @@
 #endif 
 
 // the default block cache in a pool_allocator
-#ifndef HCEPOOLALLOCATORDEFAULTBLOCKCACHE
-#define HCEPOOLALLOCATORDEFAULTBLOCKCACHE 64
+#ifndef HCEPOOLALLOCATORDEFAULTCACHESIZE
+#define HCEPOOLALLOCATORDEFAULTCACHESIZE 64
 #endif
 
 // the default coroutine resource cache in a scheduler
 #ifndef HCEREUSABLECOROUTINEHANDLEDEFAULTSCHEDULERCACHE
-#define HCEREUSABLECOROUTINEHANDLEDEFAULTSCHEDULERCACHE HCEPOOLALLOCATORDEFAULTBLOCKCACHE
+#define HCEREUSABLECOROUTINEHANDLEDEFAULTSCHEDULERCACHE HCEPOOLALLOCATORDEFAULTCACHESIZE
 #endif 
 
 // the cache of reusable coroutine resources for in the global scheduler
@@ -106,7 +106,7 @@ hce::config::scheduler::config::config() :
 { }
 
 hce::lifecycle::config::allocator::allocator() :
-    pool_allocator_default_block_cache(HCEPOOLALLOCATORDEFAULTBLOCKCACHE)
+    pool_allocator_default_cache_size(HCEPOOLALLOCATORDEFAULTCACHESIZE)
 { }
 
 hce::lifecycle::config::scheduler::scheduler() :

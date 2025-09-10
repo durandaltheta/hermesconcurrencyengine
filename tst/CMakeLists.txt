@@ -20,7 +20,7 @@ set(HCE_UT_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/id_ut.cpp
     ${CMAKE_CURRENT_LIST_DIR}/coroutine_ut.cpp
     ${CMAKE_CURRENT_LIST_DIR}/scheduler_ut.cpp
-    ${CMAKE_CURRENT_LIST_DIR}/scope_ut.cpp
+    #${CMAKE_CURRENT_LIST_DIR}/scope_ut.cpp
     ${CMAKE_CURRENT_LIST_DIR}/channel_ut.cpp 
     ${CMAKE_CURRENT_LIST_DIR}/threadpool_ut.cpp
     ${CMAKE_CURRENT_LIST_DIR}/comparison_ut.cpp

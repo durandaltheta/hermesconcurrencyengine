@@ -55,15 +55,15 @@ struct lifecycle : public service<lifecycle>, public hce::printable {
             allocator();
 
             /**
-             @brief pool_allocator's default block cache
+             @brief pool_allocator's default cache size
 
              This value sets the default cache for pool allocator's reusable 
              cached memory count.
 
              Defaults set by compiler define(s):
-             HCEPOOLALLOCATORDEFAULTBLOCKCACHE
+             HCEPOOLALLOCATORDEFAULTCACHESIZE
              */
-            size_t pool_allocator_default_block_cache; 
+            size_t pool_allocator_default_cache_size; 
         };
 
         struct scheduler {

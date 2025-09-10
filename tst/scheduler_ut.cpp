@@ -63,6 +63,114 @@ inline hce::co<void> co_scheduler_global_check(test::queue<void*>& q) {
     co_return;
 }
 
+template <typename T>
+size_t scope_awt_void() {
+    const std::string fname = hce::type::templatize<T>("scope_awt_void");
+    size_t success_count = 0;
+
+    // block until scope is awaited on this thread
+    auto scope_await_thread = [](std::deque<hce::awt<void>>& scope) {
+        while(scope.size()) {
+            // allow thread to join with the awaitable
+            scope.pop_front();
+        }
+    };
+
+    // block until coroutine returns from awaiting the scope
+    auto scope_await_co = [](hce::scheduler& sch, std::deque<hce::awt<void>>& scope) {
+        // lambda should be a valid coroutine
+        auto co = [](std::deque<hce::awt<void>>& scope) -> hce::co<void> {
+            while(scope.size()) {
+                // have coroutine join with the awaitable
+                co_await std::move(scope.front());
+                scope.pop_front();
+            }
+
+            co_return;
+        };
+
+        // schedule() awaitable goes out of scope and blocks calling thread
+        sch.schedule(co(scope));
+    };
+
+    // run both the thread and coroutine variant of the same test
+    auto run_test = [&](hce::scheduler& sch,
+                        std::deque<hce::awt<void>>& scope,
+                        std::function<void()>& setup) 
+    {
+        setup();
+        scope_await_thread(scope);
+        setup();
+        scope_await_co(sch, scope);
+        ++success_count;
+    };
+        
+    {
+        HCE_INFO_FUNCTION_BODY(fname,"scope co_void");
+        auto lf = hce::scheduler::make();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
+        std::deque<hce::awt<void>> scope;
+
+        std::function<void()> setup = [&]{
+            scope.push_back(hce::to_awt_void(sch->schedule(co_void())));
+            scope.push_back(hce::to_awt_void(sch->schedule(co_void())));
+            scope.push_back(hce::to_awt_void(sch->schedule(co_void())));
+        };
+
+        run_test(*sch, scope, setup);
+    } 
+
+    {
+        HCE_INFO_FUNCTION_BODY(fname,"scope co_push_T");
+        test::queue<T> q;
+        auto lf = hce::scheduler::make();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
+        std::deque<hce::awt<void>> scope;
+
+        std::function<void()> setup = [&]{
+            scope.push_back(hce::to_awt_void(sch->schedule(co_push_T<T>(q,test::init<T>(3)))));
+            scope.push_back(hce::to_awt_void(sch->schedule(co_push_T<T>(q,test::init<T>(2)))));
+            scope.push_back(hce::to_awt_void(sch->schedule(co_push_T<T>(q,test::init<T>(1)))));
+        };
+
+        run_test(*sch, scope, setup);
+        EXPECT_EQ(6,q.size());
+        EXPECT_EQ((T)test::init<T>(3),q.pop());
+        EXPECT_EQ((T)test::init<T>(2),q.pop());
+        EXPECT_EQ((T)test::init<T>(1),q.pop());
+        EXPECT_EQ((T)test::init<T>(3),q.pop());
+        EXPECT_EQ((T)test::init<T>(2),q.pop());
+        EXPECT_EQ((T)test::init<T>(1),q.pop());
+    } 
+
+    {
+        HCE_INFO_FUNCTION_BODY(fname,"large push_back()");
+        test::queue<T> q;
+        auto lf = hce::scheduler::make();
+        std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
+        std::deque<hce::awt<void>> scope;
+
+        std::function<void()> setup = [&]{
+            for(size_t i=0; i<1000; ++i) {
+                scope.push_back(hce::to_awt_void(sch->schedule(co_push_T_return_T<T>(q,test::init<T>(i)))));
+            }
+        };
+        
+        run_test(*sch, scope, setup);
+        EXPECT_EQ(2000,q.size());
+
+        for(size_t i=0; i<1000; ++i) {
+            EXPECT_EQ((T)test::init<T>(i),q.pop());
+        }
+
+        for(size_t i=0; i<1000; ++i) {
+            EXPECT_EQ((T)test::init<T>(i),q.pop());
+        }
+    } 
+
+    return success_count;
+}
+
 }
 }
 
@@ -381,4 +489,17 @@ TEST(scheduler, migrate) {
 
     // join with scheduled coroutine
     sch1->schedule(helper::op(sch1, sch2, schg));
+}
+
+TEST(coroutine, to_awt_void) {
+    const size_t expected = 3;
+    EXPECT_EQ(expected, test::scheduler::scope_awt_void<int>());
+    EXPECT_EQ(expected, test::scheduler::scope_awt_void<unsigned int>());
+    EXPECT_EQ(expected, test::scheduler::scope_awt_void<size_t>());
+    EXPECT_EQ(expected, test::scheduler::scope_awt_void<float>());
+    EXPECT_EQ(expected, test::scheduler::scope_awt_void<double>());
+    EXPECT_EQ(expected, test::scheduler::scope_awt_void<char>());
+    EXPECT_EQ(expected, test::scheduler::scope_awt_void<void*>());
+    EXPECT_EQ(expected, test::scheduler::scope_awt_void<std::string>());
+    EXPECT_EQ(expected, test::scheduler::scope_awt_void<test::CustomObject>());
 }

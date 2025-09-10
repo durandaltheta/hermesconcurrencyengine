@@ -306,7 +306,7 @@ namespace pool_allocator {
 /**
  @brief configures the default block limit of a pool allocator
  */
-size_t default_block_cache();
+size_t default_cache_size();
 
 }
 }
@@ -314,55 +314,41 @@ size_t default_block_cache();
 /**
  @brief a pool allocator
 
- `pool_allocator` ultimately allocate its values from the thread_local 
- memory caches via `hce::allocate<T>()`/`hce::deallocate()`
- (which itself allocates via `std::malloc()`). It is therefore compatible with 
- `hce::allocator`.
+ `pool_allocator` via `hce::allocate<T>()`/`hce::deallocate()` (which itself 
+ allocates via `std::malloc()`). It is therefore compatible with 
+ `hce::allocator` (`hce::allocator` and `hce::pool_allocator<T>` can deallocate 
+ allocations from each other).
 
- `pool_allocator`s are like memory caches in concept, with 
- several important distinguishing features:
-
- - pooled values are completely private to the owner of this object, where-as 
- cached values in the cache_allocator are intended to be used by any caller on
+ `pool_allocator`s are memory caches with these design aims:
+ - pooled values are completely private to the owner of this object 
  the thread 
  - pooled values are all of the same size (`sizeof(T)`)
  - `pool_allocator`'s block limit can be precisely calibrated to the caller's 
- exact needs, where-as cache_allocators are configured generally
+ exact needs
  - `pool_allocator`s can be used as an `std::` container's allocator
+ - all memory uses the same underlying allocation/deallocation method, allowing 
+ allocation and deallocation from different pool_allocators 
+ - constant time allocation/deallocation when re-using allocated pointers of `T`
+ - no exception handling (for speed)
 
  This object prefers to cache values on deallocation rather than immediately 
  freeing them. It also prefers to retrieve values from its cache over actually 
  allocating memory.
 
  This object's design is to limit the cost of repeated allocation and 
- deallocation of consistently sized memory blocks. As a note, the primary 
- desired efficiency improvement for using this mechanism is to guarantee a limit 
- to process-wide lock contention from calls to malloc()/free().
+ deallocation of consistently sized memory blocks. The primary desired 
+ efficiency improvements for using this mechanism:
+ - guarantee a limit to process-wide lock contention from calls to malloc()/free() 
+ - limit system calls to acquire or release more memory from the OS.
+ - limit processing of allocation overhead (less CPU) 
 
- block_limit determines the maximum cache size of the pool. That is, a 
- block_limit of 64 means that a maximum of 64 allocated Ts can be cached 
+ cache_size determines the maximum cache size of the pool. That is, a 
+ cache_size of 64 means that a maximum of 64 allocated Ts can be cached 
  for reuse before the allocator is forced to free memory when deallocate() is 
  called.
 
- The internal pool starts at a size of 0 and grows powers of 2 until a 
- maximum of block_limit is reached.
-
- This object does *NOT* pool allocations/deallocations of arrays of T. These 
- are deallocated immediately.
-
- Design Aims:
- - lazy allocated pool growth 
- - private memory pool (safe from global or thread_local shared use)
- - constant time allocation/deallocation when re-using allocated pointers of `T`
- - no exception handling (for speed)
- - usable as an std:: container allocator
- - all memory uses the same underlying allocation/deallocation method, allowing 
- allocation and deallocation from different pool_allocators 
- - array allocation/deallocation of `T` uses framework mechanism
-
- Design Limitations:
- - no default pre-pooling
- - allocated pool can only grow, never shrink
+ This object does *NOT* pool deallocations of arrays of T. These are deallocated 
+ immediately.
  */
 template <typename T>
 struct pool_allocator : public printable {
@@ -380,13 +366,13 @@ struct pool_allocator : public printable {
         using other = pool_allocator<U>;
     };
 
-    /// construct a pool_allocator with the specified block_limit
-    pool_allocator(size_t block_limit = config::pool_allocator::default_block_cache()) : 
-        block_limit_(block_limit)
+    /// construct a pool_allocator with the specified cache_size
+    pool_allocator(size_t cache_size = config::pool_allocator::default_cache_size()) : 
+        cache_size_(cache_size)
     { }
 
     pool_allocator(const pool_allocator<T>& rhs) :
-        block_limit_(rhs.block_limit_)
+        cache_size_(rhs.cache_size_)
     { 
         HCE_MIN_CONSTRUCTOR(std::string("const ") + rhs.to_string() + "&");
     }
@@ -398,14 +384,14 @@ struct pool_allocator : public printable {
      have the same block limit.
      */
     template <typename U, typename = std::enable_if_t<!std::is_same_v<T, U>>>
-    pool_allocator(const pool_allocator<U>& rhs) : block_limit_(rhs.limit()) {
+    pool_allocator(const pool_allocator<U>& rhs) : cache_size_(rhs.limit()) {
         // Copy the block limit during rebind
         HCE_MIN_CONSTRUCTOR(std::string("const ") + rhs.to_string() + "&");
     }
 
-    pool_allocator(pool_allocator<T>&& rhs) : block_limit_(0) {
+    pool_allocator(pool_allocator<T>&& rhs) : cache_size_(0) {
         HCE_MIN_CONSTRUCTOR(rhs.to_string() + "&&");
-        block_limit_ = std::move(rhs.block_limit_);
+        cache_size_ = std::move(rhs.cache_size_);
         pool_ = std::move(rhs.pool_);
     }
 
@@ -427,13 +413,13 @@ struct pool_allocator : public printable {
 
     pool_allocator<T>& operator=(const pool_allocator<T>& rhs) {
         HCE_MIN_METHOD_ENTER("operator=", std::string("const ") + rhs.to_string() + "&");
-        block_limit_ = rhs.block_limit_;
+        cache_size_ = rhs.cache_size_;
         return *this;
     }
 
     pool_allocator<T>& operator=(pool_allocator<T>&& rhs) {
         HCE_MIN_METHOD_ENTER("operator=", rhs.to_string() + "&&");
-        block_limit_ = std::move(rhs.block_limit_);
+        cache_size_ = std::move(rhs.cache_size_);
         pool_ = std::move(rhs.pool_);
         return *this;
     }
@@ -451,7 +437,8 @@ struct pool_allocator : public printable {
         T* t;
 
         if(n==1 && pool_.size()) [[likely]] { 
-            // prefer to retrieve from the pool
+            // prefer to retrieve from the pool, if all that is needed is a 
+            // single allocated value
             t = pool_.back();
             pool_.pop_back();
         } else [[unlikely]] { 
@@ -464,7 +451,7 @@ struct pool_allocator : public printable {
 
     /// deallocate a block of memory
     inline void deallocate(T* t, std::size_t n) {
-        if(n==1 && pool_.size() < block_limit_) [[likely]] { 
+        if(n==1 && pool_.size() < cache_size_) [[likely]] { 
             // pool the allocated memory for later
             pool_.push_back(t); 
         } else [[unlikely]] { 
@@ -484,7 +471,7 @@ struct pool_allocator : public printable {
     }
 
     /// return the pool size limit
-    inline size_t limit() const { return block_limit_; }
+    inline size_t limit() const { return cache_size_; }
 
     /// return the pool's available() count
     inline size_t available() const { return pool_.size(); }
@@ -493,7 +480,7 @@ struct pool_allocator : public printable {
     inline bool empty() const { return pool_.empty(); }
 
     /// return true if the pool is full, else false
-    inline bool full() const { return pool_.size() == block_limit_; }
+    inline bool full() const { return pool_.size() == cache_size_; }
 
     bool operator==(const pool_allocator<T>&) const noexcept { return true; }
     bool operator==(const hce::allocator<T>&) const noexcept { return false; }
@@ -503,8 +490,18 @@ struct pool_allocator : public printable {
     bool operator!=(const std::allocator<T>&) const noexcept { return true; }
 
 private:
-    size_t block_limit_;
-    std::vector<T*> pool_;
+    size_t cache_size_;
+
+    /* 
+     Use vector for amortized pool growth (grows in powers of 2). This limits 
+     memory usage for the pool itself instead of preallocating a pool up 
+     to the cache_size_.
+
+     This strikes the balance vectors are known for: efficient and fast, 
+     especially when internal reallocation is not necessary (in this case when 
+     the cache size is reached).
+     */
+    std::vector<T*> pool_; 
 };
 
 }

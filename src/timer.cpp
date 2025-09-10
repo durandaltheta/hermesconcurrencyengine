@@ -40,8 +40,8 @@ hce::timer::awaitable::awaitable() :
             hce::awt<bool>::interface>>(
                 slk_,
                 hce::awaitable::await::policy::defer_lock,
-                hce::awaitable::resumed::policy::release_lock,
-                hce::awaitable::resume::policy::guard_lock),
+                hce::awaitable::resumed::policy::unlocked,
+                hce::awaitable::resume::policy::lock),
     result_(false)
 { 
     HCE_MED_CONSTRUCTOR();
