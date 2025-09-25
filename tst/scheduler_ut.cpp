@@ -491,6 +491,7 @@ TEST(scheduler, migrate) {
     sch1->schedule(helper::op(sch1, sch2, schg));
 }
 
+/*
 TEST(coroutine, to_awt_void) {
     const size_t expected = 3;
     EXPECT_EQ(expected, test::scheduler::scope_awt_void<int>());
@@ -503,3 +504,4 @@ TEST(coroutine, to_awt_void) {
     EXPECT_EQ(expected, test::scheduler::scope_awt_void<std::string>());
     EXPECT_EQ(expected, test::scheduler::scope_awt_void<test::CustomObject>());
 }
+*/

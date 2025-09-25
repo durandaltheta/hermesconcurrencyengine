@@ -46,7 +46,7 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/circular_buffer.hpp
     ${HCE_INCLUDE_DIR}/list.hpp
     ${HCE_INCLUDE_DIR}/timer.hpp
-    ${HCE_INCLUDE_DIR}/synchronized_list.hpp
+    #${HCE_INCLUDE_DIR}/synchronized_list.hpp
     ${HCE_INCLUDE_DIR}/coroutine.hpp
     ${HCE_INCLUDE_DIR}/awaitable.hpp
     ${HCE_INCLUDE_DIR}/scheduler.hpp
@@ -92,8 +92,8 @@ endif()
 
 # Define the pairs of variable names and their default values
 set(PAIRS 
-# the default cache size of reusable allocations of a pool allocator
-        HCEPOOLALLOCATORDEFAULTCACHESIZE "64"
+# the default cache size of reusable allocations of pool allocators
+        HCEPOOLALLOCATORDEFAULTCACHESIZE "16"
 
 # Default configuration of scheduler reusable coroutine handles. A sane value 
 # (roughly equal or above the median count of executing coroutines during busy 

@@ -25,18 +25,12 @@ template <typename T, typename Allocator = hce::pool_allocator<T>>
 struct synchronized_list : public printable {
     using value_type = T;
 
-    synchronized_list() : 
+    synchronized_list(hce::spinlock* lk) : 
+        lk_(lk)
         closed_(false), 
         waiting_(false)
     { 
         HCE_MIN_CONSTRUCTOR(); 
-    }
-
-    synchronized_list(const Allocator& allocator) : 
-        closed_(false), 
-        waiting_(false),
-        list_(allocator) { 
-        HCE_MIN_CONSTRUCTOR(allocator); 
     }
     
     synchronized_list(const synchronized_list<T>&) = delete;
@@ -61,7 +55,7 @@ struct synchronized_list : public printable {
      @return the current length of the queue
      */
     inline size_t size() const { 
-        std::lock_guard<hce::spinlock> lk(lk_);
+        std::lock_guard<hce::spinlock> lk(*lk_);
         return list_.size();
     }
 
@@ -69,7 +63,7 @@ struct synchronized_list : public printable {
      @return true if empty, else false
      */
     inline bool empty() const { 
-        std::lock_guard<hce::spinlock> lk(lk_);
+        std::lock_guard<hce::spinlock> lk(*lk_);
         return list_.empty();
     }
 
@@ -83,7 +77,7 @@ struct synchronized_list : public printable {
         bool waiting = false;
 
         {
-            std::lock_guard<hce::spinlock> lk(lk_);
+            std::lock_guard<hce::spinlock> lk(*lk_);
 
             if(!closed_) {
                 closed_ = true;
@@ -99,7 +93,7 @@ struct synchronized_list : public printable {
      @return true if the queue is closed, else false
      */
     inline bool closed() { 
-        std::lock_guard<hce::spinlock> lk(lk_);
+        std::lock_guard<hce::spinlock> lk(*lk_);
         return closed_;
     }
 
@@ -116,7 +110,7 @@ struct synchronized_list : public printable {
         bool waiting = false; 
 
         {
-            std::lock_guard<hce::spinlock> lk(lk_);
+            std::lock_guard<hce::spinlock> lk(*lk_);
 
             // will immediately fail if synchronized_list is closed
             if(closed_) [[unlikely]] {
@@ -145,7 +139,7 @@ struct synchronized_list : public printable {
         bool waiting = false; 
 
         {
-            std::lock_guard<hce::spinlock> lk(lk_);
+            std::lock_guard<hce::spinlock> lk(*lk_);
 
             // will immediately fail if synchronized_list is closed
             if(closed_) [[unlikely]] {
@@ -221,7 +215,7 @@ struct synchronized_list : public printable {
      @return false if the queue is closed, else true 
      */
     inline bool pop(T& t) {
-        std::unique_lock<hce::spinlock> lk(lk_);
+        std::unique_lock<hce::spinlock> lk(*lk_);
 
         // will always succeed as long as operations are available
         while(!list_.size()) {
@@ -239,7 +233,7 @@ struct synchronized_list : public printable {
     }
 
 private:
-    mutable hce::spinlock lk_;
+    hce::spinlock* lk_;
     bool closed_;
     bool waiting_;
     std::condition_variable_any cv_;

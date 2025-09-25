@@ -170,26 +170,24 @@ TEST(coroutine, co_await_void) {
                         lk_,
                         hce::awaitable::await::policy::defer_lock,
                         hce::awaitable::resumed::policy::unlocked,
-                        hce::awaitable::resume::policy::lock),
+                        hce::awaitable::resume::policy::lock_responsible),
                 hdl_(hdl),
                 ready_(ready)
             { }
 
-            static inline hce::co<void>op1(std::vector<ai*> as) {
-                for(auto& a : as) {
+            static inline hce::co<void>op1(std::vector<ai*>* as) {
+                for(auto& a : *as) {
                     hce::awt<void> awt = hce::awt<void>(a);
                     EXPECT_TRUE(awt.valid());
                     co_await std::move(awt);
                 }
             }
 
-            inline bool on_ready() { 
+            inline void on_ready() { 
                 if(*ready_) {
                     *ready_ = false;
-                    return true;
-                } else {
-                    return false;
-                }
+                    this->set_ready();
+                } 
             }
 
             inline void on_resume(void* m) { }
@@ -216,7 +214,7 @@ TEST(coroutine, co_await_void) {
 
         as.emplace_back(new ai(&hdl, &flag));
         as.emplace_back(new ai(&hdl, &flag));
-        co = ai::op1(as);
+        co = ai::op1(&as);
 
         EXPECT_EQ(nullptr, hdl.address());
         EXPECT_TRUE(co);
@@ -259,15 +257,15 @@ TEST(coroutine, co_await_int) {
                         lk_,
                         hce::awaitable::await::policy::defer_lock,
                         hce::awaitable::resumed::policy::unlocked,
-                        hce::awaitable::resume::policy::lock),
+                        hce::awaitable::resume::policy::lock_responsible),
                 hdl_(hdl),
                 ready_(ready),
                 i_(i)
             { }
 
-            static inline hce::co<void>op1(std::vector<ai*> as) {
+            static inline hce::co<void>op1(std::vector<ai*>* as) {
                 int i=0;
-                for(auto& a : as) {
+                for(auto& a : *as) {
                     hce::awt<int> awt = hce::awt<int>(a);
                     EXPECT_TRUE(awt.valid());
                     int result_i = co_await std::move(awt);
@@ -276,13 +274,11 @@ TEST(coroutine, co_await_int) {
                 }
             }
 
-            inline bool on_ready() { 
+            inline void on_ready() { 
                 if(*ready_) {
                     *ready_ = false;
-                    return true;
-                } else {
-                    return false;
-                }
+                    this->set_ready();
+                } 
             }
 
             inline void on_resume(void* m) { }
@@ -312,7 +308,7 @@ TEST(coroutine, co_await_int) {
 
         as.emplace_back(new ai(&hdl, &flag, i++));
         as.emplace_back(new ai(&hdl, &flag, i++));
-        co = ai::op1(as);
+        co = ai::op1(&as);
 
         EXPECT_EQ(nullptr, hdl.address());
         EXPECT_TRUE(co);
@@ -355,30 +351,30 @@ TEST(coroutine, co_await_string) {
                         lk_,
                         hce::awaitable::await::policy::defer_lock,
                         hce::awaitable::resumed::policy::unlocked,
-                        hce::awaitable::resume::policy::lock),
+                        hce::awaitable::resume::policy::lock_responsible),
                 hdl_(hdl),
                 ready_(ready),
                 s_(std::to_string(i))
             { }
 
-            static inline hce::co<void>op1(std::vector<ai*> as) {
+            static inline hce::co<void> op1(std::vector<ai*>* as) {
                 int i=0;
-                for(auto& a : as) {
+                for(auto& a : *as) {
                     hce::awt<std::string> awt = hce::awt<std::string>(a);
                     EXPECT_TRUE(awt.valid());
+                    HCE_INFO_FUNCTION_BODY("TEST::co_await_string::op1","before, awaited:",awt.implementation().state() & hce::awaitable::awaited_mask);
                     std::string result_i = co_await std::move(awt);
+                    HCE_INFO_FUNCTION_BODY("TEST::co_await_string::op1","after, awaited:",awt.implementation().state() & hce::awaitable::awaited_mask);
                     EXPECT_EQ(std::to_string(i), result_i);
                     ++i;
                 }
             }
 
-            inline bool on_ready() { 
+            inline void on_ready() { 
                 if(*ready_) {
                     *ready_ = false;
-                    return true;
-                } else {
-                    return false;
-                }
+                    this->set_ready();
+                } 
             }
 
             inline void on_resume(void* m) { }
@@ -408,7 +404,7 @@ TEST(coroutine, co_await_string) {
 
         as.emplace_back(new ai(&hdl, &flag, i++));
         as.emplace_back(new ai(&hdl, &flag, i++));
-        co = ai::op1(as);
+        co = ai::op1(&as);
 
         EXPECT_EQ(nullptr, hdl.address());
         EXPECT_TRUE(co);

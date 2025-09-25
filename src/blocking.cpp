@@ -75,33 +75,80 @@ void hce::blocking::clear_worker_cache() {
 }
 
 hce::blocking::worker::worker() : 
-    thd_(hce::blocking::worker::run_, &operations_) 
+    thd_(hce::blocking::worker::run_, this) 
 { 
     HCE_LOW_CONSTRUCTOR();
 }
 
 hce::blocking::worker::~worker() { 
     HCE_LOW_DESTRUCTOR(); 
-    operations_.close();
+    bool waiting = false;
+
+    {
+        std::lock_guard<hce::spinlock> lk(lk_);
+
+        // close the worker
+        closed_ = true;
+        waiting = waiting_;
+        waiting_ = false;
+    }
+
+    if(waiting) [[likely]] { cv_.notify_one(); }
+
     thd_.join();
+
+    // ensure allocated memory is destroyed properly
+    while(list_.size()) [[unlikely]] {
+        auto th = list_.front();
+        list_.pop();
+        th->hce::thunk::~thunk();
+        operation_pool_.deallocate(th, 1);
+    }
 }
 
 std::string hce::blocking::worker::info_name() { return "hce::blocking::worker"; }
 std::string hce::blocking::worker::name() const { return hce::blocking::worker::info_name(); }
 
-void hce::blocking::worker::schedule(std::unique_ptr<hce::thunk>&& operation) { 
-    operations_.push_back(std::move(operation));
+void hce::blocking::worker::run_(hce::blocking::worker* wkr) {
+    hce::thunk* operation = nullptr;
+
+    while(true) {
+        wkr->get_operation_(operation);
+
+        if(operation) [[likely]] {
+            // execute operations sequentially until recv() returns false
+            (*operation)();
+        } else {
+            // end the thread
+            break;
+        }
+    }
 }
 
-void hce::blocking::worker::run_(
-    hce::synchronized_list<std::unique_ptr<hce::thunk>>* operations) 
-{
-    std::unique_ptr<hce::thunk> operation;
-
-    while(operations->pop(operation)) [[likely]] {
-        // execute operations sequentially until recv() returns false
-        (*operation)();
+void hce::blocking::worker::get_operation_(hce::thunk*& old_operation) {
+    if(old_operation) [[likely]] {
+        old_operation->hce::thunk::~thunk();
+        lk_.lock();
+        operation_pool_.deallocate(old_operation, 1);
+        old_operation = nullptr;
+    } else {
+        lk_.lock();
     }
+
+    // will always succeed as long as operations are available
+    while(!list_.size()) {
+        if(closed_) [[unlikely]] {
+            lk_.unlock();
+            return; // need to exit thread
+        } else [[likely]] {
+            waiting_ = true;
+            cv_.wait(lk_);
+        }
+    }
+
+    old_operation = std::move(list_.front());
+    list_.pop();
+    lk_.unlock();
 }
 
 // retrieve a worker thread from the service to execute blocking operations on

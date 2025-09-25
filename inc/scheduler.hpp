@@ -142,8 +142,8 @@ struct joiner :
         hce::awaitable::spinlock_lockable<
             typename hce::awt<T>::interface>(
                 hce::awaitable::await::policy::defer_lock,
-                hce::awaitable::resumed::policy::unlocked,
-                hce::awaitable::resume::policy::lock),
+                hce::awaitable::resumed::policy::unlocked, 
+                hce::awaitable::resume::policy::lock_responsible),
         address_(co.address())
     { 
         HCE_TRACE_CONSTRUCTOR(co);
@@ -164,7 +164,7 @@ struct joiner :
 
     inline void on_resume(void* m) { 
         HCE_TRACE_METHOD_ENTER("on_resume",m);
-        this->ready(true);
+        this->set_ready();
 
         if(m) [[likely]] { 
             // move the unique pointer from the promise to this object
@@ -227,7 +227,7 @@ struct joiner<void> :
             typename hce::awt<void>::interface>(
                 hce::awaitable::await::policy::defer_lock,
                 hce::awaitable::resumed::policy::unlocked,
-                hce::awaitable::resume::policy::lock),
+                hce::awaitable::resume::policy::lock_responsible),
         address_(co.address())
     { 
         HCE_TRACE_CONSTRUCTOR(co);
@@ -243,7 +243,7 @@ struct joiner<void> :
 
     inline std::string name() const { return joiner<void>::info_name(); }
     inline void* address() const { return address_; }
-    inline void on_resume(void* m) { this->ready(true); }
+    inline void on_resume(void* m) { this->set_ready(); }
 
 private:
     static inline void cleanup(hce::cleanup::data& data) { 
@@ -421,7 +421,6 @@ struct scheduler : public printable {
 
         virtual ~joiner() { 
             HCE_MIN_DESTRUCTOR(); 
-            this->clean();
         }
 
         static inline std::string info_name() { 

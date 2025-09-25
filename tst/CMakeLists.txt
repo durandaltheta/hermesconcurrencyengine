@@ -16,7 +16,7 @@ set(HCE_UT_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/allocator_ut.cpp 
     ${CMAKE_CURRENT_LIST_DIR}/circular_buffer_ut.cpp
     ${CMAKE_CURRENT_LIST_DIR}/list_ut.cpp 
-    ${CMAKE_CURRENT_LIST_DIR}/synchronized_list_ut.cpp 
+    #${CMAKE_CURRENT_LIST_DIR}/synchronized_list_ut.cpp 
     ${CMAKE_CURRENT_LIST_DIR}/id_ut.cpp
     ${CMAKE_CURRENT_LIST_DIR}/coroutine_ut.cpp
     ${CMAKE_CURRENT_LIST_DIR}/scheduler_ut.cpp

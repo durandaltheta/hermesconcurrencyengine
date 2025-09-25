@@ -20,12 +20,20 @@ namespace hce {
 /**
  @brief a mutex capable of synchronizing any combination of coroutines and non-coroutines 
 
+ This object can be used normally by non-coroutines, replacing `std::mutex`.
+
+ Calling `co_await` in a coroutine on `hce::mutex::lock()` is efficient and safe.
+
+ It may be required to use `hce::block()` when use with 
+ `std::condition_variable_any` (or `std::unique_lock`) is required. 
+
  It should be noted that other high level mechanisms (`hce::join()`, 
- `hce::scope()`, `hce::channel<T>`, etc.) may be more useful (and more 
- efficient) than implementing custom mechanisms with `hce::mutex`. `hce::mutex` 
+ `hce::channel<T>`, etc.) may be more useful (and more efficient) than 
+ implementing custom mechanisms with `hce::mutex`. `hce::mutex` 
  is most useful when integrating this library into existing user code.
  */
 struct mutex : public printable {
+    /// thrown when unlock() is called on an unlocked mutex
     struct already_unlocked_exception : public std::exception {
         already_unlocked_exception(mutex* m);
         const char* what() const noexcept;
@@ -33,7 +41,10 @@ struct mutex : public printable {
         const std::string estr;
     };
 
-    mutex();
+    /// optionally configure the internal blocked queue pool_allocator 
+    mutex(hce::pool_allocator<hce::awaitable::interface*> alloc = 
+            hce::pool_allocator<hce::awaitable::interface*>());
+
     mutex(const mutex&) = delete;
     mutex(mutex&&) = delete;
     virtual ~mutex();
@@ -62,7 +73,7 @@ private:
         acquire(hce::mutex* parent);
 
         // returns true if acquired, else we need to suspend
-        bool on_ready();
+        void on_ready();
 
         // only returns when acquired
         void on_resume(void* m);
@@ -75,7 +86,8 @@ private:
 
     hce::spinlock slk_;
     bool acquired_;
-    hce::list<acquire*,hce::pool_allocator<acquire*>> blocked_queue_;
+    hce::list<hce::awaitable::interface*,
+              hce::pool_allocator<hce::awaitable::interface*>> blocked_queue_;
     friend struct acquire;
 };
 

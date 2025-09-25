@@ -41,7 +41,7 @@ hce::timer::awaitable::awaitable() :
                 slk_,
                 hce::awaitable::await::policy::defer_lock,
                 hce::awaitable::resumed::policy::unlocked,
-                hce::awaitable::resume::policy::lock),
+                hce::awaitable::resume::policy::lock_responsible),
     result_(false)
 { 
     HCE_MED_CONSTRUCTOR();
@@ -49,14 +49,6 @@ hce::timer::awaitable::awaitable() :
 
 hce::timer::awaitable::~awaitable(){
     HCE_MED_DESTRUCTOR();
-    this->clean();
-
-    if(!ready()) {
-        std::stringstream ss;
-        ss << *this << "was not awaited nor resumed";
-        HCE_FATAL_METHOD_BODY("~awaitable",ss.str());
-        std::terminate();
-    }
 }
 
 std::string hce::timer::awaitable::info_name() { 
@@ -69,7 +61,7 @@ std::string hce::timer::awaitable::name() const {
 
 void hce::timer::awaitable::on_resume(void* m) { 
     HCE_MED_METHOD_ENTER("on_resume",m);
-    this->ready(true);
+    this->set_ready();
     result_ = (bool)m; 
 }
 
