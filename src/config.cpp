@@ -49,8 +49,8 @@ hce::config::threadpool::algorithm_function_ptr hce::config::threadpool::algorit
     return hce::service<hce::lifecycle>::get().get_config().tp.algorithm;
 }
 
-size_t hce::config::blocking::reusable_block_worker_cache_size() {
-    return hce::service<hce::lifecycle>::get().get_config().blk.reusable_block_worker_cache_size;
+size_t hce::config::blocking::default_reusable_block_worker_cache_size() {
+    return hce::service<hce::lifecycle>::get().get_config().blk.default_reusable_block_worker_cache_size;
 }
 
 int hce::config::timer::thread_priority() {

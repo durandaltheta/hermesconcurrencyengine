@@ -9,8 +9,10 @@
     
 static thread_local hce::scheduler* tl_hce_this_scheduler = nullptr;
 
+// a thread local pointing to a stack variable which holds the currently 
+// available coroutine queue
 static thread_local std::unique_ptr<hce::list<std::coroutine_handle<>>>* 
-tl_hce_scheduler_queue = nullptr;
+tl_hce_this_scheduler_local_queue = nullptr;
 
 hce::scheduler::lifecycle::manager::manager() : state_(executing) { 
     HCE_HIGH_CONSTRUCTOR(); 
@@ -223,7 +225,7 @@ hce::scheduler::state hce::scheduler::status() const {
     state s;
 
     {
-        std::lock_guard<spinlock> lk(lk_);
+        std::lock_guard<hce::spinlock> lk(lk_);
         s = state_;
     }
 
@@ -235,7 +237,7 @@ size_t hce::scheduler::scheduled_count() const {
     size_t c;
 
     {
-        std::lock_guard<spinlock> lk(lk_);
+        std::lock_guard<hce::spinlock> lk(lk_);
         c = batch_size_ + coroutine_queue_->size();
     }
     
@@ -273,12 +275,13 @@ void hce::scheduler::schedule_(std::coroutine_handle<> h) {
     if(this == tl_hce_this_scheduler) [[likely]] {
         HCE_TRACE_METHOD_BODY("schedule_","pushing ",h," onto local queue");
         // scheduling inside call to executing scheduler::run(), can do a 
-        // lockfree push to local queue 
-        (*tl_hce_scheduler_queue)->push_back(h);
+        // synchronous lockfree push to local queue on the current stack
+        (*tl_hce_this_scheduler_local_queue)->push_back(h);
     } else [[unlikely]] {
         HCE_TRACE_METHOD_BODY("schedule_","pushing ",h," onto remote queue");
 
-        std::lock_guard<spinlock> lk(lk_);
+        // need to lock to schedule on the object's synchronized queue member
+        std::lock_guard<hce::spinlock> lk(lk_);
 
         if(state_ == halted) [[unlikely]] {
             throw scheduler_halted_exception(this);
@@ -302,7 +305,7 @@ void hce::scheduler::suspend_() {
 }
 
 void hce::scheduler::resume_() {
-    std::lock_guard<spinlock> lk(lk_);
+    std::lock_guard<hce::spinlock> lk(lk_);
    
     if(state_ == suspended) { 
         state_ = executing; 
@@ -367,11 +370,11 @@ void hce::scheduler::run() {
         { 
             hce::logger::thread_log_level(loglevel);
             tl_hce_this_scheduler = s;
-            tl_hce_scheduler_queue = q;
+            tl_hce_this_scheduler_local_queue = q;
         }
 
         ~scoped_locals() {
-            tl_hce_scheduler_queue = nullptr;
+            tl_hce_this_scheduler_local_queue = nullptr;
             tl_hce_this_scheduler = nullptr;
             hce::logger::thread_log_level(prev_loglevel_);
         }
@@ -397,7 +400,7 @@ void hce::scheduler::run() {
     };
 
     // acquire the lock
-    std::unique_lock<spinlock> lk(lk_);
+    std::unique_lock<hce::spinlock> lk(lk_);
 
     try {
         // if halted return immediately
@@ -440,6 +443,9 @@ void hce::scheduler::run() {
 
                     // scope any local variables
                     {
+                        // cache the count in the queue so exactly that count
+                        // of coroutines will be evaluated before rechecking 
+                        // state 
                         size_t count = local_queue->size();
 
                         // this object is scoped to enable RAII of handles

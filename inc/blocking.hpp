@@ -22,12 +22,12 @@ namespace config {
 namespace blocking {
 
 /**
- @brief the count of reusable worker blocking threads shared by the process 
+ @brief the default count of reusable worker blocking threads shared by the process 
 
  Can be increased if `hce::block()` calls are made frequently to avoid having to 
  launch new system threads by reusing old ones. 
  */
-size_t reusable_block_worker_cache_size();
+size_t default_reusable_block_worker_cache_size();
 
 }
 }
@@ -169,7 +169,7 @@ struct blocking : public hce::printable {
 
     /**
      This value is determined by:
-     hce::config::blocking::reusable_block_worker_cache_size()
+     hce::config::blocking::default_reusable_block_worker_cache_size()
 
      This value represents the process-wide limit of reusable worker threads 
      maintained by this `service` object. This value only represents the count 
@@ -181,12 +181,17 @@ struct blocking : public hce::printable {
     size_t worker_cache_size() const;
 
     /**
-     @brief resize the worker cache's maximum reusable worker count
+     @brief resize the worker cache's maximum reusable worker count 
+
+     This allows runtime increase/decrease to the number of blocking worker
+     threads that are cached for reuse.
+     
+     @param new_count the new minimum count of worker threads to reuse
      */
-    void worker_cache_size(size_t);
+    void worker_cache_size(size_t new_count);
 
     /**
-     @return the total count of worker threads spawned for blocking operations in the entire process
+     @return the current total count of worker threads spawned for blocking operations in the entire process
      */
     size_t worker_count() const;
 
@@ -207,9 +212,9 @@ struct blocking : public hce::printable {
      not called from a coroutine, just assign the awaitable to a variable of the 
      resulting type). 
 
-     In a coroutine (with the high level `hce::blocking::block()` call):
+     In a coroutine (with the high level `hce::block()` call):
      ```
-     T result = co_await hce::blocking::block(my_function_returning_T, arg1, arg2);
+     T result = co_await hce::block(my_function_returning_T, arg1, arg2);
      ```
 
      If the caller is already executing in a thread managed by another call to 

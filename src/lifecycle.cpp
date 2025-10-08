@@ -130,7 +130,7 @@ hce::lifecycle::config::threadpool::threadpool() :
 { }
 
 hce::lifecycle::config::blocking::blocking() :
-     reusable_block_worker_cache_size(HCEREUSABLEBLOCKWORKERCACHESIZE)
+     default_reusable_block_worker_cache_size(HCEREUSABLEBLOCKWORKERCACHESIZE)
 { }
 
 hce::lifecycle::config::timer::timer() :

@@ -123,7 +123,7 @@ struct lifecycle : public service<lifecycle>, public hce::printable {
              Defaults set by compiler define(s):
              HCEPROCESSREUSABLEBLOCKWORKERPROCESSCACHE
              */
-            size_t reusable_block_worker_cache_size;
+            size_t default_reusable_block_worker_cache_size;
         };
 
         struct timer {
@@ -191,18 +191,19 @@ struct lifecycle : public service<lifecycle>, public hce::printable {
     /**
      @brief set the hce framework's global configuration and allocate, construct and start the framework 
 
-     Argument `hce::lifecycle::config` configures the process-wide framework 
+     Argument `hce::lifecycle::config` sets the process-wide framework 
      configuration, which is utilized by all `hce::config::` namespace 
-     operations. Access to the process-wide configuration is lockless.
+     operations. Access to the process-wide configuration is lockless, because 
+     it is read only after being set by this function.
 
      The returned lifecycle object starts the hce framework and manages its 
      memory. When the returned lifecycle object goes out scope the hce framework 
      will be shutdown and destroyed. 
 
      All other features rely on this object staying in existence. Therefore, all 
-     launched operations (*INCLUDING* all `hce::memory::` based deallocations) 
-     must complete and join before this object can safely go out of existence. 
-     Failure to do this can cause memory exceptions or deadlock.
+     launched operations must complete and join before this object can safely go 
+     out of existence. Failure to do this can cause memory exceptions or 
+     deadlock.
 
      There can only be one lifecycle in existence at a time. If this is called 
      again while the first one still exists, the process will exit. It is also 

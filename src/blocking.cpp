@@ -3,7 +3,7 @@
 hce::blocking::manager::manager() :
     blocking_(
         new hce::blocking(
-            hce::config::blocking::reusable_block_worker_cache_size()))
+            hce::config::blocking::default_reusable_block_worker_cache_size()))
 {
     HCE_HIGH_CONSTRUCTOR();
 }
