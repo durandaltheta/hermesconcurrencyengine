@@ -13,7 +13,7 @@ size_t block_T() {
     const std::string fname = hce::type::templatize<T>("block_T");
     size_t success_count = 0;
     const size_t reusable_block_worker_cache_size = 
-        hce::config::blocking::reusable_block_worker_cache_size();
+        hce::config::blocking::default_reusable_block_worker_cache_size();
 
     auto post_block_expected_worker_count = [&](size_t blocks_executed) {
         return reusable_block_worker_cache_size < blocks_executed
@@ -453,7 +453,7 @@ size_t block_worker_cache_size_T(const size_t cache_size) {
     HCE_INFO_FUNCTION_ENTER(fname, cache_size);
     size_t success_count = 0;
     const size_t reusable_block_worker_cache_size = 
-        hce::config::blocking::reusable_block_worker_cache_size();
+        hce::config::blocking::default_reusable_block_worker_cache_size();
 
     EXPECT_EQ(reusable_block_worker_cache_size, 
               hce::service<hce::blocking::manager>::get().blocking().worker_cache_size());

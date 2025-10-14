@@ -59,9 +59,8 @@ private:
         void* install; /// data pointer provided to install()
     };
 
-    // Provide the first entry as an optimization, assuming if an object 
-    // implements cleanup, it is very likely to need at least one node. In this 
-    // default case, avoids an unnecessary allocation/deallocation.
+    // Do not allocate the first entry as an optimization, assuming if an object 
+    // implements cleanup, it is very likely to need at least one node. 
     node head_; 
     node* list_;
 };

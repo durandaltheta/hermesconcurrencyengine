@@ -57,7 +57,7 @@ void hce::mutex::unlock() {
 
     if(acquired_) [[likely]] {
         if(blocked_queue_.size()) {
-            blocked_queue_.front()->resume(nullptr);
+            blocked_queue_.front()->notify(nullptr);
             blocked_queue_.pop();
         } else {
             acquired_ = false;
@@ -73,19 +73,22 @@ hce::mutex::acquire::acquire(hce::mutex* parent) :
             hce::spinlock,
             hce::awt<void>::interface>>(
                 parent->slk_,
-                hce::awaitable::await::policy::defer_lock,
-                hce::awaitable::resumed::policy::unlocked,
-                hce::awaitable::resume::policy::lock_responsible),
-    parent_(parent) 
+                (uint8_t)hce::awaitable::await::policy::defer_lock |
+                (uint8_t)hce::awaitable::resumed::policy::unlocked |
+                (uint8_t)hce::awaitable::notify::policy::lock_responsible),
+    parent_(parent),
+    ready_(false)
 { }
 
-void hce::mutex::acquire::on_ready() { 
+bool hce::mutex::acquire::on_ready() { 
     if(parent_->lock_or_enqueue_blocked_(this)) {
-        this->set_ready();
+        ready_ = true;
     }
+
+    return ready_;
 }
 
-void hce::mutex::acquire::on_resume(void* m) { }
+void hce::mutex::acquire::on_notify(void* m) { }
 
 bool hce::mutex::lock_or_enqueue_blocked_(hce::mutex::acquire* acq) {
     if(acquired_) [[unlikely]] {

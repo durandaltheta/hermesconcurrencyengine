@@ -94,6 +94,11 @@ private:
 /**
  @brief `co_await` to suspend execution and allow other coroutines to run. 
 
+ To temporarily suspend to caller of coroutine `resume()`:
+ ```
+ int i = co_await hce::yield<int>(3); // i == 3 when coroutine resumes
+ ```
+
  This is a complete awaitable for usage with the `co_await` keyword.
 
  This object is used to suspend execution to the caller of `coroutine::resume()` 
@@ -109,11 +114,6 @@ private:
  If used by non-coroutines no suspend will occur, and the value is returned 
  immediately. Unlike `awt<T>`, which requires an implementation, this object 
  can be `co_await`ed directly.
-
- To temporarily suspend to caller of coroutine `resume()`:
- ```
- int i = co_await hce::yield<int>(3); // i == 3 when coroutine resumes
- ```
  */
 template <typename T>
 struct yield : public detail::awaitable::yield {
@@ -177,27 +177,58 @@ struct yield<void> : public detail::awaitable::yield {
  by another object (IE, `hce::awt<T>`) which implements the `await_resume()` 
  method.
 
- `hce::awaitable` objects are transient, they are not copiable and are intended 
- to not stay in existence long. Their intended usage is to either `co_await` the 
- result (if in a coroutine), immediately convert to output `T` (or let the 
- awaitable go out of scope, blocking the thread or the operation completes).
+ `hce::awaitable` objects are transient, they are not copiable (though they can 
+ be moved) and are intended to stay in existence briefly. Their intended usage 
+ is to either `co_await` the result (if in a coroutine), immediately convert to 
+ output `T` (or let the awaitable go out of scope, which blocks the thread or 
+ the operation completes).
 
  This object manages an implementation of a pure virtual interface. It does 
- this as a type erasure strategy that allows for maintenance of a single unique 
- pointer type. It can be a bit awkward to write new implementations, but the 
- higher level objects and utilities in this library should accomodate most user 
- needs without requiring the user to implement their own.
+ this as a type erasure strategy that allows for maintenance of a single pointer 
+ type. It can be a bit awkward to write new implementations, but the higher 
+ level objects and utilities in this library which implement awaitables should 
+ accomodate most user needs without requiring the user to implement their own.
  */
 struct awaitable : public printable {
-    // awaitable::interface::state() bit masks
-    static constexpr uint8_t locked_mask = 1;
-    static constexpr uint8_t awaited_mask = 1 << 1;
-    static constexpr uint8_t suspended_mask = 1 << 2;
-    static constexpr uint8_t is_coroutine_mask = 1 << 3;
-    static constexpr uint8_t await_policy_mask = 1 << 4;
-    static constexpr uint8_t resumed_policy_mask = 1 << 5;
-    static constexpr uint8_t resume_policy_mask = 1 << 6;
-    // bit 7 is free
+    /// awaitable::interface::state() bit masks 
+    struct masks {
+        /// holds the ready-only await locking policy
+        static constexpr uint8_t await_policy = 1;
+
+        /// holds the ready-only resumed locking policy
+        static constexpr uint8_t resumed_policy = 1 << 1;
+
+        /// holds the ready-only resume locking policy
+        static constexpr uint8_t notify_policy = 1 << 2;
+
+        /**
+         Indicates if the awaitable interface is locked. Reading this bit is 
+         only useful internally for determing cleanup behavior when an awaitable 
+         is immediately ready or after it has been notified. IE, it is used to 
+         enforce the resumed policy.
+         */
+        static constexpr uint8_t locked = 1 << 3;
+
+        /**
+         Indicates if the awaitable has ever been awaited. This bit is only 
+         ever read or written by the awaiter.
+         */
+        static constexpr uint8_t awaited = 1 << 4;
+
+        /// indicates if the awaiter is suspended
+        static constexpr uint8_t suspended = 1 << 5;
+
+        /**
+         Bit indicates if the suspended awaiter is a coroutine 
+
+         This bit only has meaning if the suspended bit is 1. This bit set to 1 
+         means its a suspended coroutine, 0 means it is a non-coroutine 
+         (thread).
+         */
+        static constexpr uint8_t is_coroutine = 1 << 6;
+
+        // bit 7 is free 
+    };
     
     struct await {
         /** 
@@ -206,7 +237,7 @@ struct awaitable : public printable {
          */
         enum policy {
             defer_lock = 0x0, //< assume the lock is unlocked but lock it when necessary
-            adopt_lock = await_policy_mask //< assume the lock is already locked
+            adopt_lock = masks::await_policy //< assume the lock is already locked
         };
     };
 
@@ -216,20 +247,20 @@ struct awaitable : public printable {
          control when returning from `co_await`.
          */
         enum policy {
-            unlocked = 0x0, //< lock is not held when awaiter resumes
-            locked = resumed_policy_mask //< lock is held when awaiter resumes
+            unlocked = 0x0, //< lock is not held after awaiter resumes
+            locked = masks::resumed_policy //< lock is held when awaiter resumes
         };
     };
 
-    struct resume {
+    struct notify {
         /**
          Determines how locking is accomplished by a caller of 
-         hce::awaitable::interface::resume().
+         hce::awaitable::interface::notify().
 
-         This policy's purpose is to handle the cases where resume()'s 
+         This policy's purpose is to handle the cases where notify()'s 
          calling code either:
          1) Does no explicit synchronization, in which case `lock_responsible` 
-         should be used so the resume() call is internally synchronized.
+         should be used so the notify() call is internally synchronized.
          2) The calling code is managing ALL locking and unlocking 
          synchronization, in which case `lock_exempt` should be used. 
 
@@ -237,27 +268,27 @@ struct awaitable : public printable {
          must closely interact with a parent object, as is the case in channels.
          */
         enum policy {
-            lock_exempt = 0x0, //< do not manage lock during resume() 
-            lock_responsible = resume_policy_mask //< lock and unlock during resume()
+            lock_exempt = 0x0, //< do not manage lock during notify() 
+            lock_responsible = masks::notify_policy //< lock and unlock during notify()
         };
     };
 
     /**
      @brief pure virtual single-use interface for an awaitable's implementation 
 
-     Implements logic required by an awaitable to in a simultaneously 
+     Implements logic required by an awaitable to be used in a simultaneously 
      coroutine-safe and thread-safe way. 
 
      The pure virtual functions are called by a descendant implementation of 
      `hce::awaitable` by the compiler when the `co_await` keyword is used on it. 
-     That is, these functions trigger the virtual implementations:
+     That is, these functions internally call virtual interface implementations:
      - bool await_ready() 
      - void await_suspend(std::coroutine_handle<> h)
      - void await_resume()
 
      The following are called by completed operations to notify the awaitable 
-     it can unblock:
-     - void resume()
+     it is done and can unblock:
+     - void notify(void*)
 
      `hce::awaitable::interface` is not inheritted directly. Instead, 
      implementations should inherit `hce::awt<T>::interface`, which implements 
@@ -275,14 +306,14 @@ struct awaitable : public printable {
      `to_destination()` can be implemented by:
      - `hce::scheduler::reschedule<INTERFACE>`
 
-     `info_name()`/`name()`/`deleter()`/`on_ready()` have default 
-     implementations that can be overridden.
+     `info_name()`/`name()`/`deleter()` have default implementations that can be 
+     overridden.
 
-     In the various partial implementations `INTERFACE` is type that the
+     In the various partial implementations `INTERFACE` is the type that the
      template must inherit. All remaining optional arguments `as...` will be 
      passed to type `INTERFACE`'s contructor. 
 
-     Putting it all together, here's an example declaration of a of an 
+     Putting it all together, here's an example declaration of a of a
      complete `hce::awt<T>::interface` implementation:
      ```
      struct my_awaitable : public 
@@ -295,7 +326,7 @@ struct awaitable : public printable {
          static std::string info_name();
          std::string name() const;
          bool on_ready();
-         void on_resume(void* m);
+         void on_notify(void* m);
          bool get_result();
 
      private:
@@ -313,7 +344,7 @@ struct awaitable : public printable {
                      // down to the `hce::awt<bool>::interface` constructor.
                      hce::awaitable::await::policy::defer_lock,
                      hce::awaitable::resumed::policy::unlocked,
-                     hce::awaitable::resume::policy::lock_responsible),
+                     hce::awaitable::notify::policy::lock_responsible),
          result_(false)
      { }
 
@@ -325,10 +356,13 @@ struct awaitable : public printable {
      }
 
      bool my_awaitable::on_ready() {
+         // this would be were the implementation would be responsible for 
+         // registering its pointer to some other object or location to be 
+         // resumed sometime in the future
          return false; // never ready immediately
      }
 
-     void my_awaitable::on_resume(void* m) { 
+     void my_awaitable::on_notify(void* m) { 
          result_ = (bool)m; // interpret the void* in some implicitly agreed way
      }
 
@@ -339,8 +373,11 @@ struct awaitable : public printable {
         /// function type used for deleting interface instance
         typedef void (*deleter_t)(interface*);
 
-        /// initialize the interface with the given policies
-        interface(await::policy ap, resumed::policy rdp, resume::policy rp);
+        /**
+         Initialize the interface with the given policies. Policy bits are read 
+         only once constructed.
+         */
+        interface(uint8_t policy_bits);
         interface(const interface& rhs) = delete;
         interface(interface&& rhs) = delete;
 
@@ -418,38 +455,49 @@ struct awaitable : public printable {
         hce::awaitable::await::policy await_policy() const;
 
         /*
-         This value is necessary to introspect when determining if to lock 
-         during a call to `resume()`.
-         */
-        hce::awaitable::resume::policy resume_policy() const;
-
-        /*
          This value is necessary to introspect when determining how lock() needs
          to be called by awoken coroutine/thread from await_suspend.
          */
         hce::awaitable::resumed::policy resumed_policy() const;
 
+        /*
+         This value is necessary to introspect when determining if to lock 
+         during a call to `notify()`.
+         */
+        hce::awaitable::notify::policy notify_policy() const;
+
         /**
-         @brief unblock and resume a suspended operation 
+         @brief notify an operation is ready to resume from suspension
 
          This should be called by a different coroutine or thread.
 
          Calling this method will unblock a suspended thread or coroutine 
          (`wait()` and `co_await` will return to its caller). 
 
-         The argument void* is passed to the implementation's on_resume(), which 
-         is responsible to interpret it's meaning, allowing arbitary 
-         communication from the caller of resume() the suspended operation.
+         The argument void* is passed to the implementation's on_notify(), which 
+         is responsible to interpret its meaning, allowing arbitary 
+         communication from the caller of notify() the suspended operation.
 
-         @param m arbitary memory passed to on_resume()
+         The behavior of locking when calling this method is determined by the 
+         configured `hce::awaitable::notify::policy`
+
+         WARNING: Consideration must be given to how `on_ready()` is written if 
+         it is possible for this to be called before `on_ready()` is called. In 
+         such a case, it is typically necessary for `on_ready()` to return 
+         `true`.
+
+         WARNING: It is an ERROR to call this method twice. Once notify()ed, any 
+         pointer to the interface should be treated as volatile memory.
+
+         @param m arbitary memory passed to notify()
          */
-        void resume(void* m);
+        void notify(void* m);
 
         /**
          @brief acquire the awaitable's lock  
 
          Should only be considered for use when:
-         1) `resume()` is called while `resume::policy::lock_exempt` is set
+         1) `notify()` is called while `notify::policy::lock_exempt` is set
          2) by callers of `co_await`/`wait()` when `await::policy::adopt_lock` is set.
          */
         void lock();
@@ -458,7 +506,7 @@ struct awaitable : public printable {
          @brief release the awaitable's lock  
 
          Should only be considered for use when:
-         1) `resume()` is called while `resume::policy::lock_exempt` is set
+         1) `notify()` is called while `notify::policy::lock_exempt` is set
          2) by callers of `co_await`/`wait()` when `resumed::policy::locked` is set.
          */
         void unlock();
@@ -494,24 +542,15 @@ struct awaitable : public printable {
         virtual void unlock_impl() = 0;
 
         /**
-         Underlying implementation to pass a coroutine to a destination which 
-         will resume it.
-
-         This is called during resume() with the suspended coroutine handle, and
-         is responsible for scheduling the handle for execution. IE, the handle 
-         is ready to have its `resume()` method called.
-
-         The lock is unlocked during this call.
-         */
-        virtual void to_destination(std::coroutine_handle<>) = 0;
-
-        /**
          @brief code called during `await_ready()` 
 
          The lock will be held while calling this method.
 
          This is where code needed to determine if the implementation needs to 
-         suspend should be placed.
+         suspend should be placed. If the operation returns `false`, indicating 
+         it is is not ready, this method is responsible for passing the 
+         interface implementation's pointer to some location which can 
+         `notify()` when to resume.
 
          @return true if the operation is ready immediately, false if needs to suspend
          */
@@ -525,24 +564,44 @@ struct awaitable : public printable {
          has taken responsibility for any running coroutine handle.
 
          This operation is where any code which needs to execute just before 
-         suspending should be placed. 
+         suspending should be placed. It is typically used to cache information 
+         for when and how to reschedule when resumed.
          */
         virtual void on_suspend() = 0;
 
         /**
-         @brief called when resume()ing the suspended operation.  
+         @brief called when notify()ing an operation.
+
+         This provides a place for any necessary code to run just prior to the 
+         operation being resumed.
 
          The lock will be held while calling this method if 
-         `resume::policy::lock_responsible` is set. Otherwise it is the calling 
+         `notify::policy::lock_responsible` is set. Otherwise it is the calling 
          code's responsibility to acquire the lock.
 
-         It is passed whatever arbitary memory is passed to resume(). The 
+         It is passed whatever arbitary memory is passed to notify(). The 
          implementation may use this memory to complete an operation in 
          whatever manner it sees fit. 
 
          @param m arbitrary memory
          */
-        virtual void on_resume(void* m) = 0;
+        virtual void on_notify(void* m) = 0;
+
+        /**
+         Underlying implementation to pass a coroutine to a destination which 
+         will resume it. 
+
+         This is *only* called when resuming a suspended coroutine.
+
+         Specifically it is called during notify() with the suspended coroutine 
+         handle, and is responsible for scheduling the handle for execution. IE, 
+         the handle is ready to have its notify() method called.
+
+         This is typically implemented by a rescheduling object.
+
+         WARNING: The lock is unlocked during this call.
+         */
+        virtual void to_destination(std::coroutine_handle<>) = 0;
 
         /**
          IMPORTANT: All `hce::awt<T>` instances which are not `hce::awt<void>` 
@@ -567,22 +626,21 @@ struct awaitable : public printable {
             detail::awaitable::this_thread* this_thread;
         };
 
+        // used to properly size data_ bytes
         static constexpr uint8_t aligned_data_size = 
             ((sizeof(data)) + alignof(data) - 1) & ~(alignof(data) - 1);
 
+        // the default function pointer to delete interface implementations
         static void default_deleter_(interface*);
 
-        // state introspection
-        bool is_awaited_() const;
-        bool is_suspended_() const;
-        bool is_coroutine_() const;
-        bool is_locked_() const;
-
         // state mutation
-        void set_awaited_(bool b);
-        void set_suspended_(bool b);
-        void set_is_coroutine_(bool b);
-        void set_locked_(bool b);
+        void set_awaited_();
+        void set_locked_();
+        void set_suspended_();
+        void set_is_coroutine_();
+        void unset_locked_();
+        void unset_suspended_();
+        void unset_is_coroutine_();
 
         // acquire the data union cast from data_
         data& get_data_(); 
@@ -591,16 +649,20 @@ struct awaitable : public printable {
          `hce::awaitable::interface`s instances are created frequently, and 
          should use as little memory by default as possible, hence the state 
          masking and union. Each bit in `state_` represents a specific 
-         configuration, as defined by the `hce::awaitable` masks.
+         configuration, as defined by the `hce::awaitable::masks`.
          */
         uint8_t state_;
 
-        // data is uninitialized bytes until `is_suspended_() == true`
+        // data is uninitialized bytes until `is_suspended_() == true` (we need 
+        // to construct late with placement new)
         alignas(alignof(data)) std::byte data_[aligned_data_size];
     };
    
     /**
      @brief partial implementation of awaitable::interface for a templated Lock 
+
+     The lock is accessed via pointer, the underlying lock data is not a member 
+     of this object.
 
      For 'lockfree' semantics, template the object to `hce::lockfree` and pass 
      an `hce::lockfree` reference to the constructor.
@@ -647,7 +709,6 @@ struct awaitable : public printable {
         { }
 
         virtual ~spinlock_lockable() {}
-
         inline void lock_impl() final { lk_.lock(); }
         inline void unlock_impl() final { lk_.unlock(); }
 
@@ -674,7 +735,6 @@ struct awaitable : public printable {
         { }
         
         virtual ~lockfree_lockable() {}
-
         inline void lock_impl() final { }
         inline void unlock_impl() final { }
     };
@@ -739,18 +799,18 @@ struct awaitable : public printable {
      then the operation is on a system thread and will block the calling thread 
      instead of simply returning.
      */
-    inline void await_suspend(std::coroutine_handle<> h) { 
-        impl_->await_suspend(h); 
-    }
+    inline void await_suspend(std::coroutine_handle<> h) { impl_->await_suspend(h); }
 
     /**
      @brief block until awaitable is complete and cleanup the implementation
+     
+     If the implementation is already awaited, wait() will return immediately.
 
      Should not be called by a coroutine, which should first use the 
      `co_await` keyword. If previously `co_await`ed this method will cleanup the 
      operation.
 
-     This method automatically called by the destructor.
+     This method automatically called by the destructor. 
      */
     void wait();
 
@@ -959,7 +1019,10 @@ using awt_interface = typename hce::awt<T>::interface;
  @brief convert an awaitable that returns some type T to one that returns nothing 
 
  The awaitable still operates otherwise as normal but no type will be returned 
- from `co_await`ing it.
+ from `co_await`ing it. 
+
+ This mechanism is useful for blocking on operations with arbitrary return 
+ types that are ignored.
 
  @return a rewrapped awaitable::interface in an awt<void>
  */

@@ -48,9 +48,14 @@ void hce::detail::awaitable::yield::await_suspend(std::coroutine_handle<> h) {
     HCE_LOW_METHOD_ENTER("await_suspend");
 }
 
-hce::awaitable::interface::interface(hce::awaitable::await::policy ap, 
-                                     hce::awaitable::resumed::policy rdp,
-                                     hce::awaitable::resume::policy rp) :
+hce::awaitable::interface::interface(uint8_t policy_bits) {
+    constexpr uint8_t sanitize_policy_bits = hce::awaitable::masks::await_policy |
+                                             hce::awaitable::masks::resumed_policy |
+                                             hce::awaitable::masks::notify_policy;
+
+    // ensure no unexpected bits are set
+    policy_bits = policy_bits & sanitize_policy_bits;
+
     /* 
      Initialize the state bits.
 
@@ -58,23 +63,25 @@ hce::awaitable::interface::interface(hce::awaitable::await::policy ap,
      appropriate bit to "on" or "off".
      
      Locked state is assumed from the await::policy, which is `0` in the defer 
-     case, and non-zero in the adopt case.
+     case, and non-zero (at the appropriate bit) in the adopt case.
 
      All other bits start at 0.
      */
-    state_((ap ? hce::awaitable::locked_mask : 0x0) 
-           | ap 
-           | rdp
-           | rp)
-{ 
+    state_ = 
+        policy_bits
+        // set the locked state based on the await policy
+        | ((policy_bits & hce::awaitable::masks::await_policy) 
+           ? hce::awaitable::masks::locked 
+           : 0x0);
+
     HCE_LOW_CONSTRUCTOR();
 }
 
 hce::awaitable::interface::~interface() { 
     HCE_TRACE_DESTRUCTOR();
 
-    if(is_suspended_()) [[unlikely]] {
-        if(is_coroutine_()) {
+    if(state_ & hce::awaitable::masks::suspended) [[unlikely]] {
+        if(state_ & hce::awaitable::masks::is_coroutine) {
             // place handle in coroutine for printing purposes
             hce::coroutine co(std::move(get_data_().handle));
             std::stringstream ss;
@@ -98,7 +105,7 @@ hce::awaitable::interface::~interface() {
         }
     }
 
-    // no need to call data_ destructor, it holds nothing, or pointer or 
+    // no need to call data_ destructor, it holds nothing, or a pointer, or 
     // pointer-like memory and is guaranteed POD.
 }
 
@@ -111,12 +118,11 @@ bool hce::awaitable::interface::await_ready() {
     }
 
     // set awaited flag
-    set_awaited_(true);
+    set_awaited_();
 
     // check ready state by calling implementation
     if(this->on_ready()) [[unlikely]] {
         HCE_TRACE_METHOD_BODY("await_ready","ready immediately");
-        unlock();
         return true;
     } else [[likely]] {
         HCE_TRACE_METHOD_BODY("await_ready","about to suspend");
@@ -130,14 +136,14 @@ void hce::awaitable::interface::await_suspend(std::coroutine_handle<> h) {
 
     // still locked from await_ready()
     this->on_suspend();
-    set_suspended_(true);
+    set_suspended_();
 
     // If this handle is valid, we are in a coroutine. Optimize if() check for 
-    // coroutine suspends over system threads
+    // coroutine suspends over system threads.
     if(h) [[likely]] {
         HCE_TRACE_METHOD_BODY("await_suspend",h);
 
-        set_is_coroutine_(true);
+        set_is_coroutine_();
 
         // Assign the handle to our member. Need to placement new initialize 
         // data to a coroutine handle
@@ -164,7 +170,7 @@ void hce::awaitable::interface::await_suspend(std::coroutine_handle<> h) {
          hce::awaitable::resume() is called.
          */
 
-        set_is_coroutine_(false);
+        unset_is_coroutine_();
 
         // placement new initialize data to an awaitable::this_thread pointer
         new ((hce::awaitable::interface::data*)&(data_)) 
@@ -182,19 +188,38 @@ void hce::awaitable::interface::await_suspend(std::coroutine_handle<> h) {
 }
 
 void hce::awaitable::interface::await_resume() {
+    // This method is expected to operate without competition for the lock, 
+    // because either await_ready() has returned true or notify() has unblocked 
+    // the operation.
     HCE_TRACE_METHOD_ENTER("resumed");
 
+    // acquire only the relevant bits we need to check against
     constexpr uint8_t relevant_bits_mask = 
-        hce::awaitable::locked_mask | hce::awaitable::resumed_policy_mask;
+        hce::awaitable::masks::locked | hce::awaitable::masks::resumed_policy;
 
+    // unlocked state is represented by 0 value in bit 0. This is the default 
+    // 0 bit value for masks other than hce::awaitable::masks::locked so we 
+    // don't need to 0x0 & other_mask when accounting for the unlocked state.
     constexpr uint8_t unlocked_to_unlocked = hce::awaitable::resumed::policy::unlocked;
     constexpr uint8_t unlocked_to_locked = hce::awaitable::resumed::policy::locked;
-    constexpr uint8_t locked_to_unlocked = 
-        hce::awaitable::locked_mask | hce::awaitable::resumed::policy::unlocked;
-    constexpr uint8_t locked_to_locked = 
-        hce::awaitable::locked_mask | hce::awaitable::resumed::policy::locked;
+    constexpr uint8_t locked_to_unlocked = hce::awaitable::masks::locked | 
+                                           hce::awaitable::resumed::policy::unlocked;
+    constexpr uint8_t locked_to_locked = hce::awaitable::masks::locked | 
+                                         hce::awaitable::resumed::policy::locked;
 
-    // setup a jump table to handle if we need to do nothing, lock or unlock
+    // Setup a jump table to handle if we need to do nothing, lock or unlock.
+    //
+    // The purpose of using jump tables in this code is to not only elide some 
+    // potential processing, but to flatten the cost of using awaitables, 
+    // favoring no particular usecase in terms of throughput efficiency, based 
+    // on how complicated if/else trees in these functions are structured.
+    //
+    // Normally this consideration would be overoptimization. However, this code
+    // is:
+    // A) guaranteed to be a potential bottleneck for all hce communication 
+    // B) written for a framework intended to scale
+    //
+    // Therefore various protective design choices have been implemented.
     switch(state_ & relevant_bits_mask) {
         case unlocked_to_unlocked:
             // no change
@@ -219,108 +244,111 @@ void hce::awaitable::interface::await_resume() {
     }
 }
 
-void hce::awaitable::interface::resume(void* m) {
+void hce::awaitable::interface::notify(void* m) {
     HCE_LOW_METHOD_ENTER("resume");
 
     // the bits we need to extract to jump
     constexpr uint8_t relevant_bits_mask = 
         // if exempt, no lock or unlock. If responsible Only lock if unlocked, 
         // and only unlock if locked before end of the case
-        hce::awaitable::suspended_mask |
-        hce::awaitable::is_coroutine_mask;
+        hce::awaitable::masks::suspended |
+        hce::awaitable::masks::is_coroutine;
 
     constexpr uint8_t not_suspended_thread = 0x0;
-    constexpr uint8_t not_suspended_coroutine = hce::awaitable::is_coroutine_mask;
-    constexpr uint8_t suspended_thread = hce::awaitable::suspended_mask;
-
-    constexpr uint8_t suspended_coroutine = 
-        hce::awaitable::suspended_mask |
-        hce::awaitable::is_coroutine_mask;
-
-    // trivially inlined lambdas
-    auto not_suspended = [&]{
-        HCE_TRACE_METHOD_BODY("resume","not blocked");
-        // Call the custom resumption code. The suspended operation will NOT be 
-        // resumed yet.
-        state_ = state_ | hce::awaitable::ready_mask;
-        this->on_resume(m);
-    };
-
-    auto thd_suspended = [&]{
-        HCE_TRACE_METHOD_BODY("resume","unblock thread");
-        /*
-         Make sure that suspended pointer bit is unset before resuming. 
-         There are certain cases where failing to do this can cause a race 
-         condition error in "no-lock" scenarios when destructing the 
-         interface.
-         */
-        set_suspended_(false);
-        this->on_resume(m);
-    };
-
-    auto coro_suspended = [&]{
-        HCE_TRACE_METHOD_BODY("resume","to_destination coroutine");
-        set_suspended_(false);
-        this->on_resume(m);
-    };
+    constexpr uint8_t not_suspended_coroutine = hce::awaitable::masks::is_coroutine;
+    constexpr uint8_t suspended_thread = hce::awaitable::masks::suspended;
+    constexpr uint8_t suspended_coroutine = hce::awaitable::masks::suspended |
+                                            hce::awaitable::masks::is_coroutine;
 
     // cannot incorporate this into switch case, because the non-atomic nature 
     // of state_ requires checking it only after we are sure we have the lock.
-    if(resume_policy() == hce::resume::policy::lock_responsible) {
+    if(notify_policy() == hce::awaitable::notify::policy::lock_responsible) {
+        // acquire the lock
         lock();
 
         switch(state_ & relevant_bits_mask) {
             case not_suspended_thread:
-                not_suspended();
-                unlock();
-                break;
             case not_suspended_coroutine:
-                not_suspended();
+            {
+                HCE_TRACE_METHOD_BODY("resume","not blocked");
+                // Call the custom resumption code. The suspended operation will NOT be 
+                // resumed yet.
+                this->on_notify(m);
                 unlock();
                 break;
+            }
             case suspended_thread:
-                thd_suspended();
+            {
+                HCE_TRACE_METHOD_BODY("resume","unblock thread");
+                this->on_notify(m);
+                /*
+                 Make sure that suspended pointer bit is unset before resuming. 
+                 There are certain cases where failing to do this can cause a race 
+                 condition error in "no-lock" scenarios when destructing the 
+                 interface.
+                 */
+                unset_suspended_();
                 // Resume the suspended thread. At this point it is UNSAFE to 
                 // mutate the state of this object further, as its lifetime is 
                 // now volatile.
                 get_data_().this_thread->unblock(*this);
                 break;
+            }
             case suspended_coroutine:
-                auto h = get_data_().handle; // retrieve the stored handle
+            {
+                HCE_TRACE_METHOD_BODY("resume","to_destination coroutine");
+                // retrieve the stored handle and stash it on the stack while 
+                // we hold the lock (get_data_() is volatile outside the lock)
+                auto h = get_data_().handle; 
+                unset_suspended_();
+                this->on_notify(m);
+                unlock();
                 // Resume the suspended coroutine. At this point it is UNSAFE to 
                 // mutate the state of this object further, as its lifetime is 
                 // now volatile.
-                coro_suspended();
-                unlock();
                 this->to_destination(h);
                 break;
+            }
             default:
             {
                 std::stringstream ss;
                 ss << " cannot process " << *this << " with unknown state(): " << state_;
                 HCE_FATAL_METHOD_BODY("resume",ss.str());
+                unlock();
                 std::terminate();
                 break;
             }
         }
     } else {
         // assume we have the lock and are not responsible for it
+
         switch(state_ & relevant_bits_mask) {
             case not_suspended_thread:
-                not_suspended();
-                break;
             case not_suspended_coroutine:
-                not_suspended();
+            {
+                HCE_TRACE_METHOD_BODY("resume","not blocked");
+                // Call the custom resumption code. The suspended operation will NOT be 
+                // resumed yet.
+                this->on_notify(m);
                 break;
+            }
             case suspended_thread:
-                thd_suspended();
+            {
+                HCE_TRACE_METHOD_BODY("resume","unblock thread");
+                unset_suspended_();
+                this->on_notify(m);
                 get_data_().this_thread->unblock();
                 break;
+            }
             case suspended_coroutine:
+            {
+                HCE_TRACE_METHOD_BODY("resume","to_destination coroutine");
                 auto h = get_data_().handle;
-                coro_suspended();
+                unset_suspended_();
+                this->on_notify(m);
                 this->to_destination(h);
                 break;
+            }
             default:
             {
                 std::stringstream ss;
@@ -336,12 +364,12 @@ void hce::awaitable::interface::resume(void* m) {
 void hce::awaitable::interface::lock() { 
     HCE_TRACE_METHOD_ENTER("lock");
     this->lock_impl(); 
-    set_locked_(true);
+    set_locked_();
 }
 
 void hce::awaitable::interface::unlock() { 
     HCE_TRACE_METHOD_ENTER("unlock");
-    set_locked_(false);
+    unset_locked_();
     this->unlock_impl(); 
 }
 
@@ -357,10 +385,6 @@ hce::awaitable::interface::deleter_t hce::awaitable::interface::deleter() {
     return default_deleter_;
 }
 
-bool hce::awaitable::interface::is_locked_() const {
-    return state_ & hce::awaitable::locked_mask;
-}
-
 void hce::awaitable::interface::default_deleter_(interface* i){
     delete i;
 }
@@ -369,64 +393,56 @@ uint8_t hce::awaitable::interface::state() const {
     return state_;
 }
 
-bool hce::awaitable::interface::is_awaited_() const {
-    return state_ & hce::awaitable::awaited_mask;
-}
-
-bool hce::awaitable::interface::is_suspended_() const {
-    return state_ & hce::awaitable::suspended_mask;
-}
-
-bool hce::awaitable::interface::is_coroutine_() const {
-    return state_ & hce::awaitable::is_coroutine_mask;
-}
-
 hce::awaitable::await::policy hce::awaitable::interface::await_policy() const { 
     hce::awaitable::await::policy p = 
         (hce::awaitable::await::policy)
-        (state_ & hce::awaitable::await_policy_mask);
+        (state_ & hce::awaitable::masks::await_policy);
     HCE_TRACE_METHOD_BODY("await_policy",p);
     return p; 
 }
 
-hce::awaitable::resume::policy hce::awaitable::interface::resume_policy() const { 
-    hce::awaitable::resume::policy p = 
-        (hce::awaitable::resume::policy)
-        (state_ & hce::awaitable::resume_policy_mask);
-    HCE_TRACE_METHOD_BODY("resume_policy",p);
+hce::awaitable::notify::policy hce::awaitable::interface::notify_policy() const { 
+    hce::awaitable::notify::policy p = 
+        (hce::awaitable::notify::policy)
+        (state_ & hce::awaitable::masks::notify_policy);
+    HCE_TRACE_METHOD_BODY("notify_policy",p);
     return p; 
 }
 
 hce::awaitable::resumed::policy hce::awaitable::interface::resumed_policy() const { 
     hce::awaitable::resumed::policy p = 
         (hce::awaitable::resumed::policy)
-        (state_ & hce::awaitable::resumed_policy_mask);
+        (state_ & hce::awaitable::masks::resumed_policy);
     HCE_TRACE_METHOD_BODY("resumed_policy",p);
     return p; 
 }
 
-void hce::awaitable::interface::set_awaited_(bool b) {
-    state_ = b 
-        ? state_ | hce::awaitable::awaited_mask 
-        : state_ & ~hce::awaitable::awaited_mask;
+void hce::awaitable::interface::set_awaited_() {
+    state_ |= hce::awaitable::masks::awaited;
 }
 
-void hce::awaitable::interface::set_suspended_(bool b) {
-    state_ = b 
-        ? state_ | hce::awaitable::suspended_mask 
-        : state_ & ~hce::awaitable::suspended_mask;
+void hce::awaitable::interface::set_suspended_() {
+    state_ |= hce::awaitable::masks::suspended;
 }
 
-void hce::awaitable::interface::set_is_coroutine_(bool b) {
-    state_ = b 
-        ? state_ | hce::awaitable::is_coroutine_mask 
-        : state_ & ~hce::awaitable::is_coroutine_mask;
+void hce::awaitable::interface::set_is_coroutine_() {
+    state_ |= hce::awaitable::masks::is_coroutine;
 }
 
-void hce::awaitable::interface::set_locked_(bool b) {
-    state_ = b 
-        ? state_ | hce::awaitable::locked_mask
-        : state_ & ~hce::awaitable::locked_mask;
+void hce::awaitable::interface::set_locked_() {
+    state_ |= hce::awaitable::masks::locked;
+}
+
+void hce::awaitable::interface::unset_suspended_() {
+    state_ &= ~hce::awaitable::masks::suspended;
+}
+
+void hce::awaitable::interface::unset_is_coroutine_() {
+    state_ &= ~hce::awaitable::masks::is_coroutine;
+}
+
+void hce::awaitable::interface::unset_locked_() {
+    state_ &= ~hce::awaitable::masks::locked;
 }
 
 hce::awaitable::interface::data& hce::awaitable::interface::get_data_() {
@@ -435,7 +451,7 @@ hce::awaitable::interface::data& hce::awaitable::interface::get_data_() {
 
 void hce::awaitable::wait() {
     HCE_MIN_METHOD_ENTER("wait");
-    if(impl_ && !(impl_->state() & hce::awaitable::awaited_mask)) [[unlikely]] {
+    if(impl_ && !(impl_->state() & hce::awaitable::masks::awaited)) [[unlikely]] {
         if(coroutine::in()) [[unlikely]] { 
             // coroutine failed to `co_await` the awaitable
             std::stringstream ss;
@@ -450,8 +466,10 @@ void hce::awaitable::wait() {
             // `co_await` keyword, and needs to operate as a regular system 
             // thread blocking call, not a coroutine suspend.
             await_suspend(std::coroutine_handle<>()); 
+            impl_->await_resume(); // manually await resume
         } else {
             HCE_TRACE_METHOD_BODY("wait","thread done");
+            impl_->await_resume(); 
         }
     } else {
         HCE_TRACE_METHOD_BODY("wait","nothing to do");

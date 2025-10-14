@@ -199,11 +199,13 @@ private:
         virtual ~awaitable();
         static std::string info_name();
         std::string name() const;
-        void on_resume(void* m);
+        bool on_ready();
+        void on_notify(void* m);
         bool get_result();
 
     private:
         bool result_;
+        bool ready_;
         hce::spinlock slk_;
     };
 

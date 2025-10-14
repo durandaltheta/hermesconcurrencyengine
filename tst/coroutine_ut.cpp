@@ -168,9 +168,9 @@ TEST(coroutine, co_await_void) {
                     hce::spinlock,
                     hce::awt<void>::interface>(
                         lk_,
-                        hce::awaitable::await::policy::defer_lock,
-                        hce::awaitable::resumed::policy::unlocked,
-                        hce::awaitable::resume::policy::lock_responsible),
+                        (uint8_t)hce::awaitable::await::policy::defer_lock |
+                        (uint8_t)hce::awaitable::resumed::policy::unlocked |
+                        (uint8_t)hce::awaitable::notify::policy::lock_responsible),
                 hdl_(hdl),
                 ready_(ready)
             { }
@@ -183,14 +183,16 @@ TEST(coroutine, co_await_void) {
                 }
             }
 
-            inline void on_ready() { 
+            inline bool on_ready() { 
                 if(*ready_) {
                     *ready_ = false;
-                    this->set_ready();
-                } 
+                    return true;
+                } else {
+                    return false;
+                }
             }
 
-            inline void on_resume(void* m) { }
+            inline void on_notify(void* m) { }
 
             inline void to_destination(std::coroutine_handle<> hdl) { 
                 *hdl_ = hdl; 
@@ -227,7 +229,7 @@ TEST(coroutine, co_await_void) {
         EXPECT_FALSE(co);
         EXPECT_FALSE(flag);
 
-        as[1]->resume(nullptr);
+        as[1]->notify(nullptr);
 
         EXPECT_NE(nullptr, hdl.address());
         EXPECT_FALSE(co);
@@ -255,9 +257,9 @@ TEST(coroutine, co_await_int) {
                     hce::spinlock,
                     hce::awt<int>::interface>(
                         lk_,
-                        hce::awaitable::await::policy::defer_lock,
-                        hce::awaitable::resumed::policy::unlocked,
-                        hce::awaitable::resume::policy::lock_responsible),
+                        (uint8_t)hce::awaitable::await::policy::defer_lock |
+                        (uint8_t)hce::awaitable::resumed::policy::unlocked |
+                        (uint8_t)hce::awaitable::notify::policy::lock_responsible),
                 hdl_(hdl),
                 ready_(ready),
                 i_(i)
@@ -274,14 +276,16 @@ TEST(coroutine, co_await_int) {
                 }
             }
 
-            inline void on_ready() { 
+            inline bool on_ready() { 
                 if(*ready_) {
                     *ready_ = false;
-                    this->set_ready();
-                } 
+                    return true;
+                } else {
+                    return false;
+                }
             }
 
-            inline void on_resume(void* m) { }
+            inline void on_notify(void* m) { }
             inline int get_result() { return i_; }
 
             inline void to_destination(std::coroutine_handle<> hdl) { 
@@ -321,7 +325,7 @@ TEST(coroutine, co_await_int) {
         EXPECT_FALSE(co);
         EXPECT_FALSE(flag);
 
-        as[1]->resume(nullptr);
+        as[1]->notify(nullptr);
 
         EXPECT_NE(nullptr, hdl.address());
         EXPECT_FALSE(co);
@@ -349,9 +353,9 @@ TEST(coroutine, co_await_string) {
                     hce::spinlock,
                     hce::awt<std::string>::interface>(
                         lk_,
-                        hce::awaitable::await::policy::defer_lock,
-                        hce::awaitable::resumed::policy::unlocked,
-                        hce::awaitable::resume::policy::lock_responsible),
+                        (uint8_t)hce::awaitable::await::policy::defer_lock |
+                        (uint8_t)hce::awaitable::resumed::policy::unlocked |
+                        (uint8_t)hce::awaitable::notify::policy::lock_responsible),
                 hdl_(hdl),
                 ready_(ready),
                 s_(std::to_string(i))
@@ -362,22 +366,24 @@ TEST(coroutine, co_await_string) {
                 for(auto& a : *as) {
                     hce::awt<std::string> awt = hce::awt<std::string>(a);
                     EXPECT_TRUE(awt.valid());
-                    HCE_INFO_FUNCTION_BODY("TEST::co_await_string::op1","before, awaited:",awt.implementation().state() & hce::awaitable::awaited_mask);
+                    HCE_INFO_FUNCTION_BODY("TEST::co_await_string::op1","before, awaited:",awt.implementation().state() & hce::awaitable::masks::awaited);
                     std::string result_i = co_await std::move(awt);
-                    HCE_INFO_FUNCTION_BODY("TEST::co_await_string::op1","after, awaited:",awt.implementation().state() & hce::awaitable::awaited_mask);
+                    HCE_INFO_FUNCTION_BODY("TEST::co_await_string::op1","after, awaited:",awt.implementation().state() & hce::awaitable::masks::awaited);
                     EXPECT_EQ(std::to_string(i), result_i);
                     ++i;
                 }
             }
 
-            inline void on_ready() { 
+            inline bool on_ready() { 
                 if(*ready_) {
                     *ready_ = false;
-                    this->set_ready();
-                } 
+                    return true;
+                } else {
+                    return false;
+                }
             }
 
-            inline void on_resume(void* m) { }
+            inline void on_notify(void* m) { }
             inline std::string get_result() { return s_; }
 
             inline void to_destination(std::coroutine_handle<> hdl) { 
@@ -417,7 +423,7 @@ TEST(coroutine, co_await_string) {
         EXPECT_FALSE(co);
         EXPECT_FALSE(flag);
 
-        as[1]->resume(nullptr);
+        as[1]->notify(nullptr);
 
         EXPECT_NE(nullptr, hdl.address());
         EXPECT_FALSE(co);

@@ -141,10 +141,11 @@ struct joiner :
     joiner(hce::co<T>& co) :
         hce::awaitable::spinlock_lockable<
             typename hce::awt<T>::interface>(
-                hce::awaitable::await::policy::defer_lock,
-                hce::awaitable::resumed::policy::unlocked, 
-                hce::awaitable::resume::policy::lock_responsible),
-        address_(co.address())
+                (uint8_t)hce::awaitable::await::policy::defer_lock |
+                (uint8_t)hce::awaitable::resumed::policy::unlocked |
+                (uint8_t)hce::awaitable::notify::policy::lock_responsible),
+        address_(co.address()),
+        ready_(false)
     { 
         HCE_TRACE_CONSTRUCTOR(co);
 
@@ -162,9 +163,11 @@ struct joiner :
     inline std::string name() const { return joiner<T>::info_name(); }
     inline void* address() const { return address_; }
 
-    inline void on_resume(void* m) { 
-        HCE_TRACE_METHOD_ENTER("on_resume",m);
-        this->set_ready();
+    inline bool on_ready() { return ready_; }
+
+    inline void on_notify(void* m) { 
+        HCE_TRACE_METHOD_ENTER("on_notify",m);
+        ready_ = true;
 
         if(m) [[likely]] { 
             // move the unique pointer from the promise to this object
@@ -177,7 +180,6 @@ struct joiner :
         if(!t_) [[unlikely]] { 
             throw awaitable_destroyed_without_joining_result(address_, this); 
         }
-
         return std::move(*t_); 
     }
 
@@ -205,15 +207,16 @@ private:
             //HCE_MIN_FUNCTION_BODY("joiner<T>::cleanup()","done@",handle);
             HCE_TRACE_FUNCTION_BODY(hce::detail::scheduler::joiner<T>::info_name() + "::cleanup","done@",handle);
             // resume the blocked awaitable and pass the allocated result pointer
-            joiner.resume(&(promise.result));
+            joiner.notify(&(promise.result));
         } else [[unlikely]] {
             HCE_ERROR_FUNCTION_BODY(hce::detail::scheduler::joiner<T>::info_name() + "::cleanup","NOT done@",handle);
             // resume with no result, presumably triggering error
-            joiner.resume(nullptr);
+            joiner.notify(nullptr);
         } 
     };
 
     void* address_;
+    bool ready_;
     hce::unique_ptr<T> t_;
 };
 
@@ -225,10 +228,11 @@ struct joiner<void> :
     joiner(hce::co<void>& co) :
         hce::awaitable::spinlock_lockable<
             typename hce::awt<void>::interface>(
-                hce::awaitable::await::policy::defer_lock,
-                hce::awaitable::resumed::policy::unlocked,
-                hce::awaitable::resume::policy::lock_responsible),
-        address_(co.address())
+                (uint8_t)hce::awaitable::await::policy::defer_lock |
+                (uint8_t)hce::awaitable::resumed::policy::unlocked |
+                (uint8_t)hce::awaitable::notify::policy::lock_responsible),
+        address_(co.address()),
+        ready_(false)
     { 
         HCE_TRACE_CONSTRUCTOR(co);
 
@@ -243,15 +247,18 @@ struct joiner<void> :
 
     inline std::string name() const { return joiner<void>::info_name(); }
     inline void* address() const { return address_; }
-    inline void on_resume(void* m) { this->set_ready(); }
+
+    inline bool on_ready() { return ready_; }
+    inline void on_notify(void* m) { ready_ = true; }
 
 private:
     static inline void cleanup(hce::cleanup::data& data) { 
         HCE_TRACE_FUNCTION_ENTER("joiner<void>::cleanup()", data.install, data.self);
-        static_cast<hce::detail::scheduler::joiner<void>*>(data.install)->resume(nullptr);
+        static_cast<hce::detail::scheduler::joiner<void>*>(data.install)->notify(nullptr);
     }
 
     void* address_;
+    bool ready_;
 };
 
 }

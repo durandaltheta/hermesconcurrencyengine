@@ -9,7 +9,7 @@ hce::cleanup::cleanup() :
 hce::cleanup::~cleanup(){}
 
 void hce::cleanup::install(hce::cleanup::operation op, void* arg) {
-    if(list_) [[unlikely]] {
+    if(list_) [[unlikely]] { // optimize if() against the single node case
         hce::cleanup::node* next = (hce::cleanup::node*)(hce::memory::allocate(sizeof(node)));
         new(next) node(list_, op, arg);
         list_ = next;

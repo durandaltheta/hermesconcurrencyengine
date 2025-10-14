@@ -45,14 +45,14 @@ struct sync_partial :
     template <typename... As>
     sync_partial(As&&... as) : 
         hce::awaitable::lockfree_lockable<hce::awt_interface<T>>(
-                hce::awaitable::await::policy::defer_lock,
-                hce::awaitable::resumed::policy::unlocked,
-                hce::awaitable::resume::policy::lock_responsible),
+                (uint8_t)hce::awaitable::await::policy::defer_lock | 
+                (uint8_t)hce::awaitable::resumed::policy::unlocked |
+                (uint8_t)hce::awaitable::notify::policy::lock_responsible),
         t_(std::forward<As>(as)...) 
     { }
 
-    inline void on_ready() { this->set_ready(); }
-    inline void on_resume(void* m) { }
+    inline bool on_ready() { return true; }
+    inline void on_notify(void* m) { }
     inline T get_result() { return std::move(t_); }
 
 private:
@@ -66,13 +66,13 @@ struct sync_partial<void> : public
     sync_partial() :
         hce::awaitable::lockfree_lockable<
             hce::awt_interface<void>>(
-                hce::awaitable::await::policy::defer_lock,
-                hce::awaitable::resumed::policy::unlocked,
-                hce::awaitable::resume::policy::lock_responsible)
+                (uint8_t)hce::awaitable::await::policy::defer_lock | 
+                (uint8_t)hce::awaitable::resumed::policy::unlocked |
+                (uint8_t)hce::awaitable::notify::policy::lock_responsible)
     { }
 
-    inline void on_ready() { this->set_ready(); }
-    inline void on_resume(void* m) { }
+    inline bool on_ready() { return true; }
+    inline void on_notify(void* m) { }
 };
 
 // async operations require a lock because they are used to communicate across
@@ -84,20 +84,24 @@ struct async_partial :
     async_partial() : 
         hce::awaitable::spinlock_lockable<
             hce::awt_interface<T>>(
-                hce::awaitable::await::policy::defer_lock,
-                hce::awaitable::resumed::policy::unlocked,
-                hce::awaitable::resume::policy::lock_responsible)
+                (uint8_t)hce::awaitable::await::policy::defer_lock |
+                (uint8_t)hce::awaitable::resumed::policy::unlocked |
+                (uint8_t)hce::awaitable::notify::policy::lock_responsible),
+        ready_(false)
     { }
+    
+    inline bool on_ready() { return ready_; }
 
     // this will never be called *except* in cases where m!=nullptr
-    inline void on_resume(void* m) { 
+    inline void on_notify(void* m) { 
         t_ = std::unique_ptr<T>((T*)m);
-        this->set_ready();
+        ready_ = true;
     }
 
     inline T get_result() { return std::move(*t_); }
 
 private:
+    bool ready_;
     std::unique_ptr<T> t_;
 };
 
@@ -108,12 +112,17 @@ struct async_partial<void> :
     async_partial() : 
         hce::awaitable::spinlock_lockable<
             hce::awt_interface<void>>(
-                hce::awaitable::await::policy::defer_lock,
-                hce::awaitable::resumed::policy::unlocked,
-                hce::awaitable::resume::policy::lock_responsible)
+                (uint8_t)hce::awaitable::await::policy::defer_lock |
+                (uint8_t)hce::awaitable::resumed::policy::unlocked |
+                (uint8_t)hce::awaitable::notify::policy::lock_responsible),
+        ready_(false)
     { }
+    
+    inline bool on_ready() { return ready_; }
+    inline void on_notify(void* m) { ready_ = true; }
 
-    inline void on_resume(void* m) { this->set_ready(); }
+private:
+    bool ready_;
 };
 
 }
@@ -391,7 +400,7 @@ private:
                  cb=std::forward<Callable>(cb),
                  ... as=std::forward<As>(as)]() mutable -> void {
                     // pass the allocated T to the async and resume it
-                    ai->resume(new T(cb(std::forward<As>(as)...)));
+                    ai->notify(new T(cb(std::forward<As>(as)...)));
                 });
 
             // return an awaitable to await the result of the blocking call
@@ -419,7 +428,7 @@ private:
                  cb=std::forward<Callable>(cb),
                  ... as=std::forward<As>(as)]() mutable -> void {
                     cb(std::forward<As>(as)...);
-                    ai->resume(nullptr);
+                    ai->notify(nullptr);
                 });
 
             return hce::awt<void>(ai);

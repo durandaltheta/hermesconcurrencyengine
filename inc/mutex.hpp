@@ -24,13 +24,14 @@ namespace hce {
 
  Calling `co_await` in a coroutine on `hce::mutex::lock()` is efficient and safe.
 
- It may be required to use `hce::block()` when use with 
+ It may be required to use `hce::block()` when used with 
  `std::condition_variable_any` (or `std::unique_lock`) is required. 
 
  It should be noted that other high level mechanisms (`hce::join()`, 
  `hce::channel<T>`, etc.) may be more useful (and more efficient) than 
  implementing custom mechanisms with `hce::mutex`. `hce::mutex` 
- is most useful when integrating this library into existing user code.
+ is most useful when integrating this library into existing user code, requiring 
+ less redesign.
  */
 struct mutex : public printable {
     /// thrown when unlock() is called on an unlocked mutex
@@ -73,13 +74,14 @@ private:
         acquire(hce::mutex* parent);
 
         // returns true if acquired, else we need to suspend
-        void on_ready();
+        bool on_ready();
 
         // only returns when acquired
-        void on_resume(void* m);
+        void on_notify(void* m);
 
     private:
         hce::mutex* parent_;
+        bool ready_;
     };
 
     bool lock_or_enqueue_blocked_(acquire* lw);

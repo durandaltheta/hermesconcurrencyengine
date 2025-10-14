@@ -39,10 +39,11 @@ hce::timer::awaitable::awaitable() :
             hce::spinlock,
             hce::awt<bool>::interface>>(
                 slk_,
-                hce::awaitable::await::policy::defer_lock,
-                hce::awaitable::resumed::policy::unlocked,
-                hce::awaitable::resume::policy::lock_responsible),
-    result_(false)
+                (uint8_t)hce::awaitable::await::policy::defer_lock | 
+                (uint8_t)hce::awaitable::resumed::policy::unlocked |
+                (uint8_t)hce::awaitable::notify::policy::lock_responsible),
+    result_(false),
+    ready_(false)
 { 
     HCE_MED_CONSTRUCTOR();
 }
@@ -59,9 +60,13 @@ std::string hce::timer::awaitable::name() const {
     return hce::timer::awaitable::info_name(); 
 }
 
-void hce::timer::awaitable::on_resume(void* m) { 
-    HCE_MED_METHOD_ENTER("on_resume",m);
-    this->set_ready();
+bool hce::timer::awaitable::on_ready() { 
+    return ready_;
+}
+
+void hce::timer::awaitable::on_notify(void* m) { 
+    HCE_MED_METHOD_ENTER("on_notify",m);
+    ready_ = true;
     result_ = (bool)m; 
 }
 
@@ -114,7 +119,7 @@ hce::timer::~timer() {
         // let unique_ptr call destructor
         std::unique_ptr<timer_> t(timers_.front());
         timers_.pop_front();
-        t->awt->resume((void*)0); // cancel awaitable
+        t->awt->notify((void*)0); // cancel awaitable
 
         HCE_HIGH_METHOD_BODY("~timer","cancelled timer with ", t->sid);
     }
@@ -266,7 +271,7 @@ bool hce::timer::cancel_(const hce::sid& sid) {
                    
                     // do operations outside lock which don't require it
                     result = true;
-                    t->awt->resume((void*)0); // cancel awaitable
+                    t->awt->notify((void*)0); // cancel awaitable
 
                     HCE_LOW_METHOD_BODY("cancel","cancelled timer with ",sid);
                     break;
@@ -340,7 +345,7 @@ void hce::timer::run() {
                 lk.unlock();
 
                 do {
-                    timed_out.front()->resume((void*)1); // resume awaitable
+                    timed_out.front()->notify((void*)1); // resume awaitable
                     timed_out.pop();
                 } while(timed_out.size()); [[likely]]
 

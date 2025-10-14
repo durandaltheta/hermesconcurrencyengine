@@ -172,14 +172,14 @@ struct base_send_interface :
                 Lock,
                 awt_interface<bool>>>(
                     lk,
-                    hce::awaitable::await::policy::defer_lock,
-                    hce::awaitable::resumed::policy::locked,
-                    hce::awaitable::resume::policy::lock_exempt),
+                    (uint8_t)hce::awaitable::await::policy::defer_lock |
+                    (uint8_t)hce::awaitable::resumed::policy::locked |
+                    (uint8_t)hce::awaitable::notify::policy::lock_exempt),
         tx(t)
     { }
 
-    inline void on_resume(void* m) {
-        HCE_MIN_METHOD_ENTER("on_resume",m);
+    inline void on_notify(void* m) {
+        HCE_MIN_METHOD_ENTER("on_notify",m);
 
         if(m) [[likely]] {
             // m is destination
@@ -210,14 +210,14 @@ struct base_recv_interface :
                 Lock,
                 awt_interface<bool>>>(
                     lk,
-                    hce::awaitable::await::policy::defer_lock,
-                    hce::awaitable::resumed::policy::locked,
-                    hce::awaitable::resume::policy::lock_exempt),
+                    (uint8_t)hce::awaitable::await::policy::defer_lock |
+                    (uint8_t)hce::awaitable::resumed::policy::locked |
+                    (uint8_t)hce::awaitable::notify::policy::lock_exempt),
         destination(d)
     { }
 
-    inline void on_resume(void* m) {
-        HCE_TRACE_METHOD_BODY("on_resume",m);
+    inline void on_notify(void* m) {
+        HCE_TRACE_METHOD_BODY("on_notify",m);
 
         if(m) [[likely]] {
             // m is transfer struct
@@ -326,12 +326,12 @@ struct unbuffered : public interface<T> {
             closed_flag_ = true;
 
             while(parked_send_.size()) { 
-                parked_send_.front()->resume(nullptr); 
+                parked_send_.front()->notify(nullptr); 
                 parked_send_.pop();
             }
 
             while(parked_recv_.size()) { 
-                parked_recv_.front()->resume(nullptr); 
+                parked_recv_.front()->notify(nullptr); 
                 parked_recv_.pop();
             }
         }
@@ -378,7 +378,7 @@ struct unbuffered : public interface<T> {
         if(closed_flag_) [[unlikely]] { 
             return { result::closed }; 
         } else if(parked_send_.size()) [[likely]] {
-            parked_send_.front()->resume((void*)&r);
+            parked_send_.front()->notify((void*)&r);
 
             // return an awaitable which immediately returns true
             return { result::success }; 
@@ -391,7 +391,8 @@ private:
     struct send_interface : public detail::base_send_interface<Lock> {
         send_interface(PARENT& p, detail::transfer tx) :
             detail::base_send_interface<Lock>(p.lk_, tx),
-            parent_(p)
+            parent_(p),
+            ready_(false)
         { 
             HCE_MIN_CONSTRUCTOR();
         }
@@ -411,31 +412,35 @@ private:
             return detail::deleter::sender<send_interface>;
         }
 
-        inline void on_ready() {
+        inline bool on_ready() {
             if(parent_.closed_flag_) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("send","closed");
-                this->set_ready();
+                ready_ = true;
             } else if(parent_.parked_recv_.size()) [[likely]] {
                 HCE_TRACE_METHOD_BODY("send","done");
-                parent_.parked_recv_.front()->resume((void*)&(this->tx));
+                parent_.parked_recv_.front()->notify((void*)&(this->tx));
                 parent_.parked_recv_.pop();
                 this->success = true;
-                this->set_ready();
+                ready_ = true;
             } else [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("send","blocked");
                 parent_.parked_send_.push_back(this);
             }
+
+            return ready_;
         }
 
     private:
         PARENT& parent_;
+        bool ready_;
         friend detail::deleter;
     };
 
     struct recv_interface : public detail::base_recv_interface<Lock> {
         recv_interface(PARENT& p, void* destination) :
             detail::base_recv_interface<Lock>(p.lk_, destination),
-            parent_(p)
+            parent_(p),
+            ready_(false)
         { 
             HCE_MIN_CONSTRUCTOR();
         }
@@ -455,24 +460,27 @@ private:
             return detail::deleter::receiver<recv_interface>;
         }
 
-        inline void on_ready() {
+        inline bool on_ready() {
             if(parent_.closed_flag_) [[unlikely]] { 
                 HCE_TRACE_METHOD_BODY("recv","closed");
-                this->set_ready();
+                ready_ = true;
             } else if(parent_.parked_send_.size()) [[likely]] {
                 HCE_TRACE_METHOD_BODY("recv","resume");
-                parent_.parked_send_.front()->resume(this->destination);
+                parent_.parked_send_.front()->notify(this->destination);
                 parent_.parked_send_.pop();
                 this->success = true;
-                this->set_ready();
+                ready_ = true;
             } else [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("recv","block for transfer");
                 parent_.parked_recv_.push_back(this);
             }
+
+            return ready_;
         }
 
     private:
         PARENT& parent_;
+        bool ready_;
         friend detail::deleter;
     };
     
@@ -486,7 +494,7 @@ private:
         } else if(parked_recv_.size()) [[likely]] {
             HCE_TRACE_METHOD_BODY("try_send","done");
             detail::transfer tx(detail::pointer_send<U>,&s);
-            parked_recv_.front()->resume((void*)(&tx));
+            parked_recv_.front()->notify((void*)(&tx));
             parked_recv_.pop();
 
             return { result::success }; 
@@ -571,12 +579,12 @@ struct buffered : public interface<T> {
             closed_flag_ = true;
 
             while(parked_send_.size()) { 
-                parked_send_.front()->resume(nullptr); 
+                parked_send_.front()->notify(nullptr); 
                 parked_send_.pop();
             }
 
             while(parked_recv_.size()) { 
-                parked_recv_.front()->resume(nullptr); 
+                parked_recv_.front()->notify(nullptr); 
                 parked_recv_.pop();
             }
         }
@@ -647,7 +655,7 @@ struct buffered : public interface<T> {
             buf_.pop();
 
             if(parked_send_.size()) [[unlikely]] {
-                parked_send_.front()->resume((void*)&buf_);
+                parked_send_.front()->notify((void*)&buf_);
                 parked_send_.pop();
             }
 
@@ -662,7 +670,8 @@ private:
     struct send_interface : public detail::base_send_interface<Lock> {
         send_interface(PARENT& p, detail::transfer tx) :
             detail::base_send_interface<Lock>(p.lk_, tx),
-            parent_(p)
+            parent_(p),
+            ready_(false)
         { 
             HCE_MIN_CONSTRUCTOR();
         }
@@ -682,10 +691,10 @@ private:
             return detail::deleter::sender<send_interface>;
         }
 
-        inline void on_ready() {
+        inline bool on_ready() {
             if(parent_.closed_flag_) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("send","closed");
-                this->set_ready();
+                ready_ = true;
             } else if(parent_.buf_.full()) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("send","blocked");
                 parent_.parked_send_.push_back(this);
@@ -696,23 +705,27 @@ private:
 
                 if(parent_.parked_recv_.size()) [[unlikely]] {
                     detail::transfer tx(detail::circular_buffer_recv<T>,&(parent_.buf_));
-                    parent_.parked_recv_.front()->resume((void*)&(tx));
+                    parent_.parked_recv_.front()->notify((void*)&(tx));
                     parent_.parked_recv_.pop();
                 }
 
-                this->set_ready();
+                ready_ = true;
             }
+
+            return ready_;
         }
 
     private:
         PARENT& parent_;
+        bool ready_;
         friend detail::deleter;
     };
 
     struct recv_interface : public detail::base_recv_interface<Lock> {
         recv_interface(PARENT& p, void* destination) :
             detail::base_recv_interface<Lock>(p.lk_, destination),
-            parent_(p)
+            parent_(p),
+            ready_(false)
         { 
             HCE_MIN_CONSTRUCTOR();
         }
@@ -732,11 +745,11 @@ private:
             return detail::deleter::receiver<recv_interface>;
         }
 
-        inline void on_ready() {
+        inline bool on_ready() {
             if(parent_.buf_.empty()) [[unlikely]] {
                 if(parent_.closed_flag_ ) [[unlikely]] {
                     HCE_TRACE_METHOD_BODY("recv","closed");
-                    this->set_ready();
+                    ready_ = true;
                 } else [[likely]] {
                     HCE_TRACE_METHOD_BODY("recv","blocked");
                     parent_.parked_recv_.push_back(this);
@@ -748,16 +761,19 @@ private:
                 this->success = true;
 
                 if(parent_.parked_send_.size()) [[unlikely]] {
-                    parent_.parked_send_.front()->resume((void*)&(parent_.buf_));
+                    parent_.parked_send_.front()->notify((void*)&(parent_.buf_));
                     parent_.parked_send_.pop();
                 }
 
-                this->set_ready();
+                ready_ = true;
             }
+
+            return ready_;
         }
 
     private:
         PARENT& parent_;
+        bool ready_;
         friend detail::deleter;
     };
 
@@ -773,7 +789,7 @@ private:
             buf_.push(std::forward<U>(s));
 
             if(parked_recv_.size()) [[unlikely]] {
-                parked_recv_.front()->resume((void*)&buf_);
+                parked_recv_.front()->notify((void*)&buf_);
                 parked_recv_.pop();
             }
 
@@ -858,7 +874,7 @@ struct unlimited : public interface<T> {
 
             while(parked_recv_.size()) { 
                 HCE_TRACE_METHOD_BODY("close","closing parked recv:",parked_recv_.front());
-                parked_recv_.front()->resume(nullptr); 
+                parked_recv_.front()->notify(nullptr); 
                 parked_recv_.pop();
             }
         }
@@ -939,7 +955,8 @@ private:
     struct send_interface : public detail::base_send_interface<Lock> {
         send_interface(PARENT& p, detail::transfer tx) :
             detail::base_send_interface<Lock>(p.lk_, tx),
-            parent_(p)
+            parent_(p),
+            ready_(false)
         { 
             HCE_MIN_CONSTRUCTOR();
         }
@@ -959,10 +976,10 @@ private:
             return detail::deleter::sender<send_interface>;
         }
 
-        inline void on_ready() { 
+        inline bool on_ready() { 
             if(parent_.closed_flag_) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("send","closed");
-                this->set_ready();
+                ready_ = true;
             } else [[likely]] {
                 HCE_TRACE_METHOD_BODY("send","done");
                 this->tx.send(&(parent_.queue_));
@@ -970,23 +987,27 @@ private:
 
                 if(parent_.parked_recv_.size()) [[unlikely]] {
                     detail::transfer tx(&detail::list_recv<T,hce::list<T,Allocator>>,&(parent_.queue_));
-                    parent_.parked_recv_.front()->resume((void*)&tx);
+                    parent_.parked_recv_.front()->notify((void*)&tx);
                     parent_.parked_recv_.pop();
                 }
 
-                this->set_ready();
+                ready_ = true;
             }
+
+            return ready_;
         }
 
     private:
         PARENT& parent_;
+        bool ready_;
         friend detail::deleter;
     };
 
     struct recv_interface : public detail::base_recv_interface<Lock> {
         recv_interface(PARENT& p, void* destination) :
             detail::base_recv_interface<Lock>(p.lk_, destination),
-            parent_(p)
+            parent_(p),
+            ready_(true)
         { 
             HCE_MIN_CONSTRUCTOR();
         }
@@ -1006,11 +1027,11 @@ private:
             return detail::deleter::receiver<recv_interface>;
         }
 
-        inline void on_ready() {
+        inline bool on_ready() {
             if(parent_.queue_.empty()) [[unlikely]] {
                 if(parent_.closed_flag_ ) [[unlikely]] {
                     HCE_TRACE_METHOD_BODY("recv","closed");
-                    this->set_ready();
+                    ready_ = true;
                 } else [[likely]] {
                     HCE_TRACE_METHOD_BODY("recv","blocked");
                     parent_.parked_recv_.push_back(this);
@@ -1020,12 +1041,15 @@ private:
                 detail::transfer tx(&detail::list_recv<T,hce::list<T,Allocator>>,&(parent_.queue_));
                 tx.send(this->destination);
                 this->success = true;
-                this->set_ready();
+                ready_ = true;
             }
+
+            return ready_;
         }
 
     private:
         PARENT& parent_;
+        bool ready_;
         friend detail::deleter;
     };
     
@@ -1042,7 +1066,7 @@ private:
 
             if(parked_recv_.size()) [[unlikely]] {
                 detail::transfer tx(&detail::list_recv<T,hce::list<T,Allocator>>, &queue_);
-                parked_recv_.front()->resume((void*)&tx);
+                parked_recv_.front()->notify((void*)&tx);
                 parked_recv_.pop();
             }
 
