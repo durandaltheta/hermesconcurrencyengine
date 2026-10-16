@@ -16,14 +16,6 @@ template <>
 struct key_map_t<key::loglevel> { using type = int; };
 
 template <>
-struct key_map_t<key::memory_cache_info> { 
-    using type = hce::config::memory::cache::info; 
-};
-
-template <>
-struct key_map_t<key::memory_cache> { using type = hce::memory::cache; };
-
-template <>
 struct key_map_t<key::coroutine> { using type = hce::coroutine; };
 
 template <>

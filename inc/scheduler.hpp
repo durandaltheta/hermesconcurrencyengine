@@ -68,15 +68,6 @@ struct config {
      Handles are very small allocations (pointer sized).
      */
     size_t reusable_coroutine_handle_limit;
-
-    /**
-     The selected memory cache configuration. This object describes the 
-     `thread_local` memory cache of reusable allocations that this framework 
-     uses instead of direct allocation/deallocation.
-
-     A valid default is selected during construction.
-     */
-    hce::config::memory::cache::info* cache_info;
 };
 
 namespace global {
@@ -1015,10 +1006,6 @@ private:
      It is an ERROR if this is called more than once by a scheduler.
      */
     void run() {
-        // before anything else, configure the thread_local memory cache info 
-        // so that the memory cache is constructed with the right description
-        hce::config::memory::cache::info::set(*(config_.cache_info));
-
         // the local queue of coroutines to evaluate, won't do any logging 
         // because it is an unallocated std:: object
         std::unique_ptr<hce::list<std::coroutine_handle<>>> local_queue(

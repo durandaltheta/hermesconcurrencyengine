@@ -65,7 +65,6 @@ set(HCE_HEADER_FILES
 set(HCE_SOURCE_FILES
     ${LOGURU_DIR}/loguru.cpp
     ${HCE_SOURCE_DIR}/logging.cpp
-    ${HCE_SOURCE_DIR}/memory.cpp
     ${HCE_SOURCE_DIR}/coroutine.cpp
     ${HCE_SOURCE_DIR}/scheduler.cpp
     ${HCE_SOURCE_DIR}/timer.cpp
