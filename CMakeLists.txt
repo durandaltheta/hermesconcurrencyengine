@@ -118,27 +118,6 @@ set(HCE_COMPILE_DEFINES "HCEMEMORYCACHEBUCKETCOUNT=${HCEMEMORYCACHEBUCKETCOUNT}"
 
 # Define the pairs of variable names and their default values
 set(PAIRS
-# If the count of buckets is above 256 due to the user implementation they can 
-# configure the memory cache's index type to be larger than "unsigned char".
-#
-# This type is used in the header of every allocated value, hence why it is so 
-# small by default.
-        HCEMEMORYCACHEINDEXTYPE "uint8_t"
-
-# Each reusable memory bucket shares the same maximum count of bytes it can 
-# grow to store. This value is that limit. The maximum count of elements a 
-# bucket can contain is this value divided by the byte size of a bucket element.
-# So increasing this value increases the number of elements a bucket can store 
-# for reuse, but each bucket can contain different amounts of elements.
-        HCEMEMORYCACHESYSTEMBUCKETBYTELIMIT "${SYSTBYTELIMIT}"
-
-# the global scheduler thread gets a large amount of reusable memory because it 
-# is most likely to need it 
-        HCEMEMORYCACHEGLOBALBUCKETBYTELIMIT "${GLBBYTELIMIT}"
-
-# other schedulers get a high amount of reusable memory but less than the global thread
-        HCEMEMORYCACHESCHEDULERBUCKETBYTELIMIT "${SCHBYTELIMIT}"
-
 # the default block limit of reusable allocations of a pool allocator
         HCEPOOLALLOCATORDEFAULTBLOCKLIMIT "64"
 
