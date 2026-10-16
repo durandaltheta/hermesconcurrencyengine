@@ -1,7 +1,6 @@
+#pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef HERMES_COROUTINE_ENGINE_LIFECYCLE
-#define HERMES_COROUTINE_ENGINE_LIFECYCLE
 
 #include <memory>
 #include <string>
@@ -186,7 +185,7 @@ struct lifecycle : public service<lifecycle>, public hce::printable {
         timer tmr;
     };
 
-    virtual ~lifecycle() { HCE_INFO_DESTRUCTOR(); }
+    virtual ~lifecycle();
 
     /**
      @brief set the hce framework's global configuration and allocate, construct and start the framework 
@@ -216,20 +215,15 @@ struct lifecycle : public service<lifecycle>, public hce::printable {
      */
     static std::unique_ptr<hce::lifecycle> initialize(config c = {});
 
-    static inline std::string info_name() { return "hce::lifecycle"; }
-    inline std::string name() const { return lifecycle::info_name(); }
+    static std::string info_name();
+    std::string name() const;
 
     /// return the lifecycle's config
-    inline const config& get_config() { return config_; }
+    const config& get_config();
 
 private:
     // initialize hce::thread::local before lifecycle so logging can function
-    lifecycle(const config& c, std::unique_ptr<hce::thread::local>&& l) : 
-        config_(c),
-        local_(std::move(l))
-    { 
-        HCE_INFO_CONSTRUCTOR(); 
-    }
+    lifecycle(const config& c, std::unique_ptr<hce::thread::local>&& l);
 
     std::mutex mtx_;
 
@@ -254,5 +248,3 @@ inline std::unique_ptr<lifecycle> initialize() {
 }
 
 }
-
-#endif

@@ -1,7 +1,6 @@
+#pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef HERMES_COROUTINE_ENGINE_UTILITY
-#define HERMES_COROUTINE_ENGINE_UTILITY
 
 #include <utility>
 #include <functional>
@@ -30,5 +29,3 @@ using function_return_type = std::invoke_result_t<F, Args...>;
 typedef std::function<void()> thunk;
 
 }
-
-#endif

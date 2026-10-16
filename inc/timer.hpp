@@ -1,7 +1,6 @@
+#pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef HERMES_COROUTINE_ENGINE_TIMER
-#define HERMES_COROUTINE_ENGINE_TIMER
 
 #include <list>
 #include <exception>
@@ -612,5 +611,3 @@ inline hce::awt<void> sleep(const TIMEOUT& timeout) {
 }
 
 }
-
-#endif

@@ -50,10 +50,7 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/coroutine.hpp
     ${HCE_INCLUDE_DIR}/scheduler.hpp
     ${HCE_INCLUDE_DIR}/blocking.hpp
-    #${HCE_INCLUDE_DIR}/mutex.hpp
-    #${HCE_INCLUDE_DIR}/condition_variable.hpp
     ${HCE_INCLUDE_DIR}/channel.hpp
-    ${HCE_INCLUDE_DIR}/scope.hpp
     ${HCE_INCLUDE_DIR}/threadpool.hpp
     ${HCE_INCLUDE_DIR}/thread_key_map.hpp
     ${HCE_INCLUDE_DIR}/lifecycle.hpp
@@ -65,9 +62,12 @@ set(HCE_HEADER_FILES
 set(HCE_SOURCE_FILES
     ${LOGURU_DIR}/loguru.cpp
     ${HCE_SOURCE_DIR}/logging.cpp
+    ${HCE_SOURCE_DIR}/cleanup.cpp
     ${HCE_SOURCE_DIR}/coroutine.cpp
     ${HCE_SOURCE_DIR}/scheduler.cpp
+    ${HCE_SOURCE_DIR}/blocking.cpp
     ${HCE_SOURCE_DIR}/timer.cpp
+    ${HCE_SOURCE_DIR}/thread.cpp
     ${HCE_SOURCE_DIR}/threadpool.cpp
     ${HCE_SOURCE_DIR}/service.cpp
     ${HCE_SOURCE_DIR}/lifecycle.cpp

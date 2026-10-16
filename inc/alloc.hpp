@@ -1,3 +1,4 @@
+#pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
 /**
@@ -8,8 +9,6 @@
 
  This is the header most code needs to include.
  */
-#ifndef HERMES_COROUTINE_ENGINE_ALLOC
-#define HERMES_COROUTINE_ENGINE_ALLOC
 
 #include <type_traits>
 #include <string>
@@ -535,5 +534,3 @@ template <typename T, typename U>
 bool operator!=(const std::allocator<T>& lhs, const hce::pool_allocator<U>& rhs) {
     return !(lhs == rhs);
 }
-
-#endif

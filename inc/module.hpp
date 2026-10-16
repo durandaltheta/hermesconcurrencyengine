@@ -1,7 +1,6 @@
+#pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef HERMES_COROUTINE_ENGINE_MODULE
-#define HERMES_COROUTINE_ENGINE_MODULE
 
 #include <string>
 #include <filesystem>
@@ -58,5 +57,3 @@ struct module {
 };
 
 }
-
-#endif

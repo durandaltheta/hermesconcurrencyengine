@@ -1,7 +1,6 @@
+#pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef HERMES_COROUTINE_ENGINE
-#define HERMES_COROUTINE_ENGINE
 
 #include "base.hpp"
 #include "utility.hpp"
@@ -19,13 +18,8 @@
 #include "scheduler.hpp"
 #include "blocking.hpp"
 #include "timer.hpp"
-//#include "mutex.hpp"
-//#include "condition_variable.hpp"
 #include "channel.hpp"
-#include "scope.hpp"
 #include "threadpool.hpp"
 #include "lifecycle.hpp"
 #include "environment.hpp"
 #include "module.hpp"
-
-#endif

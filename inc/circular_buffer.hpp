@@ -1,7 +1,6 @@
+#pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef HERMES_COROUTINE_ENGINE_CIRCULAR_BUFFER
-#define HERMES_COROUTINE_ENGINE_CIRCULAR_BUFFER
 
 #include <cstdlib>
 #include <algorithm>
@@ -196,5 +195,3 @@ private:
 };
 
 }
-
-#endif

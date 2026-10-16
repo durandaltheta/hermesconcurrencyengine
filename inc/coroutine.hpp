@@ -1,7 +1,6 @@
+#pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef HERMES_COROUTINE_ENGINE_COROUTINE
-#define HERMES_COROUTINE_ENGINE_COROUTINE
 
 // c++
 #include <memory>
@@ -56,191 +55,87 @@ struct coroutine : public printable {
      co<T>::promise_type.
      */
     struct promise_type : public cleanup, public printable {
-        promise_type() { }
-        virtual ~promise_type(){ }
+        promise_type();
+        virtual ~promise_type();
 
         // ensure the use of non-throwing operator-new
-        static coroutine get_return_object_on_allocation_failure() {
-            throw std::bad_alloc();
-            return coroutine(nullptr);
-        }
+        static coroutine get_return_object_on_allocation_failure();
 
         /// implement cleanup interface
-        inline void* cleanup_alloc(size_t n) {
-            return hce::memory::allocate(n);
-        }
+        void* cleanup_alloc(size_t n);
 
         /// implement cleanup interface
-        inline void cleanup_dealloc(void* p) {
-            hce::memory::deallocate(p);
-        }
+        void cleanup_dealloc(void* p);
 
         /**
          @brief implement custom new to make use of thread local allocation caching
          */
-        inline void* operator new(std::size_t n) noexcept {
-            return hce::memory::allocate(n);
-        }
+        void* operator new(std::size_t n) noexcept;
 
         /**
          @brief implement custom delete to make use of thread local allocation caching 
          */
-        inline void operator delete(void* ptr) noexcept {
-            hce::memory::deallocate(ptr);
-        }
+        void operator delete(void* ptr) noexcept;
 
-        inline coroutine get_return_object() {
-            return { 
-                std::coroutine_handle<promise_type>::from_promise(*this) 
-            };
-        }
+        coroutine get_return_object();
 
-        inline std::suspend_always initial_suspend() { return {}; }
-        inline std::suspend_always final_suspend() noexcept { return {}; }
-        inline void unhandled_exception() { eptr = std::current_exception(); }
+        std::suspend_always initial_suspend();
+        std::suspend_always final_suspend() noexcept;
+        void unhandled_exception();
 
         /// exception pointer to the most recently raised exception
         std::exception_ptr eptr = nullptr; 
     };
 
-    coroutine() { }
+    coroutine();
     coroutine(const coroutine&) = delete;
-
-    coroutine(coroutine&& rhs) {
-        HCE_MED_GUARD(rhs.handle_, HCE_MED_CONSTRUCTOR(rhs)); 
-        swap(rhs); 
-    }
+    coroutine(coroutine&& rhs);
 
     // construct the coroutine from a type erased handle
-    coroutine(std::coroutine_handle<>&& h) : handle_(h) { 
-        HCE_MIN_GUARD(h,HCE_MIN_CONSTRUCTOR(h));
+    coroutine(std::coroutine_handle<>&& h);
+    coroutine& operator=(const coroutine&) = delete;
+    coroutine& operator=(coroutine&& rhs);
+    virtual ~coroutine();
 
-        // ensure source memory no longer has access to the handle
-        h = std::coroutine_handle<>();
-    }
-
-    inline coroutine& operator=(const coroutine&) = delete;
-
-    inline coroutine& operator=(coroutine&& rhs) { 
-        HCE_MED_METHOD_ENTER("operator=",rhs);
-        swap(rhs);
-        return *this;
-    }
-
-    virtual ~coroutine() {
-        HCE_MED_GUARD(handle_,HCE_MED_DESTRUCTOR()); 
-        reset(); 
-    }
-
-    static inline std::string info_name() { return "hce::coroutine"; }
-    inline std::string name() const { return coroutine::info_name(); }
+    static std::string info_name();
+    std::string name() const;
 
     /// return our stringified coroutine handle's address
-    inline std::string content() const { 
-        if(handle_) {
-            std::stringstream ss;
-            ss << handle_;
-            return ss.str();
-        } else { return std::string(); }
-    }
+    std::string content() const;
 
     /// return true if the handle is valid, else false
-    inline operator bool() const { return (bool)handle_; }
+    operator bool() const;
 
     /// releases ownership of the managed handle and returns it
-    inline std::coroutine_handle<> release() {
-        HCE_LOW_METHOD_ENTER("release");
-        auto h = handle_;
-        handle_ = std::coroutine_handle<>();
-        return h;
-    }
+    std::coroutine_handle<> release();
+    
 
     /// cleans up and resets the managed handle
-    inline void reset() { 
-        HCE_TRACE_METHOD_ENTER("reset");
-        if(handle_) [[likely]] { destroy_(); }
-        handle_ = std::coroutine_handle<>(); 
-    }
+    void reset();
 
     /// cleans up and replaces the managed handle
-    inline void reset(std::coroutine_handle<> h) { 
-        HCE_TRACE_METHOD_ENTER("reset", h);
-        if(handle_) [[likely]] { destroy_(); }
-        handle_ = h; 
-    }
+    void reset(std::coroutine_handle<> h);
 
     /// swap two coroutines
-    inline void swap(coroutine& rhs) noexcept { 
-        HCE_TRACE_METHOD_ENTER("swap", rhs);
-        std::coroutine_handle<> h = handle_;
-        handle_ = rhs.handle_;
-        rhs.handle_ = h;
-    }
+    void swap(coroutine& rhs) noexcept;
 
     /// return true if the coroutine is done, else false
-    inline bool done() const { 
-        bool d = handle_.done();
-        HCE_MIN_METHOD_BODY("done", std::boolalpha, d);
-        return d; 
-    }
+    bool done() const;
 
     /// return the address of the underlying handle
-    inline void* address() const { 
-        HCE_MIN_METHOD_ENTER("address");
-        return handle_.address(); 
-    }
+    void* address() const;
    
     /// return true if called inside a running coroutine, else false
-    static inline bool in() { 
-        bool ret = detail::coroutine::tl_this_coroutine(); 
-        HCE_TRACE_FUNCTION_BODY("hce::coroutine::in():",ret);
-        return ret;
-    }
+    static bool in();
 
     /// return the coroutine running on this thread
-    static inline coroutine& local() { 
-        HCE_TRACE_FUNCTION_ENTER("hce::coroutine::local()");
-        return *(detail::coroutine::tl_this_coroutine()); 
-    }
+    static coroutine& local();
 
     /// resume the coroutine 
-    inline void resume() {
-        HCE_MED_METHOD_ENTER("resume");
-        auto& tl_co = detail::coroutine::tl_this_coroutine();
-
-        // store parent coroutine pointer
-        auto parent_co = tl_co;
-
-        // set current coroutine ptr 
-        tl_co = this; 
-        
-        // continue coroutine execution
-        handle_.resume();
-
-        /*
-         Optimize for handle stealing awaitable blocking operations by not 
-         expecting this handle to remain valid.
-         */
-        if(handle_) [[unlikely]] {
-            // acquire the exception pointer
-            auto eptr = 
-                std::coroutine_handle<promise_type>::from_address(address())
-                    .promise()
-                    .eptr;
-
-            // rethrow any caught exceptions from the coroutine
-            if(eptr) [[unlikely]] { std::rethrow_exception(eptr); }
-        }
-
-        // restore the parent pointer
-        tl_co = parent_co;
-    }
+    void resume();
 
 protected:
-    inline void destroy_() {
-        HCE_MED_METHOD_BODY("destroy", handle_);
-        handle_.destroy(); // destruct and deallocate memory 
-    }
+    void destroy_();
 
     // the coroutine's managed handle
     std::coroutine_handle<> handle_;
@@ -388,11 +283,8 @@ namespace coroutine {
 
 /// thread_local block/unblock functionality
 struct this_thread : public printable {
-    static inline std::string info_name() { 
-        return "hce::detail::coroutine::this_thread"; 
-    }
-
-    inline std::string name() const { return this_thread::info_name(); }
+    static std::string info_name();
+    std::string name() const;
 
     // get the this_thread object associated with the calling thread
     static this_thread* get();
@@ -408,11 +300,7 @@ struct this_thread : public printable {
     }
     
     // unblock an arbitrary this_thread without lock synchronization
-    inline void unblock() {
-        HCE_TRACE_METHOD_ENTER("unblock");
-        ready = true;
-        cv.notify_one();
-    }
+    void unblock();
 
     // unblock an arbitrary this_thread with lock synchronization
     template <typename LOCK>
@@ -424,7 +312,7 @@ struct this_thread : public printable {
     }
 
 private:
-    this_thread() { }
+    this_thread();
 
     template <typename LOCK>
     inline void block_(LOCK& lk) {
@@ -442,37 +330,15 @@ private:
 }
 
 struct yield : public hce::printable {
-    yield() { HCE_LOW_CONSTRUCTOR(); }
+    yield();
+    virtual ~yield();
 
-    virtual ~yield() {
-        HCE_LOW_DESTRUCTOR();
-
-        if(hce::coroutine::in() && !awaited_){ 
-            std::stringstream ss;
-            ss << hce::coroutine::local()
-               << "did not call co_await on "
-               << *this;
-            HCE_FATAL_LOG("%s",ss.str().c_str());
-            std::terminate();
-        }
-    }
-
-    static inline std::string info_name() { 
-        return "hce::detail::coroutine::yield"; 
-    }
-
-    inline std::string name() const { return yield::info_name(); }
-
-    inline bool await_ready() {
-        HCE_LOW_METHOD_ENTER("await_ready");
-        awaited_ = true;
-        return false; 
-    }
+    static std::string info_name();
+    std::string name() const;
+    bool await_ready();
 
     // don't need to replace the handle, it's not moving
-    inline void await_suspend(std::coroutine_handle<> h) { 
-        HCE_LOW_METHOD_ENTER("await_suspend");
-    }
+    void await_suspend(std::coroutine_handle<> h);
 
 private:
     bool awaited_ = false;
@@ -626,31 +492,11 @@ struct awaitable : public printable {
      objects.
      */
     struct interface : public printable {
-        interface() { HCE_LOW_CONSTRUCTOR(); }
+        interface();
         interface(const interface& rhs) = delete;
         interface(interface&& rhs) = delete;
 
-        virtual ~interface() { 
-            HCE_TRACE_DESTRUCTOR();
-
-            if(this->handle_) [[unlikely]] {
-                // place handle in coroutine for printing purposes
-                coroutine co(std::move(this->handle_));
-                std::stringstream ss;
-                ss << *this
-                   << " was not resumed before being destroyed; it held " 
-                   << co;
-                HCE_FATAL_METHOD_BODY("~interface",ss.str().c_str());
-
-                // Can't recover anyway, about to terminate. Leaving the handle 
-                // in this destructor and cleaning up would cause a circular 
-                // destructor call (IE, an object inside the coroutine would 
-                // destruct the coroutine containing it), causing a very 
-                // confusing error.
-                co.release();
-                std::terminate();
-            }
-        }
+        virtual ~interface();
 
         /**
          @brief implement custom new to make use of thread local allocation caching
@@ -658,86 +504,20 @@ struct awaitable : public printable {
          This has the same constructor argument limitations as 
          `hce::coroutine::promise_type`
          */
-        inline void* operator new(std::size_t n) noexcept {
-            return hce::memory::allocate(n);
-        }
-
-        inline void operator delete(void* ptr) noexcept {
-            hce::memory::deallocate(ptr);
-        }
+        void* operator new(std::size_t n) noexcept;
+        void operator delete(void* ptr) noexcept;
         
         interface& operator=(const interface& rhs) = delete;
         interface& operator=(interface&& rhs) = delete;
 
-        static inline std::string info_name() { 
-            return "hce::awaitable::interface"; 
-        }
+        static inline std::string info_name();
+        std::string name() const;
+        virtual bool awaited() final;
 
-        inline std::string name() const { return interface::info_name(); }
-
-        virtual inline bool awaited() final { return this->awaited_; }
-
-        virtual inline bool await_ready() final {
-            HCE_LOW_METHOD_ENTER("await_ready");
-
-            // acquire the lock if implementation was not constructed with 
-            // ownership
-            if(this->await_policy() == await::policy::defer) { this->lock(); }
-
-            // set awaited flag
-            this->awaited_ = true;
-
-            // call the ready code
-            if(this->on_ready()) [[unlikely]] {
-                HCE_TRACE_METHOD_BODY("await_ready","ready immediately");
-                this->unlock();
-                return true;
-            } else [[likely]] {
-                HCE_TRACE_METHOD_BODY("await_ready","about to suspend");
-                return false;
-            }
-        }
+        virtual bool await_ready() final;
 
         /// called by awaitable's await_suspend()
-        virtual inline void await_suspend(std::coroutine_handle<> h) final {
-            HCE_LOW_METHOD_ENTER("await_suspend");
-
-            // still locked from await_ready()
-            this->on_suspend();
-
-            // If this handle is valid, we are in a coroutine. Optimize for 
-            // coroutine suspends over system threads
-            if(h) [[likely]] {
-                HCE_TRACE_METHOD_BODY("await_suspend",h);
-
-                // assign the handle to our member
-                this->handle_ = h; 
-
-                // the current coroutine no longer manages the handle
-                coroutine::local().release(); 
-
-                // Compiler now returns to the caller of coroutine::resume() 
-                // when this function returns
-            } else [[unlikely]] {
-                // Behavior of system thread in this function is VERY different 
-                // than in coroutines. We block here on a condition_variable 
-                // until resume() is called, where-as in a coroutine it takes
-                // control of the coroutine handle and suspends.
-
-                // block the calling thread using traditional mechanisms
-                this->tt_ = detail::coroutine::this_thread::get(); 
-
-                HCE_TRACE_METHOD_BODY("await_suspend","tt_:",(void*)(this->tt_));
-
-                // allow condition_variable::wait() to unlock `this`
-                detail::coroutine::this_thread::block(*this);
-
-                // we are now re-locked and resumed
-            }
-
-            // in both cases we need to exit this function unlocked
-            this->unlock();
-        }
+        virtual void await_suspend(std::coroutine_handle<> h) final;
 
         /**
          @brief unblock and resume a suspended operation 
@@ -749,44 +529,7 @@ struct awaitable : public printable {
 
          @param m arbitary memory passed to on_resume()
          */
-        virtual inline void resume(void* m) final {
-            HCE_LOW_METHOD_ENTER("resume");
-
-            auto rp = this->resume_policy();
-
-            // acquire the lock
-            if(rp == resume::policy::lock){ this->lock(); }
-
-            // call the custom resumption code
-            this->on_resume(m); 
-
-            // optimize for coroutines over threads
-            if(this->handle_) [[likely]] { 
-                HCE_TRACE_METHOD_BODY("resume","to_destination");
-                // unblock the suspended coroutine and push the handle to its 
-                // destination. Make sure that handle_ is unset before passing 
-                // to destination. There are certain cases where the the 
-                // coroutine can be rescheduled where this can cause an error 
-                // otherwise in "no-lock" scenarios.
-                auto h = this->handle_;
-                this->handle_ = std::coroutine_handle<>();
-                if(rp != resume::policy::no_lock) { this->unlock(); }
-                this->to_destination(h);
-            } else [[unlikely]] {
-                if(this->tt_) [[unlikely]] { 
-                    HCE_TRACE_METHOD_BODY("resume","unblock");
-                    // unblock the suspended thread 
-                    auto tt = this->tt_;
-                    this->tt_ = nullptr;
-                    if(rp == resume::policy::no_lock) { tt->unblock(); }
-                    else { tt->unblock(*this); }
-                } else [[likely]] {
-                    HCE_TRACE_METHOD_BODY("resume","not blocked");
-                    // this was called before blocking occurred
-                    if(rp != resume::policy::no_lock) { this->unlock(); }
-                }
-            }
-        }
+        virtual void resume(void* m) final;
 
         /**
          This value is necessary to introspect when determining how lock() needs
@@ -909,27 +652,19 @@ struct awaitable : public printable {
         bool locked_; // track locked state
     };
 
-    awaitable() : impl_(nullptr) {
-        HCE_TRACE_CONSTRUCTOR();
-    }
-
+    awaitable();
     awaitable(const awaitable&) = delete;
     awaitable(awaitable&& rhs) = default;
     
-    virtual ~awaitable() { 
-        HCE_TRACE_DESTRUCTOR();
-        wait(); 
-    }
+    virtual ~awaitable();
 
-    inline awaitable& operator=(const awaitable&) = delete;
-    inline awaitable& operator=(awaitable&& rhs) = default;
+    awaitable& operator=(const awaitable&) = delete;
+    awaitable& operator=(awaitable&& rhs) = default;
     
-    static inline std::string info_name() { return "hce::awaitable"; }
-    inline std::string name() const { return awaitable::info_name(); }
+    static std::string info_name();
+    std::string name() const;
 
-    inline std::string content() const {
-        return impl_ ? impl_->to_string() : std::string();
-    }
+    std::string content() const;
 
     /**
      Can't use conversion `operator bool()` because descendent awaitables are 
@@ -939,25 +674,25 @@ struct awaitable : public printable {
 
      @return true if the awaitable manages an implementation, else false
      */
-    inline bool valid() const { return (bool)impl_; }
+    bool valid() const;
 
     /// return the underlying implementation
-    interface& implementation() { return *impl_; }
+    interface& implementation();
 
     /// destroy the implementation 
-    inline void reset() { impl_.reset(); }
+    void reset();
 
     /// destroy the implementation and assign a new one
-    inline void reset(interface* i) { impl_.reset(i); }
+    void reset(interface* i);
 
     /// release control of the underlying implementation pointer
-    inline interface* release() { return impl_.release(); }
+    interface* release();
 
     /**
      Immediately called by `co_await` keyword. If it returns `true`, 
      `await_ready()` is immediately called.
      */
-    inline bool await_ready() { return impl_->await_ready(); }
+    bool await_ready();
 
     /**
      When using the `co_await` keyword, if `await_ready() == false`, this 
@@ -969,9 +704,7 @@ struct awaitable : public printable {
      then the operation is on a system thread and will block the calling thread 
      instead of simply returning.
      */
-    inline void await_suspend(std::coroutine_handle<> h) { 
-        impl_->await_suspend(h); 
-    }
+    void await_suspend(std::coroutine_handle<> h);
 
     /**
      @brief block until awaitable is complete and cleanup the implementation
@@ -982,30 +715,7 @@ struct awaitable : public printable {
 
      This method automatically called by the destructor.
      */
-    inline void wait() {
-        HCE_MIN_METHOD_ENTER("wait");
-        if(impl_ && !(impl_->awaited())) [[unlikely]] {
-            if(coroutine::in()) [[unlikely]] { 
-                // coroutine failed to `co_await` the awaitable
-                std::stringstream ss;
-                ss << hce::coroutine::local()
-                   << "did not call co_await on "
-                   << *this;
-                HCE_FATAL_METHOD_BODY("wait",ss.str());
-                std::terminate();
-            } else if(!await_ready()) [[likely]] { 
-                HCE_TRACE_METHOD_BODY("wait","thread");
-                // if we're here, this awaitable is operating without the 
-                // `co_await` keyword, and needs to operate as a regular system 
-                // thread blocking call, not a coroutine suspend.
-                await_suspend(std::coroutine_handle<>()); 
-            } else {
-                HCE_TRACE_METHOD_BODY("wait","thread done");
-            }
-        } else {
-            HCE_TRACE_METHOD_BODY("wait","nothing to do");
-        }
-    }
+    void wait();
 
 protected:
     /*
@@ -1022,10 +732,7 @@ protected:
 
 private:
     struct interface_deleter {
-        inline void operator()(interface* ptr) const noexcept {
-            ptr->~interface(); // call destructor
-            ptr->operator delete(ptr);  // call custom delete 
-        }
+        void operator()(interface* ptr) const noexcept;
     };
 
     std::unique_ptr<interface, interface_deleter> impl_;
@@ -1203,5 +910,3 @@ template <typename T>
 using awt_interface = typename hce::awt<T>::interface;
 
 }
-
-#endif
