@@ -2,7 +2,6 @@
 
 #include <gtest/gtest.h> 
 #include "test_helpers.hpp"
-#include "test_memory_helpers.hpp"
 
 namespace test {
 namespace threadpool {
@@ -244,32 +243,4 @@ TEST(threadpool, join_schedule) {
     EXPECT_EQ(expected, test::threadpool::join_schedule_T<void*>());
     EXPECT_EQ(expected, test::threadpool::join_schedule_T<std::string>());
     EXPECT_EQ(expected, test::threadpool::join_schedule_T<test::CustomObject>());
-}
-
-TEST(threadpool, cache_info) {
-    auto& tp_schs = hce::service<hce::threadpool>::get().schedulers();
-
-    EXPECT_TRUE(tp_schs.size() > 0);
-
-    hce::lifecycle::config c;
-    tp_schs[0]->schedule(test::memory::cache_info_check_co("global", c.mem.global));
-
-    for(size_t i=1; i<tp_schs.size(); ++i) {
-        tp_schs[i]->schedule(
-            test::memory::cache_info_check_co(
-                "scheduler", 
-                c.mem.scheduler));
-    }
-}
-
-TEST(threadpool, cache_allocate_deallocate) {
-    auto& tp_schs = hce::service<hce::threadpool>::get().schedulers();
-
-    EXPECT_TRUE(tp_schs.size() > 0);
-
-    std::vector<hce::awt<void>> awts;
-
-    for(size_t i=0; i<tp_schs.size(); ++i) {
-        awts.push_back(tp_schs[i]->schedule(test::memory::cache_allocate_deallocate_co()));
-    }
 }

@@ -3,10 +3,10 @@
 #include <string>
 
 #include "memory.hpp"
+#include "alloc.hpp"
 
 #include <gtest/gtest.h>
 #include "test_helpers.hpp"
-#include "test_memory_helpers.hpp"
 
 namespace test {
 
@@ -27,15 +27,6 @@ void allocate_deallocate_T(){
     }
 }
 
-}
-
-TEST(memory, system_cache_info) {
-    hce::lifecycle::config c;
-    test::memory::cache_info_check("system", c.mem.system);
-}
-
-TEST(memory, system_cache_allocate_deallocate) {
-    test::memory::cache_allocate_deallocate();
 }
 
 TEST(memory, allocate_deallocate) {

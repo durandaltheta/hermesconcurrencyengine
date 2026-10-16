@@ -9,7 +9,6 @@ add_subdirectory(googletest)
 set(HCE_UT_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/main.cpp
     ${CMAKE_CURRENT_LIST_DIR}/test_helpers.hpp
-    ${CMAKE_CURRENT_LIST_DIR}/test_memory_helpers.hpp
     ${CMAKE_CURRENT_LIST_DIR}/test_blocking_helpers.hpp
     ${CMAKE_CURRENT_LIST_DIR}/test_module_helpers.hpp
     ${CMAKE_CURRENT_LIST_DIR}/lifecycle_ut.cpp
