@@ -12,7 +12,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -Wall -Wfatal-errors")
 set(HCE_INCLUDE_DIR ${CMAKE_CURRENT_LIST_DIR}/inc)
 set(HCE_SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/src)
 set(LOGURU_DIR ${CMAKE_CURRENT_LIST_DIR}/loguru)
-option(BUILD_SHARED_LIBS "Build hce as a shared library" OFF)
+option(BUILD_SHARED_LIBS "Build hce as a shared library" ON)
 
 project(libhce)
 
@@ -80,41 +80,6 @@ set(HCE_SOURCE_FILES
 if(NOT DEFINED TIME_SENSITIVE_TESTS_ENABLED OR "${TIME_SENSITIVE_TESTS_ENABLED}" STREQUAL "")
     set(TIME_SENSITIVE_TESTS_ENABLED "1")
 endif()
-
-# The number of buckets containing thread_local reusable allocated memory used 
-# by this library's memory allocation facilities. Reused allocations prevent 
-# needing to call process-wide locks.
-#
-# buckets are defined as incrementing holding powers of 2, each bucket one power 
-# higher than the previous:
-# - bucket 0 holds values of 1 byte
-# - bucket 1 holds values of 2 bytes
-# - bucket 2 holds values of 4 bytes
-# - bucket 3 holds values of 8 bytes
-# - etc.
-#
-# More buckets allows for reusable allocations of larger byte counts.
-#
-# Any requested allocated size larger than the largest bucket can provide will 
-# be allocated/deallocated directly with `malloc()`/`free()`.
-if(NOT DEFINED HCEMEMORYCACHEBUCKETCOUNT OR "${HCEMEMORYCACHEBUCKETCOUNT}" STREQUAL "")
-    set(HCEMEMORYCACHEBUCKETCOUNT "13")
-endif()
-
-# 512 bytes == 2^9. Buckets 10-HCEMEMORYCACHEBUCKETCOUNT will hold a maximum of 
-# 1 value, but buckets 0-9 will hold more.
-math(EXPR SYSTBYTELIMIT "${CMAKE_SIZEOF_VOID_P} * 64") 
-
-# All buckets are 2^HCEMEMORYCACHEBUCKETCOUNT bytes, equal to the block size of 
-# the largest bucket 
-math(EXPR SCHBYTELIMIT "1 << ${HCEMEMORYCACHEBUCKETCOUNT}")
-
-# The global scheduler gets double the cache size because of its expected larger 
-# load
-math(EXPR GLBBYTELIMIT "${SCHBYTELIMIT} * 2") 
-       
-# Start the compile definitions list
-set(HCE_COMPILE_DEFINES "HCEMEMORYCACHEBUCKETCOUNT=${HCEMEMORYCACHEBUCKETCOUNT}")
 
 # Define the pairs of variable names and their default values
 set(PAIRS
