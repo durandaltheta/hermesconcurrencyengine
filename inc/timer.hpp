@@ -445,6 +445,8 @@ private:
                         HCE_LOW_METHOD_BODY("cancel","cancelled timer with ",sid);
                         break;
                     }
+
+                    ++it;
                 }
             }
         } 
@@ -538,23 +540,23 @@ private:
 
                     if(below_busy_wait_threshold()) [[unlikely]] {
                         // spend as much time busy waiting as possible unlocked
-                        lk_.unlock();
+                        lk.unlock();
 
                         do {
                             // spend some time acquiring the time and keeping 
                             // the service unlocked
                             update_now(true);
 
-                            lk_.lock();
+                            lk.lock();
                             // update latest timeout each check because the lock 
                             // is not held
                             timeout = timers_.front()->timeout;
-                            lk_.unlock();
+                            lk.unlock();
 
                             // don't actually need to lock during this check
                         } while(below_busy_wait_threshold());
                             
-                        lk_.lock();
+                        lk.lock();
                     } else [[likely]] {
                         auto tmp_timeout = timeout_algorithm_(now, timeout);
 
