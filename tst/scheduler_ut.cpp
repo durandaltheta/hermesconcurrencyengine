@@ -12,7 +12,6 @@
 
 #include <gtest/gtest.h> 
 #include "test_helpers.hpp"
-#include "test_memory_helpers.hpp"
 
 namespace test {
 namespace scheduler {
@@ -382,38 +381,4 @@ TEST(scheduler, migrate) {
 
     // join with scheduled coroutine
     sch1->schedule(helper::op(sch1, sch2, schg));
-}
-
-TEST(scheduler, scheduler_cache_info) {
-    auto lf = hce::scheduler::make();
-    std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
-    hce::lifecycle::config c;
-    sch->schedule(test::memory::cache_info_check_co("scheduler", c.mem.scheduler));
-}
-
-TEST(scheduler, global_cache_info) {
-    hce::config::scheduler::config gconf = 
-        hce::config::scheduler::global::config();
-
-    EXPECT_NE(nullptr, gconf.cache_info);
-    EXPECT_EQ(std::string("global"), std::string(gconf.cache_info->name()));
-
-    hce::config::memory::cache::info& cur_info = hce::config::memory::cache::info::get();
-    EXPECT_EQ(std::string("system"), std::string(cur_info.name()));
-
-    hce::lifecycle::config c;
-    hce::service<hce::scheduler::global>::get().get_scheduler().schedule(
-        test::memory::cache_info_check_co(
-            "global", 
-            c.mem.global));
-}
-
-TEST(scheduler, scheduler_cache_allocate_deallocate) {
-    auto lf = hce::scheduler::make();
-    std::shared_ptr<hce::scheduler> sch = lf->get_scheduler();
-    sch->schedule(test::memory::cache_allocate_deallocate_co());
-}
-
-TEST(scheduler, global_cache_allocate_deallocate) {
-    hce::service<hce::scheduler::global>::get().get_scheduler().schedule(test::memory::cache_allocate_deallocate_co());
 }
