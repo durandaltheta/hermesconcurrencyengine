@@ -20,22 +20,6 @@ void* hce::memory::allocate(size_t size);
 void hce::memory::deallocate(void* p);
 ```
 
-## Thread Local Caching
-The first, and most general, allocation caching mechanism is each thread has a `thread_local` `hce::memory::cache`. `cache`s house a variety of relatively small allocation buckets for allocation reuse. `hce::memory::allocate()`/`hce::memory::deallocate()` functions are abstractions to calling the `thread_local` `cache`'s methods, which are lockless.
-
-The `cache` is configured at framework build time with the following `cmake` defined values:
-- `HCETHREADLOCALMEMORYBUCKETCOUNT`: the count of buckets which cache memory chunks in powers of 2, ie: bucket[0] holds allocations of 1 byte, bucket[1] holds allocations of 2 bytes, bucket[2] holds allocations of 4 bytes, etc.
-- `HCETHREADLOCALMEMORYBUCKETBYTELIMIT`: the byte limit any bucket can cache before being forced to call `std::free()` on the allocated memory.
-
-The default `hce::config` function which is used to initialize the `cache` is this function:
-```
-extern hce::config::memory::cache::info& hce::config::memory::cache::info::get();
-```
-
-The user can either modify the `cmake` defines or implement and link a custom `hce::config::memory::cache::info::get()`. The default implementation provides different caching configurations based on the type of thread that needs the cache. For example, the thread running the `hce::scheduler` returned by `hce::scheduler::global()` is expected to have the highest memory reuse burden of any system thread, and is given due consideration.
-
-Custom implementations of `info()` provide the opportunity for fine-grained control of the cache. For example, if the user determines that a few buckets needs a much higher (or lower) byte limit, they can implement the *exact* bucket limits and block size values in their implementation.
-
 ## Default Allocator 
 The `hce::allocator<T>` is a replacement for `std::allocator<T>` which uses `hce::allocate<T>()`/`hce::deallocate()` instead of directly calling `malloc()`/`free()`. This allows the user to easily make use of the framework's allocation caching in their `std::` compliant containers.
 
