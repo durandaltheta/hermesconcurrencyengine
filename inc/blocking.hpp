@@ -356,8 +356,8 @@ private:
             auto ai = new blocking::async<T>();
             auto& wkr = ai->worker();
             HCE_MIN_METHOD_BODY("block","executing on ",wkr);
-            
-            hce::thunk* th = new hce::thunk;
+           
+            hce::thunk* th = hce::allocate<hce::thunk>(1);  // raw memory
 
             hce::alloc::construct_thunk_ptr(
                 th,
@@ -392,7 +392,7 @@ private:
             auto& wkr = ai->worker(); 
             HCE_MIN_METHOD_BODY("block","executing on ",wkr);
 
-            hce::thunk* th = new hce::thunk;
+            hce::thunk* th = hce::allocate<hce::thunk>(1);  // raw memory
 
             hce::alloc::construct_thunk_ptr(
                 th, 
