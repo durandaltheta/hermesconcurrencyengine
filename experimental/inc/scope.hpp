@@ -1,7 +1,6 @@
+#pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef HERMES_COROUTINE_ENGINE_SCOPE
-#define HERMES_COROUTINE_ENGINE_SCOPE
 
 #include <coroutine>
 #include <unordered_set>
@@ -158,5 +157,3 @@ private:
 };
 
 }
-
-#endif

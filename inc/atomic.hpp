@@ -1,8 +1,6 @@
+#pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef HERMES_COROUTINE_ENGINE_ATOMIC
-#define HERMES_COROUTINE_ENGINE_ATOMIC
-
 #include <atomic>
 
 #include "logging.hpp"
@@ -68,5 +66,3 @@ struct lockfree : public printable {
 };
 
 }
-
-#endif

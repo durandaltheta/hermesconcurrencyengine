@@ -170,3 +170,19 @@ std::unique_ptr<hce::lifecycle> hce::lifecycle::initialize(hce::lifecycle::confi
 }
 
 int hce::config::logging::default_log_level() { return HCELOGLEVEL; }
+
+hce::lifecycle::~lifecycle() { HCE_INFO_DESTRUCTOR(); }
+
+std::string hce::lifecycle::info_name() { return "hce::lifecycle"; }
+std::string hce::lifecycle::name() const { return lifecycle::info_name(); }
+
+/// return the lifecycle's config
+const hce::lifecycle::config& hce::lifecycle::get_config() { return config_; }
+
+// initialize hce::thread::local before lifecycle so logging can function
+hce::lifecycle::lifecycle(const config& c, std::unique_ptr<hce::thread::local>&& l) : 
+    config_(c),
+    local_(std::move(l))
+{ 
+    HCE_INFO_CONSTRUCTOR(); 
+}

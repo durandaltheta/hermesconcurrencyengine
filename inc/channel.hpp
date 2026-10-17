@@ -1,8 +1,6 @@
+#pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef HERMES_COROUTINE_ENGINE_CHANNEL
-#define HERMES_COROUTINE_ENGINE_CHANNEL
-
 // c++
 #include <typeinfo>
 #include <mutex>
@@ -1127,5 +1125,3 @@ private:
 };
 
 }
-
-#endif

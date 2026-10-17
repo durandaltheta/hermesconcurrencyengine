@@ -1,3 +1,4 @@
+#pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
 /**
@@ -9,8 +10,6 @@
  this source to make the framework allocate and deallocate using their private 
  definitions.
  */
-#ifndef HERMES_COROUTINE_ENGINE_MEMORY
-#define HERMES_COROUTINE_ENGINE_MEMORY
 
 #include <cstdlib>
 
@@ -36,5 +35,3 @@ inline void deallocate(void* p) {
 
 }
 }
-
-#endif

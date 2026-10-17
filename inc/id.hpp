@@ -1,7 +1,6 @@
+#pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef HERMES_COROUTINE_ENGINE_ID
-#define HERMES_COROUTINE_ENGINE_ID
 
 #include <memory>
 #include <cstddef>
@@ -16,7 +15,7 @@ namespace hce {
 /**
  @brief identifier object interface
 
- Rerpresents an arbitrary unique identifying memory address. The address of this 
+ Represents an arbitrary unique identifying memory address. The address of this 
  memory is usable as a container key.
  */
 struct id : public printable {
@@ -138,5 +137,3 @@ private:
 };
 
 }
-
-#endif

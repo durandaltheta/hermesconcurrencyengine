@@ -1,3 +1,4 @@
+#pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
 /**
@@ -5,9 +6,6 @@
 
  Standardize chrono time types for this framework
  */
-#ifndef HERMES_COROUTINE_ENGINE_CHRONO
-#define HERMES_COROUTINE_ENGINE_CHRONO
-
 #include <chrono>
 
 namespace hce {
@@ -29,4 +27,3 @@ inline Duration to(const std::chrono::duration<Rep,Period>& dur) {
 
 }
 }
-#endif

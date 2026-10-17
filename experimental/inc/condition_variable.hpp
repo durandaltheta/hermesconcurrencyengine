@@ -1,7 +1,6 @@
+#pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef HERMES_COROUTINE_ENGINE_CONDITION_VARIABLE
-#define HERMES_COROUTINE_ENGINE_CONDITION_VARIABLE
 
 // c++
 #include <mutex>

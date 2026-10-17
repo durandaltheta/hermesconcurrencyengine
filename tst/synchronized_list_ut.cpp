@@ -13,7 +13,7 @@ namespace test {
 template <typename T>
 void emplace_back_front_pop_T() {
     hce::synchronized_list<T> q;
-    T t;
+    T t{};
 
     EXPECT_EQ(0, q.size());
     EXPECT_TRUE(q.empty());
@@ -38,7 +38,7 @@ void emplace_back_front_pop_T() {
 template <typename T>
 void rvalue_push_back_front_pop_T() {
     hce::synchronized_list<T> q;
-    T t;
+    T t{};
 
     EXPECT_EQ(0, q.size());
     EXPECT_TRUE(q.empty());
@@ -76,7 +76,7 @@ void lvalue_push_back_front_pop_T() {
     EXPECT_FALSE(q.empty());
 
     for(size_t i=0; i<100; ++i) {
-        T t;
+        T t{};
         q.pop(t);
         EXPECT_EQ((T)test::init<T>(i), t);
         EXPECT_EQ(100 - (i+1), q.size());

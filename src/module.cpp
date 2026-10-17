@@ -7,7 +7,7 @@
 
 using hce_close_handle_f = void (*)(void*);
 using hce_install_environment_f = void (*)(void*);
-using hce_module_create_f = void* (*)(void*);
+using hce_module_create_f = void* (*)();
 using hce_module_destroy_f = void (*)(void*);
 
 void hce_close_handle_(void* handle) {
@@ -40,7 +40,16 @@ hce::co<int> hce_start_module_(
     std::unique_ptr<void, hce_module_destroy_f> umodule)
 {
     // schedule modules' start() coroutine
-    co_return co_await hce::schedule(((hce::module*)(umodule.get()))->start(context));
+    int result = co_await hce::schedule(((hce::module*)(umodule.get()))->start(context));
+
+    // Destroy the module implementation before the library is closed.
+    // Reverse parameter destruction order in the coroutine frame is not
+    // reliable under optimization and has been observed to call
+    // hce_module_destroy after dlclose.
+    umodule.reset();
+    uhandle.reset();   // dlclose now, before co_return
+
+    co_return result;
 }
 
 hce::awt<int> hce_module_import_(const std::filesystem::path& path, 
@@ -96,7 +105,7 @@ hce::awt<int> hce_module_import_(const std::filesystem::path& path,
         std::terminate();
     }
 
-    void* module = create(context);
+    void* module = create();
 
     if (!module) {
         HCE_FATAL_FUNCTION_BODY("hce_start_module_", "hce_module_create() returned nullptr");

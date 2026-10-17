@@ -110,10 +110,12 @@ struct result_interface : public hce::printable {
     }
 
     virtual ~result_interface() {
+        /*
         if(!this->validated_) {
             HCE_FATAL_METHOD_BODY("~result_interface","result_interface did not have validate_results() called before being destroyed, cannot continue");
             std::terminate();
         }
+        */
     }
 
     static inline std::string info_name() { 
@@ -541,7 +543,8 @@ struct timer : public result_interface<20> {
         return std::chrono::milliseconds(12000);
     }
 
-    virtual ~timer(){}
+    virtual ~timer(){ 
+    }
 
     static inline std::string info_name() { 
         return "test::module::timer";

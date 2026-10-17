@@ -1,7 +1,6 @@
+#pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#ifndef HERMES_COROUTINE_ENGINE_THREADPOOL
-#define HERMES_COROUTINE_ENGINE_THREADPOOL
 
 // c++
 #include <vector>
@@ -78,31 +77,15 @@ algorithm_function_ptr algorithm();
  threads beyond the first will be launched.
  */
 struct threadpool : public hce::service<threadpool>, public hce::printable {
-    static inline std::string info_name() { return "hce::threadpool"; }
-    inline std::string name() const { return threadpool::info_name(); }
+    static std::string info_name();
+    std::string name() const;
 
-    inline std::string content() const {
-        std::stringstream ss;
-        auto it = schedulers_.cbegin();
-        auto end = schedulers_.cend();
-
-        ss << **it;
-        ++it;
-
-        while(it!=end) {
-            ss << ", " << **it;
-            ++it;
-        }
-
-        return ss.str(); 
-    }
+    std::string content() const;
 
     /**
      @return a const reference to the managed vector of threadpool schedulers
      */
-    inline const std::vector<std::shared_ptr<hce::scheduler>>& schedulers() const {
-        return schedulers_;
-    }
+    const std::vector<std::shared_ptr<hce::scheduler>>& schedulers() const;
 
     /**
      Select a scheduler using the algorithm returned by 
@@ -112,7 +95,7 @@ struct threadpool : public hce::service<threadpool>, public hce::printable {
 
      @return a reference to a scheduler
      */
-    inline hce::scheduler& algorithm() const { return algorithm_(); }
+    hce::scheduler& algorithm() const;
 
     /**
      @brief best effort mechanism to select the scheduler with the lightest workload 
@@ -140,53 +123,10 @@ struct threadpool : public hce::service<threadpool>, public hce::printable {
     }
 
 private:
-    threadpool() : 
-        // initialize const vector
-        schedulers_([]() -> std::vector<std::shared_ptr<hce::scheduler>> { 
-            // acquire the selected worker count from compiler define
-            size_t worker_count = hce::config::threadpool::count();
-
-            if(worker_count == 0) {
-                // try to match worker_count to CPU count
-                worker_count = std::thread::hardware_concurrency(); 
-
-                // enforce a minimum of 1 worker threads
-                if(worker_count == 0) { 
-                    worker_count = 1; 
-                }
-            }
-
-            // construct the initial vector given worker size
-            std::vector<std::shared_ptr<hce::scheduler>> schedulers(worker_count);
-
-            // the first scheduler is always the default global scheduler
-            schedulers[0] = hce::service<hce::scheduler::global>::get().get_scheduler();
-
-            // construct the rest of the schedulers
-            for(size_t i=1; i<schedulers.size(); ++i) {
-                // get an hce::scheduler::lifecycle
-                auto lf = hce::scheduler::make(hce::config::threadpool::config());
-
-                // assign the scheduler to the vector
-                schedulers[i] = lf->get_scheduler();
-
-                // register the worker lifecycle
-                hce::service<hce::scheduler::lifecycle::manager>::get().registration(
-                    std::move(lf));
-            }
-
-            // return the completed vector
-            return schedulers;
-        }())
-    { 
-        // set the threadpool's algorithm
-        algorithm_ = hce::config::threadpool::algorithm();
-        HCE_HIGH_CONSTRUCTOR();
-    }
-
+    threadpool();
     threadpool(const threadpool&) = delete;
     threadpool(threadpool&&) = delete;
-    virtual ~threadpool(){ HCE_HIGH_DESTRUCTOR(); }
+    virtual ~threadpool();
 
     threadpool& operator=(const threadpool&) = delete;
     threadpool& operator=(threadpool&&) = delete;
@@ -198,5 +138,3 @@ private:
 };
 
 }
-
-#endif
