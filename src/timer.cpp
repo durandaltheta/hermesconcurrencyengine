@@ -101,9 +101,14 @@ bool hce::timer::awaitable::on_ready() {
 
 void hce::timer::awaitable::on_resume(void* m) { 
     HCE_MED_METHOD_ENTER("on_resume",m);
+    auto t = (timer_*)m;
     ready_ = true;
-    result_ = m == nullptr; 
-    delete (timer_*)m; // allow awaitable to delete the memory
+    result_ = t->timed_out;
+
+    // Allow awaitable to delete the memory, ensuring it is unreferenceable by 
+    // the timer service even if this object becomes unreadable memory (a la, 
+    // in an imported dynamically linked module).
+    delete t; 
 }
 
 bool hce::timer::awaitable::get_result() { 
@@ -147,9 +152,10 @@ hce::timer::~timer() {
     // properly cancel and cleanup timers
     while(timers_.size()) {
         // let unique_ptr call destructor
-        std::unique_ptr<timer_> t(timers_.front());
+        auto t = timers_.front();
         timers_.pop_front();
-        t->awt->resume(nullptr); // cancel awaitable
+        t->timed_out = false;
+        t->awt->resume(t); // cancel awaitable
 
         HCE_HIGH_METHOD_BODY("~timer","cancelled timer with ", t->sid);
     }
@@ -256,6 +262,7 @@ bool hce::timer::cancel_(const hce::sid& sid) {
                    
                     // do operations outside lock which don't require it
                     result = true;
+                    t->timed_out = false;
                     t->awt->resume(t.release()); // cancel awaitable
 
                     HCE_LOW_METHOD_BODY("cancel","cancelled timer with ",sid);
@@ -282,7 +289,7 @@ void hce::timer::run() {
     hce::chrono::time_point now = hce::chrono::now();
     hce::chrono::time_point prev = now;
     hce::chrono::time_point timeout;
-    hce::list<hce::timer::awaitable*> timed_out;
+    hce::list<hce::timer::timer_*> timed_out;
 
     auto update_now = [&](bool busy){ 
         prev = now;
@@ -321,10 +328,8 @@ void hce::timer::run() {
             // check if a timer is ready to timeout
             if(timeout_ready()) [[unlikely]] {
                 do {
-                    // let unique_ptr call destructor
-                    std::unique_ptr<timer_> t(*it);
                     // handle timeout callbacks outside lock
-                    timed_out.push_back(t->awt);
+                    timed_out.push_back(*it);
                     it = timers_.erase(it);
                 } while(timeout_ready()); 
 
@@ -332,8 +337,10 @@ void hce::timer::run() {
                 lk.unlock();
 
                 do {
-                    timed_out.front()->resume(nullptr); // resume awaitable
+                    auto t = timed_out.front();
                     timed_out.pop();
+                    t->timed_out = true;
+                    t->awt->resume(t); // resume awaitable
                 } while(timed_out.size()); [[likely]]
 
                 // re-acquire the lock

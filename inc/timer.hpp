@@ -214,6 +214,7 @@ private:
               const hce::chrono::time_point& t, 
               hce::timer::awaitable* a);
 
+        bool timed_out = false;
         hce::sid sid;
         hce::chrono::time_point timeout;
         hce::timer::awaitable* awt;
