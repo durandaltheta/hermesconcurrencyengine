@@ -5,17 +5,35 @@
 
 #include "logging.hpp"
 
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
+#include <immintrin.h>
+#endif
+
 namespace hce {
 
-/**
-@brief core mechanism for atomic synchronization. 
+namespace detail {
+inline void cpu_pause() noexcept {
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
+    _mm_pause();
+#elif defined(__aarch64__) || defined(__arm__)
+    asm volatile("yield" ::: "memory");
+#else
+    // fallback: nothing, or a compiler barrier
+    std::atomic_signal_fence(std::memory_order_seq_cst);
+#endif
+}
+} // namespace detail
 
-Implements atomic lock API without operating system blocking.
-*/
+/**
+ @brief core mechanism for atomic synchronization.
+
+ Implements atomic lock API without operating system blocking.
+ Uses a short pause while spinning to reduce power and cache traffic.
+ */
 struct spinlock : public printable {
-    spinlock() { 
+    spinlock() {
         HCE_MIN_CONSTRUCTOR();
-        lock_.clear(); 
+        lock_.clear();
     }
 
     virtual ~spinlock() { HCE_MIN_DESTRUCTOR(); }
@@ -25,17 +43,32 @@ struct spinlock : public printable {
 
     inline void lock() {
         HCE_MIN_METHOD_ENTER("lock");
-        while(lock_.test_and_set(std::memory_order_acquire)){ } 
+
+        // Fast path: try once
+        if (!lock_.test_and_set(std::memory_order_acquire)) [[likely]] {
+            return;
+        }
+
+        // Contended: spin with pause until it looks clear, then retry TAS
+        while(true) {
+            while(lock_.test(std::memory_order_relaxed)) {
+                detail::cpu_pause();
+            }
+
+            if(!lock_.test_and_set(std::memory_order_acquire)) [[likely]] {
+                return;
+            }
+        }
     }
 
     inline bool try_lock() {
         HCE_MIN_METHOD_ENTER("try_lock");
-        return !(lock_.test_and_set(std::memory_order_acquire)); 
+        return !lock_.test_and_set(std::memory_order_acquire);
     }
 
     inline void unlock() {
         HCE_MIN_METHOD_ENTER("unlock");
-        lock_.clear(std::memory_order_release); 
+        lock_.clear(std::memory_order_release);
     }
 
 private:
@@ -43,10 +76,10 @@ private:
 };
 
 /**
- @brief lockless lockable implementation 
+ @brief no-op lockable for use only when all access is already serialized
+ on the same thread (e.g. coroutines scheduled on one scheduler thread).
 
- For use when an object implement lock API is required but no atomic 
- locking is actually desired.
+ Not safe for concurrent access from multiple threads.
  */
 struct lockfree : public printable {
     lockfree() { HCE_MIN_CONSTRUCTOR(); }
