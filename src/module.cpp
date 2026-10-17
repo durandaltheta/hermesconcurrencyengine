@@ -47,6 +47,7 @@ hce::co<int> hce_start_module_(
     // reliable under optimization and has been observed to call
     // hce_module_destroy after dlclose.
     umodule.reset();
+    uhandle.reset();   // dlclose now, before co_return
 
     co_return result;
 }

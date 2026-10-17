@@ -133,7 +133,7 @@ struct allocator {
     }
 
     inline void destroy(T* p) noexcept {
-        p->~U();
+        p->~T();
     }
 
     // comparison operators (required for allocator compatibility)
