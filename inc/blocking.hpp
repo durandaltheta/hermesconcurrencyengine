@@ -34,6 +34,20 @@ size_t reusable_block_worker_cache_size();
 namespace detail {
 namespace blocking {
 
+struct task {
+    typedef void(*resume_awt_f)(task*);
+
+    void* result = nullptr; // type erased allocated pointer
+    void* awt = nullptr; // type erase awaitable
+    hce::unique_ptr<hce::thunk> operation;
+    resume_awt_f resume_awt = nullptr;
+
+    static void call(task*);
+};
+
+using utask = std::unique_ptr<task>;
+using utask_list = synchronized_list<utask>;
+
 // sync operations are lockfree because they are allocated on the same thread 
 // as the caller and are immediately complete (no interthread communication 
 // required)
@@ -107,8 +121,10 @@ struct async_partial :
 
     // this will never be called *except* in cases where m!=nullptr
     inline void on_resume(void* m) { 
-        t_ = std::unique_ptr<T>((T*)m);
         ready_ = true;
+        auto t = (task*)m;
+        t_.reset((T*)(t->result));
+        delete t;
     }
 
     inline T get_result() { return std::move(*t_); }
@@ -136,12 +152,27 @@ struct async_partial<void> :
     { }
 
     inline bool on_ready() { return ready_; }
-    inline void on_resume(void* m) { ready_ = true; }
+
+    inline void on_resume(void* m) { 
+        ready_ = true; 
+        auto t = (task*)m;
+        delete t;
+    }
 
 private:
     hce::spinlock lk_;
     bool ready_;
 };
+
+template <typename RETURN_TYPE>
+inline void resume_async_awt_impl(hce::detail::blocking::task* task) {
+    ((async_partial<RETURN_TYPE>*)(task->awt))->resume(task);
+}
+
+template <>
+inline void resume_async_awt_impl<void>(hce::detail::blocking::task* task) {
+    ((async_partial<void>*)(task->awt))->resume(task);
+}
 
 }
 }
@@ -249,33 +280,7 @@ struct blocking : public hce::service<blocking>, public hce::printable {
 
 private:
     // block worker thread 
-    struct worker : public printable {
-        worker();
-        virtual ~worker();
-        static std::string info_name();
-        std::string name() const;
-
-        // schedule an operation 
-        void schedule(hce::unique_ptr<hce::thunk>&& operation);
-
-    private:
-        // worker thread scheduler run function
-        static void run_(
-                synchronized_list<hce::unique_ptr<hce::thunk>>* operations);
-
-        // Blocking operation queue. No reason to use thread_local cache
-        // for hce::thunk, because it would be essentially doing a one-way 
-        // memory steal from the scheduler thread to the block thread.
-        //
-        // However, it's fine that the object itself use the 
-        // `pool_allocator` as its allocator, because list node memory will 
-        // be managed and reused inside the object no matter which thread 
-        // allocates the initial memory.
-        hce::synchronized_list<hce::unique_ptr<hce::thunk>> operations_;
-
-        // operating system thread
-        std::thread thd_;
-    };
+    struct worker;
 
     // awaitable implementation for returning an immediately available value
     template <typename T>
@@ -338,6 +343,32 @@ private:
         std::unique_ptr<blocking::worker> wkr_;
     };
 
+    struct worker : public printable {
+        worker();
+        virtual ~worker();
+        static std::string info_name();
+        std::string name() const;
+
+        // schedule an operation 
+        void schedule(hce::detail::blocking::utask&& operation);
+
+        // worker thread scheduler run function
+        static void run_(hce::detail::blocking::utask_list* tasks);
+
+        // Blocking operation queue. No reason to use thread_local cache
+        // for hce::thunk, because it would be essentially doing a one-way 
+        // memory steal from the scheduler thread to the block thread.
+        //
+        // However, it's fine that the object itself use the 
+        // `pool_allocator` as its allocator, because list node memory will 
+        // be managed and reused inside the object no matter which thread 
+        // allocates the initial memory.
+        hce::detail::blocking::utask_list tasks_;
+
+        // operating system thread
+        std::thread thd_;
+    };
+
     blocking();
 
     // retrieve a worker thread from the service to execute blocking operations on
@@ -358,18 +389,22 @@ private:
             HCE_MIN_METHOD_BODY("block","executing on ",wkr);
            
             hce::thunk* th = hce::allocate<hce::thunk>(1);  // raw memory
+            auto task = new hce::detail::blocking::task(
+                    nullptr,
+                    ai,
+                    hce::unique_ptr<hce::thunk>(th),
+                    &hce::detail::blocking::resume_async_awt_impl<T>);
 
             hce::alloc::construct_thunk_ptr(
                 th,
-                [ai,
+                [task,
                  cb=std::forward<Callable>(cb),
                  ... as=std::forward<As>(as)]() mutable -> void {
-                    // pass the allocated T to the async and resume it
-                    ai->resume(new T(cb(std::forward<As>(as)...)));
+                    task->result = (void*)new T(cb(std::forward<As>(as)...));
                 });
 
             // construct the operation and send to the worker
-            wkr.schedule(hce::unique_ptr<hce::thunk>(th));
+            wkr.schedule(hce::detail::blocking::utask(task));
 
             // return an awaitable to await the result of the blocking call
             return hce::awt<T>(ai);
@@ -393,17 +428,20 @@ private:
             HCE_MIN_METHOD_BODY("block","executing on ",wkr);
 
             hce::thunk* th = hce::allocate<hce::thunk>(1);  // raw memory
+            auto task = new hce::detail::blocking::task(
+                    nullptr,
+                    ai,
+                    hce::unique_ptr<hce::thunk>(th),
+                    &hce::detail::blocking::resume_async_awt_impl<void>);
 
             hce::alloc::construct_thunk_ptr(
                 th, 
-                [ai,
-                 cb=std::forward<Callable>(cb),
+                [cb=std::forward<Callable>(cb),
                  ... as=std::forward<As>(as)]() mutable -> void {
                     cb(std::forward<As>(as)...);
-                    ai->resume(nullptr);
                 });
 
-            wkr.schedule(hce::unique_ptr<hce::thunk>(th));
+            wkr.schedule(hce::detail::blocking::utask(task));
             return hce::awt<void>(ai);
         } else {
             HCE_MIN_METHOD_BODY("block","executing on current thread");

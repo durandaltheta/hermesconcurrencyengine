@@ -1,5 +1,10 @@
 #include "blocking.hpp"
 
+void hce::detail::blocking::task::call(hce::detail::blocking::task* task) {
+    (*(task->operation))();
+    task->resume_awt(task);
+}
+
 hce::blocking::~blocking() { HCE_HIGH_DESTRUCTOR(); }
 std::string hce::blocking::info_name() { return ("hce::blocking"); }
 std::string hce::blocking::name() const { return blocking::info_name(); }
@@ -30,13 +35,13 @@ void hce::blocking::clear_worker_cache() {
     }
 }
 
-hce::blocking::worker::worker() : thd_(worker::run_, &operations_) { 
+hce::blocking::worker::worker() : thd_(worker::run_, &tasks_) { 
     HCE_LOW_CONSTRUCTOR();
 }
 
 hce::blocking::worker::~worker() { 
     HCE_LOW_DESTRUCTOR(); 
-    operations_.close();
+    tasks_.close();
     thd_.join();
 }
 
@@ -46,18 +51,16 @@ std::string hce::blocking::worker::info_name() {
 
 std::string hce::blocking::worker::name() const { return worker::info_name(); }
 
-void hce::blocking::worker::schedule(hce::unique_ptr<hce::thunk>&& operation) { 
-    operations_.push_back(std::move(operation));
+void hce::blocking::worker::schedule(hce::detail::blocking::utask&& task) { 
+    tasks_.push_back(std::move(task));
 }
 
-void hce::blocking::worker::run_(
-        synchronized_list<hce::unique_ptr<hce::thunk>>* operations) 
-{
-    hce::unique_ptr<hce::thunk> operation;
+void hce::blocking::worker::run_(hce::detail::blocking::utask_list* tasks) {
+    hce::detail::blocking::utask task;
 
-    while(operations->pop(operation)) [[likely]] {
+    while(tasks->pop(task)) [[likely]] {
         // execute operations sequentially until recv() returns false
-        (*operation)();
+        hce::detail::blocking::task::call(task.release());
     }
 }
 

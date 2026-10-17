@@ -7,7 +7,7 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release) 
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -Wall -Wfatal-errors")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -Wall -Wfatal-errors -g -O2")
 
 set(HCE_INCLUDE_DIR ${CMAKE_CURRENT_LIST_DIR}/inc)
 set(HCE_SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/src)
