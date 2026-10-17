@@ -256,12 +256,12 @@ private:
         std::string name() const;
 
         // schedule an operation 
-        void schedule(std::unique_ptr<hce::thunk>&& operation);
+        void schedule(hce::unique_ptr<hce::thunk>&& operation);
 
     private:
         // worker thread scheduler run function
         static void run_(
-                synchronized_list<std::unique_ptr<hce::thunk>>* operations);
+                synchronized_list<hce::unique_ptr<hce::thunk>>* operations);
 
         // Blocking operation queue. No reason to use thread_local cache
         // for hce::thunk, because it would be essentially doing a one-way 
@@ -271,7 +271,7 @@ private:
         // `pool_allocator` as its allocator, because list node memory will 
         // be managed and reused inside the object no matter which thread 
         // allocates the initial memory.
-        hce::synchronized_list<std::unique_ptr<hce::thunk>> operations_;
+        hce::synchronized_list<hce::unique_ptr<hce::thunk>> operations_;
 
         // operating system thread
         std::thread thd_;
@@ -369,7 +369,7 @@ private:
                 });
 
             // construct the operation and send to the worker
-            wkr.schedule(std::unique_ptr<hce::thunk>(th));
+            wkr.schedule(hce::unique_ptr<hce::thunk>(th));
 
             // return an awaitable to await the result of the blocking call
             return hce::awt<T>(ai);
@@ -403,7 +403,7 @@ private:
                     ai->resume(nullptr);
                 });
 
-            wkr.schedule(std::unique_ptr<hce::thunk>(th));
+            wkr.schedule(hce::unique_ptr<hce::thunk>(th));
             return hce::awt<void>(ai);
         } else {
             HCE_MIN_METHOD_BODY("block","executing on current thread");

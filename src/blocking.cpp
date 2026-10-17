@@ -46,14 +46,14 @@ std::string hce::blocking::worker::info_name() {
 
 std::string hce::blocking::worker::name() const { return worker::info_name(); }
 
-void hce::blocking::worker::schedule(std::unique_ptr<hce::thunk>&& operation) { 
+void hce::blocking::worker::schedule(hce::unique_ptr<hce::thunk>&& operation) { 
     operations_.push_back(std::move(operation));
 }
 
 void hce::blocking::worker::run_(
-        synchronized_list<std::unique_ptr<hce::thunk>>* operations) 
+        synchronized_list<hce::unique_ptr<hce::thunk>>* operations) 
 {
-    std::unique_ptr<hce::thunk> operation;
+    hce::unique_ptr<hce::thunk> operation;
 
     while(operations->pop(operation)) [[likely]] {
         // execute operations sequentially until recv() returns false
