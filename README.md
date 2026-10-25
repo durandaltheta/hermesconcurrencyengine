@@ -580,6 +580,115 @@ hce::awt<void> hce::sleep(const hce::chrono::time_point& timeout);
 hce::awt<void> hce::sleep(const hce::chrono::duration& dur);
 ```
 
+## Network
+
+The framework includes an asynchronous TCP/UDP networking service built on an epoll-based backend. It lets coroutines open client connections, accept server connections, and perform non-blocking send/receive without blocking the scheduler or requiring manual `hce::block()` / `hce::yield()` glue.
+
+The service is registered automatically with the `lifecycle`. Access it with:
+
+```cpp
+auto& net = hce::service<hce::network>::get();
+```
+
+Worker thread count is controlled by `hce::config::network::thread_count()`. A value of `0` defaults to hardware concurrency. The backend assigns accepted/connected sockets to IO threads for affinity.
+
+### Address
+
+```cpp
+struct hce::network::address {
+    std::string host;
+    uint16_t port = 0;
+    enum struct type_e { tcp, udp } type = type_e::tcp;
+};
+```
+
+### Client
+
+`connect` returns an awaitable that yields a movable `connection` (or an error):
+
+```cpp
+hce::co<void> client() {
+    auto& net = hce::service<hce::network>::get();
+
+    auto conn_exp = co_await net.connect({
+        .host = "127.0.0.1",
+        .port = 8080,
+        .type = hce::network::address::type_e::tcp
+    });
+
+    if (!conn_exp) {
+        // handle conn_exp.error()
+        co_return;
+    }
+
+    auto conn = std::move(conn_exp.value());
+
+    std::vector<std::byte> payload{/* ... */};
+    auto send_ec = co_await conn.send_all(payload);
+    if (send_ec) {
+        // handle error
+        co_return;
+    }
+
+    std::vector<std::byte> buf(1024);
+    auto recv_exp = co_await conn.recv_all(buf);
+    if (!recv_exp) {
+        // handle recv_exp.error()
+        co_return;
+    }
+
+    conn.close();
+}
+```
+
+### Server
+
+`listen` is synchronous and returns an `acceptor` (or an error). `accept` is an awaitable that yields a ready, non-blocking `connection` already assigned to an IO thread:
+
+```cpp
+hce::co<void> server() {
+    auto& net = hce::service<hce::network>::get();
+
+    auto acc_exp = net.listen({
+        .host = "0.0.0.0",
+        .port = 8080,
+        .type = hce::network::address::type_e::tcp
+    });
+
+    if (!acc_exp) {
+        // handle acc_exp.error()
+        co_return;
+    }
+
+    auto acc = std::move(acc_exp.value());
+
+    while (true) {
+        auto conn_exp = co_await acc.accept();
+        if (!conn_exp) {
+            // handle error or shutdown
+            break;
+        }
+
+        auto conn = std::move(conn_exp.value());
+        // schedule a handler coroutine for this connection
+        hce::schedule(handle_client(std::move(conn)));
+    }
+}
+```
+
+### Connection I/O
+
+On a `connection`:
+
+- `send(std::span<const std::byte>)` / `recv(std::span<std::byte>)` — single attempt; returns bytes transferred or an error. `EAGAIN`/`EWOULDBLOCK` causes the awaitable to re-register interest.
+- `send_all` / `recv_all` — retry until the full span is transferred or an error occurs.
+- `close()` — closes the underlying socket.
+- `valid()` — true while the socket is open.
+
+Both `connection` and `acceptor` are movable (not copyable) and own their sockets. The low-level socket interface is available via `get_socket()` if you need the raw file descriptor or additional options.
+
+All network awaitables suspend the calling coroutine and resume it from the IO backend when the socket is ready, keeping the scheduler free for other work.
+
 ## Modules
 This project supports the concept of dynamically loaded plugins running coroutines via the module system. Here is the module API:
 ```cpp
