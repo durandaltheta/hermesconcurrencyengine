@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis
 
-#include "socket.hpp"
+#include "network/socket.hpp"
 
 #include <arpa/inet.h>
 #include <fcntl.h>

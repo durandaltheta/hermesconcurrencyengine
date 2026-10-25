@@ -3,7 +3,7 @@
 //Author: Blayne Dennis
 #include <expected>
 #include <span>
-#include <byte>
+#include <cstddef>
 
 #include <netinet/in.h>
 #include <sys/socket.h>
