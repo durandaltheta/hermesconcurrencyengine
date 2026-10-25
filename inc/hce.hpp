@@ -18,6 +18,7 @@
 #include "scheduler.hpp"
 #include "blocking.hpp"
 #include "synchronization.hpp"
+#include "network.hpp"
 #include "timer.hpp"
 #include "channel.hpp"
 #include "threadpool.hpp"
