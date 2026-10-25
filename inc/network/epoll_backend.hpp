@@ -35,7 +35,7 @@ namespace network {
  */
 struct epoll_backend : public hce::interface::network::backend {
     explicit epoll_backend(size_t thread_count = 1);
-    ~epoll_backend();
+    virtual ~epoll_backend();
 
     epoll_backend(const epoll_backend&) = delete;
     epoll_backend& operator=(const epoll_backend&) = delete;

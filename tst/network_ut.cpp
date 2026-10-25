@@ -44,7 +44,10 @@ hce::co<void> echo_once(hce::network::acceptor acc,
     }
 
     auto conn = std::move(conn_exp.value());
-    ASSERT_TRUE(conn.valid());
+    if(!conn.valid()) {
+        status.push("connection not valid after accept");
+        co_return;
+    }
 
     std::byte buf[512];
     auto recv_exp = co_await conn.recv(std::span(buf));
@@ -77,7 +80,10 @@ hce::co<void> client_echo(hce::network::address addr,
     }
 
     auto conn = std::move(conn_exp.value());
-    ASSERT_TRUE(conn.valid());
+    if(!conn.valid()) {
+        status.push("connection not valid after connect");
+        co_return;
+    }
 
     std::vector<std::byte> send_buf(payload.size());
     std::memcpy(send_buf.data(), payload.data(), payload.size());
@@ -404,8 +410,14 @@ TEST(network, connection_valid_after_move) {
         }
         auto conn = std::move(conn_exp.value());
         hce::network::connection moved = std::move(conn);
-        EXPECT_TRUE(moved.valid());
-        EXPECT_FALSE(conn.valid()); // moved-from
+        if(!moved.valid()) {
+            status.push("moved connection not valid");
+            co_return;
+        }
+        if(conn.valid()) {
+            status.push("moved-from connection still valid");
+            co_return;
+        }
         moved.close();
         status.push("ok");
         co_return;

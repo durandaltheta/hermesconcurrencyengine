@@ -12,6 +12,8 @@ namespace hce {
 namespace detail {
 namespace network {
 
+socket::~socket() { close(); }
+
 void socket::close() {
     if(fd_ >= 0) {
         ::close(fd_);

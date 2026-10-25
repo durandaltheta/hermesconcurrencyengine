@@ -24,7 +24,7 @@ namespace network {
 struct socket : public hce::interface::network::socket {
     socket() = default;
     explicit socket(int fd) : fd_(fd) {}
-    ~socket() { close(); }
+    virtual ~socket();
 
     socket(const socket&) = delete;
     socket(socket&& other) noexcept : fd_(other.fd_) { other.fd_ = -1; }
