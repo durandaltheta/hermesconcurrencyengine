@@ -458,7 +458,8 @@ struct accept_awaitable :
                             errno, std::system_category()));
                     } else {
                         network::connection conn;
-                        conn.get_socket() = detail::network::socket(cfd);
+                        static_cast<detail::network::socket&>(conn.get_socket()) 
+                            = detail::network::socket(cfd);
                         r->value = std::move(conn);
                     }
                 }
@@ -563,7 +564,8 @@ struct connect_awaitable :
             return;
         }
 
-        pending.get_socket() = detail::network::socket(fd);
+        static_cast<detail::network::socket&>(pending.get_socket()) 
+            = detail::network::socket(fd);
 
         int cr = ::connect(fd, res->ai_addr, res->ai_addrlen);
         ::freeaddrinfo(res);
