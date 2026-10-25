@@ -601,26 +601,25 @@ struct connect_awaitable :
             hce::awt<hce::expected<network::connection,
                                    std::error_code>>::interface>>;
 
-    bool on_ready() override { return ready_; }
-
-    void on_suspend() override {
-        base::on_suspend();
+    // Returns true if the operation is already finished (success or hard error).
+    bool try_connect() {
+        if(ready_) return true;
 
         addrinfo hints{};
         hints.ai_family = AF_UNSPEC;
-        hints.ai_socktype = (addr.type == hce::network::address::type_e::udp) 
-            ? SOCK_DGRAM 
+        hints.ai_socktype = (addr.type == hce::network::address::type_e::udp)
+            ? SOCK_DGRAM
             : SOCK_STREAM;
+
         addrinfo* res = nullptr;
         int rc = ::getaddrinfo(addr.host.c_str(),
                                std::to_string(addr.port).c_str(),
                                &hints, &res);
         if(rc != 0) {
-            auto* r = new connection_result;
-            r->value = hce::unexpected(std::make_error_code(
+            result = hce::unexpected(std::make_error_code(
                 std::errc::host_unreachable));
-            resume(r);
-            return;
+            ready_ = true;
+            return true;
         }
 
         int fd = ::socket(res->ai_family,
@@ -628,34 +627,48 @@ struct connect_awaitable :
                           res->ai_protocol);
         if(fd < 0) {
             ::freeaddrinfo(res);
-            auto* r = new connection_result;
-            r->value = hce::unexpected(std::error_code(
+            result = hce::unexpected(std::error_code(
                 errno, std::system_category()));
-            resume(r);
-            return;
+            ready_ = true;
+            return true;
         }
 
-        static_cast<detail::network::socket&>(pending.get_socket()) 
+        static_cast<detail::network::socket&>(pending.get_socket())
             = detail::network::socket(fd);
 
         int cr = ::connect(fd, res->ai_addr, res->ai_addrlen);
         ::freeaddrinfo(res);
 
         if(cr == 0) {
-            auto* r = new connection_result;
-            r->value = std::move(pending);
-            resume(r);
-            return;
-        }
-        if(errno != EINPROGRESS) {
-            auto* r = new connection_result;
-            r->value = hce::unexpected(std::error_code(
-                errno, std::system_category()));
-            resume(r);
-            return;
+            // Immediate success (typical for UDP, possible for TCP on localhost)
+            result = std::move(pending);
+            ready_ = true;
+            return true;
         }
 
+        if(errno != EINPROGRESS) {
+            result = hce::unexpected(std::error_code(
+                errno, std::system_category()));
+            ready_ = true;
+            return true;
+        }
+
+        // EINPROGRESS — need writability
+        return false;
+    }
+
+    bool on_ready() override {
+        return try_connect();
+    }
+
+    void on_suspend() override {
+        base::on_suspend();
+
+        // try_connect() already created the socket and saw EINPROGRESS.
+        // Just register for write.
         auto& backend = hce::service<network>::get().get_backend();
+        int fd = static_cast<detail::network::socket&>(pending.get_socket()).fd();
+
         backend.register_op(
             fd,
             hce::interface::network::backend::interest::write,
