@@ -777,21 +777,28 @@ hce::co<hce::expected<std::vector<std::byte>, std::error_code>>
 hce::network::length_prefixed::recv(hce::network::connection& conn) {
     uint32_t len_be = 0;
     auto len_span = std::as_writable_bytes(std::span(&len_be, 1));
-
     auto len_exp = co_await conn.recv_all(len_span);
-    if(!len_exp) {
-        co_return hce::unexpected(len_exp.error());
+
+    if(!len_exp || len_exp.value() != sizeof(uint32_t)) {
+        // clean EOF or truncated length prefix
+        co_return hce::unexpected(
+            len_exp ? std::make_error_code(std::errc::connection_reset)
+                    : len_exp.error());
     }
 
     const uint32_t len = ntohl(len_be);
+
     if(len > max_payload) {
         co_return hce::unexpected(std::make_error_code(std::errc::message_size));
     }
 
     std::vector<std::byte> payload(len);
     auto payload_exp = co_await conn.recv_all(payload);
-    if(!payload_exp) {
-        co_return hce::unexpected(payload_exp.error());
+
+    if(!payload_exp || payload_exp.value() != len) {
+        co_return hce::unexpected(
+            payload_exp ? std::make_error_code(std::errc::connection_reset)
+                        : payload_exp.error());
     }
 
     co_return payload;

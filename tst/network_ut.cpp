@@ -729,21 +729,3 @@ TEST(network, length_prefixed_pump_echo) {
     (void)server_awt;
     (void)client_awt;
 }
-
-TEST(network, length_prefixed_empty_and_modest) {
-    auto& net = hce::service<hce::network>::get();
-    auto acc_exp = net.listen({"127.0.0.1", 0});
-    ASSERT_TRUE(acc_exp);
-    auto acc = std::move(acc_exp.value());
-    const uint16_t port = test::network::get_local_port(acc);
-
-    // empty
-    {
-        test::queue<std::string> s, c;
-        hce::schedule(lp_echo_once(std::move(acc), s)); // note: acc moved, so re-listen if you want multiple
-        // For simplicity this test only covers one payload; split or re-listen as needed.
-    }
-
-    // Re-listen for a second case if desired, or fold both into one multi-client helper.
-    // Modest size is already covered by the first test; add a 1 KiB case the same way.
-}
