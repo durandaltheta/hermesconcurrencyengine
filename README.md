@@ -684,10 +684,214 @@ On a `connection`:
 - `send_all` / `recv_all` — retry until the full span is transferred or an error occurs.
 - `close()` — closes the underlying socket.
 - `valid()` — true while the socket is open.
+- `shutdown_read()` / `shutdown_write()` — half-close the socket.
 
 Both `connection` and `acceptor` are movable (not copyable) and own their sockets. The low-level socket interface is available via `get_socket()` if you need the raw file descriptor or additional options.
 
 All network awaitables suspend the calling coroutine and resume it from the IO backend when the socket is ready, keeping the scheduler free for other work.
+
+---
+
+## Protocols
+
+Raw `send`/`recv` give you bytes. Most real applications need *messages* — discrete, framed units of data (a request, a response, a record, a framed binary blob, etc.).
+
+The networking service provides a small, optional **protocol** abstraction for this purpose. A protocol is a type that knows how to read one complete message from a connection and write one complete message to a connection. It sits on top of the byte-oriented `connection` API and is free to call `recv`/`recv_all`/`send`/`send_all` (or any other connection methods) as needed.
+
+### The `protocol` interface
+
+```cpp
+template<typename T>
+struct hce::network::protocol {
+    virtual ~protocol() {}
+
+    // Read one complete message. May call recv/recv_all internally.
+    virtual hce::co<hce::expected<T, std::error_code>>
+    recv(hce::network::connection& conn) = 0;
+
+    // Write one complete message. May call send/send_all internally.
+    virtual hce::co<std::error_code>
+    send(hce::network::connection& conn, T msg) = 0;
+};
+```
+
+`T` is the message type you want to work with at the application level. The protocol is responsible for any framing, length prefixes, delimiters, checksums, or serialization needed to turn a stream of bytes into a sequence of `T` values (and vice versa).
+
+Protocols are ordinary C++ types. You can use the supplied helpers or write your own. Because the methods are coroutines, they compose naturally with the rest of the library.
+
+### Length-prefixed framing (`length_prefixed`)
+
+A common and simple framing scheme is a fixed-size length prefix followed by that many payload bytes. The library includes a ready-to-use implementation for binary blobs:
+
+```cpp
+struct hce::network::length_prefixed
+    : public hce::network::protocol<std::vector<std::byte>>
+{
+    static constexpr size_t max_payload = 16 * 1024 * 1024; // safety limit
+
+    hce::co<hce::expected<std::vector<std::byte>, std::error_code>>
+    recv(hce::network::connection& conn) override;
+
+    hce::co<std::error_code>
+    send(hce::network::connection& conn, std::vector<std::byte> msg) override;
+};
+```
+
+**Message layout** (network byte order):
+
+```
+[ uint32_t length ][ payload bytes... ]
+```
+
+- `recv` reads the 4-byte length, converts it from network order, allocates a buffer of that size, then reads exactly that many payload bytes.
+- `send` writes the length (host → network order) followed by the payload.
+- Payloads larger than `max_payload` are rejected with `std::errc::message_size`.
+- Truncated or unexpected EOF is reported as an error (typically `std::errc::connection_reset` or the underlying error).
+
+#### Example: length-prefixed echo
+
+```cpp
+hce::co<void> handle_client(hce::network::connection conn) {
+    hce::network::length_prefixed proto;
+
+    while (conn.valid()) {
+        auto msg_exp = co_await hce::schedule(proto.recv(conn));
+        if (!msg_exp) {
+            // clean close or error
+            break;
+        }
+
+        // Echo the message back.
+        if (auto ec = co_await hce::schedule(proto.send(conn, std::move(msg_exp.value())))) {
+            break;
+        }
+    }
+
+    conn.close();
+}
+```
+
+On the client side the same protocol type is used to send and receive complete messages:
+
+```cpp
+hce::co<void> client() {
+    auto& net = hce::service<hce::network>::get();
+    auto conn_exp = co_await net.connect({.host = "127.0.0.1", .port = 8080});
+    if (!conn_exp) co_return;
+
+    auto conn = std::move(conn_exp.value());
+    hce::network::length_prefixed proto;
+
+    std::vector<std::byte> payload{/* ... */};
+    if (auto ec = co_await hce::schedule(proto.send(conn, payload))) {
+        // handle error
+        co_return;
+    }
+
+    auto reply = co_await hce::schedule(proto.recv(conn));
+    // ... use reply
+}
+```
+
+### Writing your own protocol
+
+Any type that implements the two methods above is a valid protocol. Common patterns:
+
+- **Line-based text** — read until `\n` (or `\r\n`), return `std::string`.
+- **Fixed-size messages** — always read exactly `N` bytes.
+- **Delimiter-framed** — read until a sentinel sequence.
+- **Length-prefixed with a different integer size or endianness**.
+- **Serialized objects** — length prefix + FlatBuffers / custom binary / etc., returning your domain type instead of `std::vector<std::byte>`.
+
+A minimal line-based example (illustrative):
+
+```cpp
+struct line_protocol : hce::network::protocol<std::string> {
+    hce::co<hce::expected<std::string, std::error_code>>
+    recv(hce::network::connection& conn) override {
+        std::string line;
+        std::byte b;
+
+        while (true) {
+            auto exp = co_await conn.recv(std::span(&b, 1));
+            if (!exp || exp.value() == 0) {
+                co_return hce::unexpected(
+                    exp ? std::make_error_code(std::errc::connection_reset)
+                        : exp.error());
+            }
+            if (b == std::byte{'\n'}) break;
+            line.push_back(static_cast<char>(b));
+        }
+        co_return line;
+    }
+
+    hce::co<std::error_code>
+    send(hce::network::connection& conn, std::string msg) override {
+        msg.push_back('\n');
+        auto span = std::as_bytes(std::span(msg));
+        co_return co_await conn.send_all(span);
+    }
+};
+```
+
+### The `pump` helper
+
+Once you have a protocol, you often want to move messages between a connection and the rest of your application without manually writing the read/write loops. `hce::network::pump` does exactly that:
+
+```cpp
+template<typename T>
+static hce::co<void> hce::network::pump(
+    hce::network::protocol<T>& proto,
+    hce::network::connection conn,
+    hce::chan<T> inbound,   // connection → user
+    hce::chan<T> outbound)  // user → connection
+```
+
+It launches two concurrent directions:
+
+- **Reader** — repeatedly calls `proto.recv(conn)` and sends each complete message into the `inbound` channel. Stops on error, EOF, or when the channel is closed.
+- **Writer** — receives messages from the `outbound` channel and calls `proto.send(conn, msg)`. Stops when the channel is closed or a send fails.
+
+When both directions finish, the connection is closed. Half-closes (`shutdown_read` / `shutdown_write`) are performed as each direction ends so the peer can observe the shutdown cleanly.
+
+#### Example: pumping a length-prefixed connection into channels
+
+```cpp
+hce::co<void> handle_client(hce::network::connection conn) {
+    auto inbound  = hce::chan<std::vector<std::byte>>::make();
+    auto outbound = hce::chan<std::vector<std::byte>>::make();
+    hce::network::length_prefixed proto;
+
+    // Pump runs in the background; we talk only to the channels.
+    auto pump_awt = hce::schedule(
+        hce::network::pump<std::vector<std::byte>>(
+            proto, std::move(conn), inbound, outbound));
+
+    // Application logic talks to channels only.
+    std::vector<std::byte> msg;
+    while (co_await inbound.recv(msg)) {
+        // process msg, possibly reply
+        co_await outbound.send(/* response */);
+    }
+
+    outbound.close();
+    co_await std::move(pump_awt);
+}
+```
+
+This pattern keeps protocol framing and connection lifetime management separate from application logic. The same channels can be used from multiple coroutines, combined with other `hce` primitives (`select`, timeouts, etc.), or forwarded to other services.
+
+### Summary
+
+| Layer | Responsibility | Typical types |
+|-------|----------------|---------------|
+| Socket / epoll backend | Non-blocking readiness, thread affinity | internal |
+| `connection` | Byte stream I/O (`send`/`recv`/`send_all`/`recv_all`) | `connection` |
+| `protocol<T>` | Framing + serialization into application messages | `length_prefixed`, user-defined |
+| `pump` | Bidirectional message shuttle between connection and channels | — |
+| Application | Business logic | channels, coroutines |
+
+Protocols are optional. You can stay at the byte level forever if that matches your protocol (e.g. raw UDP datagrams, or a custom binary format you prefer to parse yourself). When you want message-oriented communication, implement (or reuse) a `protocol<T>` and, if desired, let `pump` move the messages for you.
 
 ## Modules
 This project supports the concept of dynamically loaded plugins running coroutines via the module system. Here is the module API:
