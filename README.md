@@ -424,6 +424,86 @@ hce::co<result> attempt_non_blocking(const unsigned int maximum_retry) {
 };
 ```
 
+## Synchronization
+
+Standard library synchronization primitives (`std::mutex`, `std::unique_lock`, `std::condition_variable`, etc.) can block the calling thread. Direct use of them inside an `hce::co<T>` would stall the scheduler. The functions in `synchronization.hpp` make them coroutine-safe by offloading blocking work to `hce::block` worker threads while providing a fast path when a lock can be acquired immediately.
+
+All functions return an `hce::awt<...>` that can be `co_await`ed.
+
+### Mutex
+
+```cpp
+template <typename LOCKABLE>
+hce::awt<void> hce::mutex::lock(LOCKABLE& l);
+```
+
+Attempts `try_lock()`. On success the returned awaitable is immediately ready. Otherwise the call is offloaded:
+
+```cpp
+std::mutex mtx;
+hce::co<void> example() {
+    co_await hce::mutex::lock(mtx);
+    // critical section
+    mtx.unlock();
+}
+```
+
+Works with any type that provides `try_lock()` / `lock()` (e.g. `std::mutex`, `std::timed_mutex`, `hce::spinlock`).
+
+### Unique lock
+
+```cpp
+template <typename LOCKABLE>
+hce::awt<void> hce::unique_lock::construct(std::unique_lock<LOCKABLE>& ul, LOCKABLE& l);
+
+template <typename LOCKABLE>
+hce::awt<void> hce::unique_lock::lock(std::unique_lock<LOCKABLE>& ul);
+
+template <typename LOCKABLE, typename DURATION>
+hce::awt<bool> hce::unique_lock::try_lock_for(std::unique_lock<LOCKABLE>& ul, const DURATION& dur);
+
+template <typename LOCKABLE, typename TIMEPOINT>
+hce::awt<bool> hce::unique_lock::try_lock_until(std::unique_lock<LOCKABLE>& ul, const TIMEPOINT& tp);
+```
+
+`construct` is the normal way to obtain a locked `std::unique_lock` from a coroutine (it performs the lock then adopts ownership). The other overloads mirror the corresponding `std::unique_lock` members, again using the try-then-block pattern (or always blocking for the timed variants).
+
+```cpp
+std::mutex mtx;
+hce::co<void> example() {
+    std::unique_lock<std::mutex> ul;
+    co_await hce::unique_lock::construct(ul, mtx);
+    // ul is locked; destructor will unlock
+}
+```
+
+### Condition variable
+
+```cpp
+template <typename CONDITION_VARIABLE, typename LOCK>
+hce::awt<void> hce::condition_variable::wait(CONDITION_VARIABLE& cv, LOCK& lk);
+
+// plus overloads taking a predicate, and the wait_for / wait_until variants
+```
+
+All waits are offloaded to a blocking worker. The lock object (normally a `std::unique_lock`) is unlocked and re-locked by the condition variable exactly as it would be in ordinary threaded code.
+
+```cpp
+std::mutex mtx;
+std::condition_variable cv;
+bool ready = false;
+
+hce::co<void> waiter() {
+    std::unique_lock<std::mutex> ul;
+    co_await hce::unique_lock::construct(ul, mtx);
+    co_await hce::condition_variable::wait(cv, ul, [&]{ return ready; });
+}
+```
+
+These wrappers exist so existing code that already uses the standard primitives can be adapted to run inside coroutines with minimal changes. Prefer channels for new coroutine-to-coroutine communication.
+
+Use the synchronization helpers when you must interoperate with code that already expects a mutex or condition variable.
+
 ## Timers
 Coroutines can use the following API to start/check/cancel timers:
 ```
