@@ -155,34 +155,57 @@ struct network : public hce::service<network>, public hce::printable {
     };
 
     /**
-     @brief protocol interface for managing a raw connection sending and receiving bytes
+     @brief protocol interface for converting a raw connection to a specific data type
      */
     template<typename T>
     struct protocol {
+        virtual ~protocol() = 0;
+
         // Read one complete message. May call recv/recv_all internally.
-        static hce::co<hce::expected<T, std::error_code>>
-        recv(hce::network::connection& conn);
+        virtual hce::co<hce::expected<T, std::error_code>>
+        recv(hce::network::connection& conn) = 0;
 
         // Write one complete message. May call send/send_all internally.
-        static hce::co<std::error_code>
-        send(hce::network::connection& conn, T msg);
+        virtual hce::co<std::error_code>
+        send(hce::network::connection& conn, T msg) = 0;
     };
 
     /**
-     @brief bridge a connection to inbound/outbound channels over some PROTOCOL
+     @brief length-prefixed binary framing protocol implementation 
 
-     PROTOCOL should be some implementation of hce::network::protocol<T>.
+     Length prefixing a binary blob is a common framing protocol pattern.
+
+     It is included here as an optional helper.
+
+     Message layout: uint32_t length (network order) followed by that many payload bytes.
+     T is std::vector<std::byte>.
      */
-    template<typename T, typename PROTOCOL>
-    static hce::co<void> bridge(
+    struct length_prefixed : public protocol<std::vector<std::byte>> {
+        static constexpr size_t max_payload = 16 * 1024 * 1024; // arbitrary safety limit
+
+        ~length_prefixed();
+
+        hce::co<hce::expected<std::vector<std::byte>, std::error_code>>
+        recv(hce::network::connection& conn);
+
+        hce::co<std::error_code>
+        send(hce::network::connection& conn, std::vector<std::byte> msg);
+    };
+
+    /**
+     @brief pump data between a connection and inbound/outbound channels over some PROTOCOL
+     */
+    template<typename T>
+    static hce::co<void> pump(
+        hce::network::protocol<T>& proto,
         hce::network::connection conn,
-        hce::chan<T> inbound,   // connection → user
-        hce::chan<T> outbound)  // user → connection
+        hce::chan<T> inbound,  // connection -> user
+        hce::chan<T> outbound) // user -> connection
     {
         // Two concurrent directions.
         auto reader = [&]() -> hce::co<void> {
             while(conn.valid()) {
-                auto msg = co_await PROTOCOL::recv(conn);
+                auto msg = co_await proto.recv(conn);
 
                 if(!msg) { 
                     break; // error or clean EOF
@@ -200,7 +223,7 @@ struct network : public hce::service<network>, public hce::printable {
             T msg;
 
             while(co_await outbound.recv(msg)) {
-                if(auto ec = co_await PROTOCOL::send(conn, std::move(msg))) {
+                if(auto ec = co_await proto.send(conn, std::move(msg))) {
                     break;
                 }
             }
