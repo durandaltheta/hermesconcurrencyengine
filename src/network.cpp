@@ -353,22 +353,27 @@ struct recv_all_awaitable :
         while(offset < buf.size()) {
             std::error_code ec;
             ssize_t n = sock.recv(buf.subspan(offset), ec);
+
             if(n > 0) {
                 offset += static_cast<size_t>(n);
                 continue;
             }
+
             if(n == 0 && !ec) {             // EOF
                 result = offset;
                 ready_ = true;
                 return true;
             }
+
             if(!ec || ec == std::errc::resource_unavailable_try_again) {
                 return false;               // need readability
             }
+
             result = hce::unexpected(ec);
             ready_ = true;
             return true;
         }
+
         result = offset;
         ready_ = true;
         return true;
@@ -391,12 +396,14 @@ struct recv_all_awaitable :
             this,
             [](int, std::error_code ec, uint32_t, void* user) {
                 auto* self = static_cast<recv_all_awaitable*>(user);
+
                 if(ec) {
                     auto* r = new size_result;
                     r->value = hce::unexpected(ec);
                     self->resume(r);
                     return;
                 }
+
                 if(self->try_progress()) {
                     auto* r = new size_result;
                     r->value = std::move(self->result);
