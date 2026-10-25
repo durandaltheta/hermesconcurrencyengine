@@ -199,7 +199,7 @@ struct network : public hce::service<network>, public hce::printable {
     };
 
     /**
-     @brief pump data between a connection and inbound/outbound channels over some PROTOCOL
+     @brief pump data between a connection and inbound/outbound channels over some protocol
      */
     template<typename T>
     static hce::co<void> pump(
