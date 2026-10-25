@@ -18,6 +18,7 @@
 #include "threadpool.hpp"
 #include "blocking.hpp"
 #include "timer.hpp"
+#include "network.hpp"
 
 namespace hce {
 
@@ -175,6 +176,17 @@ struct lifecycle : public service<lifecycle>, public hce::printable {
             hce::config::timer::algorithm_function_ptr algorithm;
         };
 
+        struct network {
+            network();
+
+            /**
+             @brief count of worker threads 
+
+             If 0, count is set to hardware concurrency
+             */
+            size_t thread_count;
+        };
+
         config(){}
 
         logging log;
@@ -183,6 +195,7 @@ struct lifecycle : public service<lifecycle>, public hce::printable {
         threadpool tp;
         blocking blk;
         timer tmr;
+        network net;
     };
 
     virtual ~lifecycle();
@@ -237,6 +250,7 @@ private:
     hce::threadpool threadpool_;
     hce::blocking blocking_;
     hce::timer timer_;
+    hce::network network_;
 };
 
 /**

@@ -46,6 +46,9 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/circular_buffer.hpp
     ${HCE_INCLUDE_DIR}/list.hpp
     ${HCE_INCLUDE_DIR}/timer.hpp
+    ${HCE_INCLUDE_DIR}/network.hpp
+    ${HCE_INCLUDE_DIR}/network/epoll_backend.hpp
+    ${HCE_INCLUDE_DIR}/network/socket.hpp
     ${HCE_INCLUDE_DIR}/synchronized_list.hpp
     ${HCE_INCLUDE_DIR}/coroutine.hpp
     ${HCE_INCLUDE_DIR}/scheduler.hpp
@@ -68,6 +71,9 @@ set(HCE_SOURCE_FILES
     ${HCE_SOURCE_DIR}/blocking.cpp
     ${HCE_SOURCE_DIR}/synchronization.cpp
     ${HCE_SOURCE_DIR}/timer.cpp
+    ${HCE_SOURCE_DIR}/network.cpp
+    ${HCE_SOURCE_DIR}/network/epoll_backend.cpp
+    ${HCE_SOURCE_DIR}/network/socket.cpp
     ${HCE_SOURCE_DIR}/thread.cpp
     ${HCE_SOURCE_DIR}/threadpool.cpp
     ${HCE_SOURCE_DIR}/service.cpp

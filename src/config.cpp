@@ -70,6 +70,10 @@ hce::chrono::duration hce::config::timer::early_wakeup_long_threshold() {
     return hce::service<hce::lifecycle>::get().get_config().tmr.early_wakeup_long_threshold;
 }
 
+size_t hce::config::network::thread_count() {
+    return hce::service<hce::lifecycle>::get().get_config().net.thread_count;
+}
+
 hce::config::timer::algorithm_function_ptr hce::config::timer::timeout_algorithm() {
     return hce::service<hce::lifecycle>::get().get_config().tmr.algorithm;
 }

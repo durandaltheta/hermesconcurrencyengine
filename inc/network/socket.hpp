@@ -26,15 +26,17 @@ struct socket {
     ~socket() { close(); }
 
     socket(const socket&) = delete;
+    socket(socket&& other) noexcept : fd_(other.fd_) { other.fd_ = -1; }
+
     socket& operator=(const socket&) = delete;
 
-    socket(socket&& other) noexcept : fd_(other.fd_) { other.fd_ = -1; }
     socket& operator=(socket&& other) noexcept {
-        if (this != &other) {
+        if(this != &other) {
             close();
             fd_ = other.fd_;
             other.fd_ = -1;
         }
+
         return *this;
     }
 
@@ -43,14 +45,17 @@ struct socket {
 
     void close();
 
-    // Low-level helpers used by awaitables.
+    // low-level helpers used by awaitables.
     std::error_code set_nonblocking();
     std::error_code bind(const sockaddr* addr, socklen_t len);
     std::error_code listen(int backlog = SOMAXCONN);
     std::error_code connect(const sockaddr* addr, socklen_t len);
 
-    // Returns bytes transferred or -1 + ec on error.
-    // EAGAIN / EWOULDBLOCK means the caller should re-register interest.
+    /*
+     Returns bytes transferred or -1 + ec on error.
+
+     EAGAIN / EWOULDBLOCK means the caller should re-register interest.
+     */
     ssize_t send(std::span<const std::byte> data, std::error_code& ec);
     ssize_t recv(std::span<std::byte> buf, std::error_code& ec);
 

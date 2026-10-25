@@ -46,6 +46,7 @@ struct environment : public printable {
                 hce::service<hce::threadpool>::ptr_ref(),
                 hce::service<hce::blocking>::ptr_ref(),
                 hce::service<hce::timer>::ptr_ref(),
+                hce::service<hce::network>::ptr_ref(),
                 hce::service<hce::lifecycle>::ptr_ref());
     }
 
@@ -62,6 +63,7 @@ struct environment : public printable {
         hce::service<hce::threadpool>::ptr_ref() = threadpool;
         hce::service<hce::blocking>::ptr_ref() = blocking;
         hce::service<hce::timer>::ptr_ref() = timer;
+        hce::service<hce::network>::ptr_ref() = network;
         hce::service<hce::lifecycle>::ptr_ref() = lifecycle;
     }
 
@@ -72,6 +74,7 @@ private:
                 hce::threadpool* tp,
                 hce::blocking* blk,
                 hce::timer* tmr,
+                hce::network* net,
                 hce::lifecycle* lf) :
         local(lc),
         scheduler_lifecycle_manager(slm),
@@ -79,6 +82,7 @@ private:
         threadpool(tp),
         blocking(blk),
         timer(tmr),
+        network(net),
         lifecycle(lf)
     { 
         HCE_MED_CONSTRUCTOR();
@@ -91,6 +95,7 @@ private:
         threadpool = rhs.threadpool;
         blocking = rhs.blocking;
         timer = rhs.timer;
+        network = rhs.network;
         lifecycle = rhs.lifecycle;
     }
 
@@ -100,6 +105,7 @@ private:
     hce::threadpool* threadpool = nullptr;
     hce::blocking* blocking = nullptr;
     hce::timer* timer = nullptr;
+    hce::network* network = nullptr;
     hce::lifecycle* lifecycle = nullptr;
 };
 

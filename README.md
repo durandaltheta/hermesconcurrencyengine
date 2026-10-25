@@ -10,7 +10,7 @@ This framework is designed to make using `c++20` coroutines in real code much ea
 A simple example where a coroutine is constructed, scheduled, and communicated with asynchronously. 
 
 [example_001 source](ex/src/example_001.cpp)
-```
+```cpp
 #include <iostream>
 #include <hce.hpp>
 
@@ -100,7 +100,7 @@ Each `hce` compatible coroutine must:
 
 ### Coroutines must utilize coroutine keywords
 Utilize one or more of the following `c++20` coroutine keywords:
-```
+```cpp
 co_return // coroutine specific 'return' statement
 co_await // used to safely block a coroutine on a returned awaitable object
 ```
@@ -108,7 +108,7 @@ co_await // used to safely block a coroutine on a returned awaitable object
 `co_yield` keyword is not utilized by this framework.
 
 NOTE: `awaitable` objects are returned from various functions in this framework with the type `hce::awt<AWAITABLE_RETURN_TYPE>`. `AWAITABLE_RETURN_TYPE` is the type returned from the awaitable when `co_await`ed:
-```
+```cpp
 // given this function
 hce::awt<int> awaitable_function();
 
@@ -122,7 +122,7 @@ hce::co<int> my_coroutine() {
 ### Coroutines return a valid type
 The `hce` coroutine function must specify its return type as `hce::co<COROUTINE_RETURN_TYPE>`. `COROUTINE_RETURN_TYPE` is the type of the returned value by the `co_return` statement.
 
-```
+```cpp
 hce::co<int> my_coroutine_returning_int() {
     co_return 3;
 }
@@ -132,7 +132,7 @@ hce::co<int> my_coroutine_returning_int() {
 The coroutine function must be exactly one stack frame in size, all `co_return`, `co_await`, and `co_yield` statements associated with a single coroutine happen directly in the coroutine body.
 
 Bad:
-```
+```cpp
 int inner_frame() {
     co_return 3; // BAD, inner is its own stack frame and is not a coroutine
 }
@@ -144,14 +144,14 @@ hce::co<int> outer_frame() {
 ```
 
 Good:
-```
+```cpp
 hce::co<int> valid() {
     co_return 3; 
 }
 ```
 
 Good:
-```
+```cpp
 int inner_frame() {
     return 3; 
 }
@@ -162,7 +162,7 @@ hce::co<int> outer_frame() {
 ```
 
 ### Further Examples and Explanations
-```
+```cpp
 #include <string> 
 #include <hce.hpp>
 
@@ -189,7 +189,7 @@ Generate `Doxygen` documentation to see more for `hce` coroutine creation.
 To initialize the framework user code is responsible for calling `hce::initialize()` and holding onto the resulting `std::unique_ptr<hce::lifecycle>`. The returned pointer should stay in scope until all other `hce` operations have completed and joined. `hce::initialize()` can accept a `hce::lifecycle::config` object, providing a variety of options to configure the framework before it starts. Generate the `doxygen` documentation to see more.
 
 Here are some of the most important high level operations (all of which rely on `hce::lifecycle` staying in existence):
-```
+```cpp
 // Schedule a coroutine and return an awaitable which can be awaited to return the coroutine return value
 hce::awt<T> hce::schedule(co);
 
@@ -201,7 +201,7 @@ hce::awt<T> hce::block(Callable, args...);
 ```
 
 A simple example program:
-```
+```cpp
 #include <iostream>
 #include <hce.hpp> 
 
@@ -232,7 +232,7 @@ Generate `Doxygen` documentation to see more for `hce::lifecycle` creation, conf
 ## Scheduling  
 ### Concurrent
 `hce::co<T>`s can be scheduled for execution on the calling thread's `hce::scheduler` (or the global `hce::scheduler` as a fallback) with `hce::schedule()`:
-```
+```cpp
 hce::co<int> my_coroutine2() { 
     /* ... */
 }
@@ -262,7 +262,7 @@ Parallel scheduling allows for potentially more usage of CPU resources, but has 
 NOTE: The default count of threads in the `hce::threadpool` is 1, disabling parallelism. See below on how to configure the system to spawn more. Calls to `hce::threadpool::schedule()` will always function, but will only select the global scheduler if the threadpool size is `1`.
 
 `hce::co<T>`s can be scheduled for on some `hce::scheduler` managed by the `hce::threadpool` with `hce::threadpool::schedule()`:
-```
+```cpp
 hce::co<int> my_coroutine2() { 
     /* ... */
 }
@@ -292,7 +292,7 @@ Generate `Doxygen` documentation to see more for `hce::threadpool` creation, con
 This library allows communication between coroutines, threads, and any combination there-in using `hce::chan<T>`s, a specialized communication mechanism allowing transfer of data.
 
 A simple example program:
-```
+```cpp
 #include <iostream>
 #include <hce.hpp> 
 
@@ -350,7 +350,7 @@ Arbitrary functions which may block a calling coroutine are unsafe to use direct
 Instead, those functions can be executed with a call to `hce::block()` to safely block the coroutine without blocking the system thread:
 
 A simple example program:
-```
+```cpp
 #include <iostream>
 #include <chrono>
 #include <hce.hpp> 
@@ -390,17 +390,17 @@ Generate `Doxygen` documentation to see more for `hce::block()` behavior and con
 A coroutine can implement a non-blocking code by using `hce::yield<T>` objects. `co_await`ing an instance of an `hce::yield<T>` object yields a value as the result of the `co_await` statement, but suspends execution of the coroutine allowing other coroutines to run first. 
 
 Example:
-```
+```cpp
 int i = co_await hce::yield<int>(3); // i == 3 when coroutine resumes
 ```
 
 `hce::yield<void>` is a legal instance of `hce::yield`, but returns no value, merely suspending execution of the calling coroutine:
-```
+```cpp
  co_await hce::yield<void>(); 
 ```
 
 `hce::yield<T>` can be returned arbitrarily from functions as well. Best practice is to implement non-blocking code which might fail to return an `hce::yield` templated to the result of the operation. The calling coroutine can then `co_await` the non-blocking operation until it succeeds, or the coroutine executes some fallback behavior:
-```
+```cpp
 enum result {
     success,
     failure
@@ -518,7 +518,7 @@ Use the synchronization helpers when you must interoperate with code that alread
 
 ## Timers
 Coroutines can use the following API to start/check/cancel timers:
-```
+```cpp
 /**
  @brief optionally ensure the timer service thread is running 
 
@@ -582,7 +582,7 @@ hce::awt<void> hce::sleep(const hce::chrono::duration& dur);
 
 ## Modules
 This project supports the concept of dynamically loaded plugins running coroutines via the module system. Here is the module API:
-```
+```cpp
 namespace hce {
 
 /**
@@ -637,7 +637,7 @@ struct module {
 ```
 
 Implementation is fairly simple. You will need a host which is compiled against the `hce` library that initializes the framework and imports the module. An example host that communicates to the module:
-```
+```cpp
 #include <string>
 #include <hce/hce.hpp>
 
@@ -664,7 +664,7 @@ int main() {
 ```
 
 Write a dynamically linked library and compile it against the same `hce` library with the necessary API and `hce::module` implementation:
-```
+```cpp
 #include <iostream>
 #include <string>
 #include <hce/hce.hpp>
