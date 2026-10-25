@@ -367,38 +367,44 @@ TEST(network, connection_valid_after_move) {
 
     test::queue<std::string> status;
 
-    auto server_awt = hce::schedule([&]() -> hce::co<void> {
-        auto conn_exp = co_await acc.accept();
-        if(!conn_exp) {
-            status.push("accept fail");
+    // Move the acceptor into the coroutine so its lifetime is tied to the
+    // coroutine frame (same pattern as the other tests that pass).
+    auto server_awt = hce::schedule(
+        [](hce::network::acceptor acc, test::queue<std::string>& st) -> hce::co<void> {
+            auto conn_exp = co_await acc.accept();
+            if(!conn_exp) {
+                st.push("accept fail");
+                co_return;
+            }
+            auto conn = std::move(conn_exp.value());
+            hce::network::connection moved = std::move(conn);
+            if(!moved.valid()) {
+                st.push("moved connection not valid");
+                co_return;
+            }
+            if(conn.valid()) {
+                st.push("moved-from connection still valid");
+                co_return;
+            }
+            moved.close();
+            st.push("ok");
             co_return;
-        }
-        auto conn = std::move(conn_exp.value());
-        hce::network::connection moved = std::move(conn);
-        if(!moved.valid()) {
-            status.push("moved connection not valid");
-            co_return;
-        }
-        if(conn.valid()) {
-            status.push("moved-from connection still valid");
-            co_return;
-        }
-        moved.close();
-        status.push("ok");
-        co_return;
-    }());
+        }(std::move(acc), status));
 
-    auto client_awt = hce::schedule([&]() -> hce::co<void> {
-        auto conn_exp = co_await net.connect(
-            {"127.0.0.1", port, hce::network::address::type_e::tcp});
-        if(!conn_exp) {
-            status.push("connect fail");
+    auto client_awt = hce::schedule(
+        [](hce::network::address addr, test::queue<std::string>& st) -> hce::co<void> {
+            auto& n = hce::service<hce::network>::get();
+            auto conn_exp = co_await n.connect(addr);
+            if(!conn_exp) {
+                st.push("connect fail");
+                co_return;
+            }
+            auto conn = std::move(conn_exp.value());
+            conn.close();
             co_return;
-        }
-        auto conn = std::move(conn_exp.value());
-        conn.close();
-        co_return;
-    }());
+        }(hce::network::address{"127.0.0.1", port,
+                               hce::network::address::type_e::tcp},
+          status));
 
     EXPECT_EQ(status.pop(), "ok");
     (void)server_awt;
