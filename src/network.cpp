@@ -77,9 +77,16 @@ struct send_awaitable :
         data(d)
     {}
 
+    using base = hce::scheduler::reschedule<
+        hce::awaitable::lockable<
+            hce::spinlock,
+            hce::awt<std::error_code>::interface>>;
+
     bool on_ready() override { return ready_; }
 
     void on_suspend() override {
+        base::on_suspend();
+
         auto& backend = hce::service<network>::get().get_backend();
         backend.register_op(
             sock.fd(),
@@ -150,9 +157,16 @@ struct send_all_awaitable :
         data(d)
     {}
 
+    using base = hce::scheduler::reschedule<
+        hce::awaitable::lockable<
+            hce::spinlock,
+            hce::awt<std::error_code>::interface>>;
+
     bool on_ready() override { return ready_; }
 
     void on_suspend() override {
+        base::on_suspend();
+
         // Kick off the first attempt. We never call resume from this stack.
         continue_send();
     }
@@ -242,9 +256,16 @@ struct recv_awaitable :
         buf(b)
     {}
 
+    using base = hce::scheduler::reschedule<
+        hce::awaitable::lockable<
+            hce::spinlock,
+            hce::awt<hce::expected<size_t, std::error_code>>::interface>>;
+
     bool on_ready() override { return ready_; }
 
     void on_suspend() override {
+        base::on_suspend();
+
         auto& backend = hce::service<network>::get().get_backend();
         backend.register_op(
             sock.fd(),
@@ -312,9 +333,16 @@ struct recv_all_awaitable :
         buf(b)
     {}
 
+    using base = hce::scheduler::reschedule<
+        hce::awaitable::lockable<
+            hce::spinlock,
+            hce::awt<hce::expected<size_t, std::error_code>>::interface>>;
+
     bool on_ready() override { return ready_; }
 
     void on_suspend() override {
+        base::on_suspend();
+
         continue_recv();
     }
 
@@ -433,9 +461,17 @@ struct accept_awaitable :
         sock(s)
     {}
 
+    using base = hce::scheduler::reschedule<
+        hce::awaitable::lockable<
+            hce::spinlock,
+            hce::awt<hce::expected<network::connection,
+                                   std::error_code>>::interface>>;
+
     bool on_ready() override { return ready_; }
 
     void on_suspend() override {
+        base::on_suspend();
+
         auto& backend = hce::service<network>::get().get_backend();
         backend.register_op(
             sock.fd(),
@@ -534,9 +570,17 @@ struct connect_awaitable :
         addr(a)
     {}
 
+    using base = hce::scheduler::reschedule<
+        hce::awaitable::lockable<
+            hce::spinlock,
+            hce::awt<hce::expected<network::connection,
+                                   std::error_code>>::interface>>;
+
     bool on_ready() override { return ready_; }
 
     void on_suspend() override {
+        base::on_suspend();
+
         addrinfo hints{};
         hints.ai_family = AF_UNSPEC;
         hints.ai_socktype = SOCK_STREAM;
