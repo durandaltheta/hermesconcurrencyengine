@@ -475,7 +475,6 @@ TEST(network, udp_listen_any_interface) {
 TEST(network, udp_connect_and_send_recv) {
     auto& net = hce::service<hce::network>::get();
 
-    // Server binds
     auto acc_exp = net.listen(
         {"127.0.0.1", 0, hce::network::address::type_e::udp});
     ASSERT_TRUE(acc_exp);
@@ -484,17 +483,17 @@ TEST(network, udp_connect_and_send_recv) {
     ASSERT_GT(port, 0);
 
     const std::string payload = "udp hello";
-
     test::queue<std::string> client_status;
 
-    // Client connects (sets default peer) and does a round-trip
-    // once the server side can also send/recv on the bound socket.
     auto client_awt = hce::schedule(
-        [&]() -> hce::co<void> {
+        [](uint16_t port,
+           std::string payload,
+           test::queue<std::string>& status) -> hce::co<void> {
+            auto& net = hce::service<hce::network>::get();
             auto conn_exp = co_await net.connect(
                 {"127.0.0.1", port, hce::network::address::type_e::udp});
             if (!conn_exp) {
-                client_status.push("connect failed: " + conn_exp.error().message());
+                status.push("connect failed: " + conn_exp.error().message());
                 co_return;
             }
             auto conn = std::move(conn_exp.value());
@@ -504,15 +503,14 @@ TEST(network, udp_connect_and_send_recv) {
 
             auto send_ec = co_await conn.send_all(std::span(buf));
             if (send_ec) {
-                client_status.push("send failed: " + send_ec.message());
+                status.push("send failed: " + send_ec.message());
                 co_return;
             }
 
-            // For a true echo the server must reply; this is the client half.
-            client_status.push("sent");
+            status.push("sent");
             conn.close();
             co_return;
-        }());
+        }(port, payload, client_status));
 
     EXPECT_EQ(client_status.pop(), "sent");
     (void)client_awt;
