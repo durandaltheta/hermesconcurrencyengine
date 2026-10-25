@@ -25,6 +25,7 @@ set(HCE_UT_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/threadpool_ut.cpp
     ${CMAKE_CURRENT_LIST_DIR}/comparison_ut.cpp
     ${CMAKE_CURRENT_LIST_DIR}/blocking_ut.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/synchronization_ut.cpp
     ${CMAKE_CURRENT_LIST_DIR}/module_ut.cpp
     )
 

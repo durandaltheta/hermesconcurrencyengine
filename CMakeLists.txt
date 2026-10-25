@@ -66,6 +66,7 @@ set(HCE_SOURCE_FILES
     ${HCE_SOURCE_DIR}/coroutine.cpp
     ${HCE_SOURCE_DIR}/scheduler.cpp
     ${HCE_SOURCE_DIR}/blocking.cpp
+    ${HCE_SOURCE_DIR}/synchronization.cpp
     ${HCE_SOURCE_DIR}/timer.cpp
     ${HCE_SOURCE_DIR}/thread.cpp
     ${HCE_SOURCE_DIR}/threadpool.cpp
