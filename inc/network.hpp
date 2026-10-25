@@ -16,6 +16,7 @@
 #include "scheduler.hpp"
 #include "channel.hpp"
 
+#include <iostream>
 namespace hce {
 namespace config {
 namespace network {
@@ -224,6 +225,8 @@ struct network : public hce::service<network>, public hce::printable {
 
             conn.shutdown_read();
             inbound.close();
+            std::cout << "reader dead" << std::endl;
+            co_return;
         };
 
         auto writer = [&]() -> hce::co<void> {
@@ -237,13 +240,18 @@ struct network : public hce::service<network>, public hce::printable {
 
             conn.shutdown_write();
             outbound.close();
+            std::cout << "writer dead" << std::endl;
+            co_return;
         };
 
         auto reader_awt = hce::schedule(reader());
         auto writer_awt = hce::schedule(writer());
         co_await std::move(reader_awt);
+        std::cout << "awaited reader" << std::endl;
         co_await std::move(writer_awt);
+        std::cout << "awaited writer" << std::endl;
         conn.close();
+        std::cout << "pump done" << std::endl;
     }
 
     network(const network&) = delete;
