@@ -7,7 +7,6 @@
 #include <netdb.h>
 
 namespace hce {
-namespace network {
 
 // ---------------------------------------------------------------------------
 // Helpers — result objects that cross the resume boundary.
@@ -18,11 +17,11 @@ struct error_result {
 };
 
 struct size_result {
-    std::expected<size_t, std::error_code> value;
+    hce::expected<size_t, std::error_code> value;
 };
 
 struct connection_result {
-    std::expected<network::connection, std::error_code> value;
+    hce::expected<network::connection, std::error_code> value;
 };
 
 // ---------------------------------------------------------------------------
@@ -81,10 +80,10 @@ struct send_awaitable :
     bool on_ready() override { return ready_; }
 
     void on_suspend() override {
-        auto& backend = hce::service<network>::get().backend;
+        auto& backend = hce::service<network>::get().get_backend();
         backend.register_op(
             sock.fd(),
-            detail::network::backend::interest::write,
+            hce::interface::network::backend::interest::write,
             this,
             [](int, std::error_code ec, uint32_t, void* user) {
                 auto* self = static_cast<send_awaitable*>(user);
@@ -170,10 +169,10 @@ struct send_all_awaitable :
             if(!ec || ec == std::errc::resource_unavailable_try_again) {
                 // Need writability. Register and return; completion will
                 // call continue_send again (or resume on hard error).
-                auto& backend = hce::service<network>::get().backend;
+                auto& backend = hce::service<network>::get().get_backend();
                 backend.register_op(
                     sock.fd(),
-                    detail::network::backend::interest::write,
+                    hce::interface::network::backend::interest::write,
                     this,
                     [](int, std::error_code ec, uint32_t, void* user) {
                         auto* self = static_cast<send_all_awaitable*>(user);
@@ -229,13 +228,13 @@ struct recv_awaitable :
     public hce::scheduler::reschedule<
         hce::awaitable::lockable<
             hce::spinlock,
-            hce::awt<std::expected<size_t, std::error_code>>::interface>>
+            hce::awt<hce::expected<size_t, std::error_code>>::interface>>
 {
     recv_awaitable(detail::network::socket& s, std::span<std::byte> b) :
         hce::scheduler::reschedule<
             hce::awaitable::lockable<
                 hce::spinlock,
-                hce::awt<std::expected<size_t, std::error_code>>::interface>>(
+                hce::awt<hce::expected<size_t, std::error_code>>::interface>>(
                     slk_,
                     hce::awaitable::await::policy::defer,
                     hce::awaitable::resume::policy::lock),
@@ -246,10 +245,10 @@ struct recv_awaitable :
     bool on_ready() override { return ready_; }
 
     void on_suspend() override {
-        auto& backend = hce::service<network>::get().backend;
+        auto& backend = hce::service<network>::get().get_backend();
         backend.register_op(
             sock.fd(),
-            detail::network::backend::interest::read,
+            hce::interface::network::backend::interest::read,
             this,
             [](int, std::error_code ec, uint32_t, void* user) {
                 auto* self = static_cast<recv_awaitable*>(user);
@@ -276,7 +275,7 @@ struct recv_awaitable :
         ready_ = true;
     }
 
-    std::expected<size_t, std::error_code> get_result() override {
+    hce::expected<size_t, std::error_code> get_result() override {
         return result;
     }
 
@@ -284,12 +283,12 @@ struct recv_awaitable :
     detail::network::socket& sock;
     std::span<std::byte> buf;
     bool ready_ = false;
-    std::expected<size_t, std::error_code> result;
+    hce::expected<size_t, std::error_code> result;
 };
 
-hce::awt<std::expected<size_t, std::error_code>>
+hce::awt<hce::expected<size_t, std::error_code>>
 network::connection::recv(std::span<std::byte> data) {
-    return hce::awt<std::expected<size_t, std::error_code>>(
+    return hce::awt<hce::expected<size_t, std::error_code>>(
         new recv_awaitable(socket, data));
 }
 
@@ -299,13 +298,13 @@ struct recv_all_awaitable :
     public hce::scheduler::reschedule<
         hce::awaitable::lockable<
             hce::spinlock,
-            hce::awt<std::expected<size_t, std::error_code>>::interface>>
+            hce::awt<hce::expected<size_t, std::error_code>>::interface>>
 {
     recv_all_awaitable(detail::network::socket& s, std::span<std::byte> b) :
         hce::scheduler::reschedule<
             hce::awaitable::lockable<
                 hce::spinlock,
-                hce::awt<std::expected<size_t, std::error_code>>::interface>>(
+                hce::awt<hce::expected<size_t, std::error_code>>::interface>>(
                     slk_,
                     hce::awaitable::await::policy::defer,
                     hce::awaitable::resume::policy::lock),
@@ -335,10 +334,10 @@ struct recv_all_awaitable :
                 return;
             }
             if(!ec || ec == std::errc::resource_unavailable_try_again) {
-                auto& backend = hce::service<network>::get().backend;
+                auto& backend = hce::service<network>::get().get_backend();
                 backend.register_op(
                     sock.fd(),
-                    detail::network::backend::interest::read,
+                    hce::interface::network::backend::interest::read,
                     this,
                     [](int, std::error_code ec, uint32_t, void* user) {
                         auto* self = static_cast<recv_all_awaitable*>(user);
@@ -369,7 +368,7 @@ struct recv_all_awaitable :
         ready_ = true;
     }
 
-    std::expected<size_t, std::error_code> get_result() override {
+    hce::expected<size_t, std::error_code> get_result() override {
         return result;
     }
 
@@ -378,12 +377,12 @@ struct recv_all_awaitable :
     std::span<std::byte> buf;
     size_t offset = 0;
     bool ready_ = false;
-    std::expected<size_t, std::error_code> result;
+    hce::expected<size_t, std::error_code> result;
 };
 
-hce::awt<std::expected<size_t, std::error_code>>
+hce::awt<hce::expected<size_t, std::error_code>>
 network::connection::recv_all(std::span<std::byte> data) {
-    return hce::awt<std::expected<size_t, std::error_code>>(
+    return hce::awt<hce::expected<size_t, std::error_code>>(
         new recv_all_awaitable(socket, data));
 }
 
@@ -419,14 +418,14 @@ struct accept_awaitable :
     public hce::scheduler::reschedule<
         hce::awaitable::lockable<
             hce::spinlock,
-            hce::awt<std::expected<network::connection,
+            hce::awt<hce::expected<network::connection,
                                    std::error_code>>::interface>>
 {
     explicit accept_awaitable(detail::network::socket& s) :
         hce::scheduler::reschedule<
             hce::awaitable::lockable<
                 hce::spinlock,
-                hce::awt<std::expected<network::connection,
+                hce::awt<hce::expected<network::connection,
                                        std::error_code>>::interface>>(
                     slk_,
                     hce::awaitable::await::policy::defer,
@@ -437,10 +436,10 @@ struct accept_awaitable :
     bool on_ready() override { return ready_; }
 
     void on_suspend() override {
-        auto& backend = hce::service<network>::get().backend;
+        auto& backend = hce::service<network>::get().get_backend();
         backend.register_op(
             sock.fd(),
-            detail::network::backend::interest::read,
+            hce::interface::network::backend::interest::read,
             this,
             [](int, std::error_code ec, uint32_t, void* user) {
                 auto* self = static_cast<accept_awaitable*>(user);
@@ -474,7 +473,7 @@ struct accept_awaitable :
         ready_ = true;
     }
 
-    std::expected<network::connection, std::error_code>
+    hce::expected<network::connection, std::error_code>
     get_result() override {
         return std::move(result);
     }
@@ -482,12 +481,12 @@ struct accept_awaitable :
     hce::spinlock slk_;
     detail::network::socket& sock;
     bool ready_ = false;
-    std::expected<network::connection, std::error_code> result;
+    hce::expected<network::connection, std::error_code> result;
 };
 
-hce::awt<std::expected<network::connection, std::error_code>>
+hce::awt<hce::expected<network::connection, std::error_code>>
 network::acceptor::accept() {
-    return hce::awt<std::expected<network::connection, std::error_code>>(
+    return hce::awt<hce::expected<network::connection, std::error_code>>(
         new accept_awaitable(socket));
 }
 
@@ -519,14 +518,14 @@ struct connect_awaitable :
     public hce::scheduler::reschedule<
         hce::awaitable::lockable<
             hce::spinlock,
-            hce::awt<std::expected<network::connection,
+            hce::awt<hce::expected<network::connection,
                                    std::error_code>>::interface>>
 {
     explicit connect_awaitable(const network::address& a) :
         hce::scheduler::reschedule<
             hce::awaitable::lockable<
                 hce::spinlock,
-                hce::awt<std::expected<network::connection,
+                hce::awt<hce::expected<network::connection,
                                        std::error_code>>::interface>>(
                     slk_,
                     hce::awaitable::await::policy::defer,
@@ -583,10 +582,10 @@ struct connect_awaitable :
             return;
         }
 
-        auto& backend = hce::service<network>::get().backend;
+        auto& backend = hce::service<network>::get().get_backend();
         backend.register_op(
             fd,
-            detail::network::backend::interest::write,
+            hce::interface::network::backend::interest::write,
             this,
             [](int fd, std::error_code ec, uint32_t, void* user) {
                 auto* self = static_cast<connect_awaitable*>(user);
@@ -615,7 +614,7 @@ struct connect_awaitable :
         ready_ = true;
     }
 
-    std::expected<network::connection, std::error_code>
+    hce::expected<network::connection, std::error_code>
     get_result() override {
         return std::move(result);
     }
@@ -624,18 +623,18 @@ struct connect_awaitable :
     network::address addr;
     network::connection pending;
     bool ready_ = false;
-    std::expected<network::connection, std::error_code> result;
+    hce::expected<network::connection, std::error_code> result;
 };
 
-hce::awt<std::expected<network::connection, std::error_code>>
+hce::awt<hce::expected<network::connection, std::error_code>>
 network::connect(const address& addr) {
-    return hce::awt<std::expected<network::connection, std::error_code>>(
+    return hce::awt<hce::expected<network::connection, std::error_code>>(
         new connect_awaitable(addr));
 }
 
 // ---- listen --------------------------------------------------------------
 
-std::expected<network::acceptor, std::error_code>
+hce::expected<network::acceptor, std::error_code>
 network::listen(const address& addr, int backlog) {
     int fd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
 
@@ -672,7 +671,10 @@ network::listen(const address& addr, int backlog) {
     a.socket = detail::network::socket(fd);
     return a;
 }
+    
+network::backend& network::get_backend() {
+    return epoll_backend;
+}
 
-} // network
 } // hce
 

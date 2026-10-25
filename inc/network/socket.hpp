@@ -7,8 +7,9 @@
 #include <string>
 #include <system_error>
 
-#include <netinet/in.h>
 #include <sys/socket.h>
+
+#include "network/interface.hpp"
 
 namespace hce {
 namespace detail {

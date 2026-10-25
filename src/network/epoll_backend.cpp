@@ -1,8 +1,6 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis
 
-#include "network/epoll_backend.hpp"
-
 #include <cerrno>
 #include <cstring>
 #include <stdexcept>
@@ -10,11 +8,14 @@
 
 #include <fcntl.h>
 #include <sys/eventfd.h>
+#include <sys/socket.h>
+
+#include "network/interface.hpp"
+#include "network/epoll_backend.hpp"
 
 namespace hce {
 namespace detail {
 namespace network {
-namespace backend {
 
 namespace {
 
@@ -103,17 +104,21 @@ void epoll_backend::assign(int fd) {
     // that forces the mapping to be created if desired later.
     (void)thread_for(fd);
 }
+    
+size_t epoll_backend::thread_count() const { return thread_count_; }
 
 epoll_backend::thread_state& epoll_backend::thread_for(int fd) {
     size_t idx = static_cast<size_t>(fd) % thread_count_;
     return *threads_[idx];
 }
 
-void epoll_backend::wake(thread_state& ts) {
+ssize_t epoll_backend::wake(thread_state& ts) {
     if(ts.wake_fd >= 0) {
         uint64_t one = 1;
-        ::write(ts.wake_fd, &one, sizeof(one));
-    }
+        return ::write(ts.wake_fd, &one, sizeof(one));
+    } 
+
+    return 0;
 }
 
 void epoll_backend::set_nonblocking(int fd) {
@@ -124,10 +129,10 @@ void epoll_backend::set_nonblocking(int fd) {
     ::fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-op_id epoll_backend::register_op(int fd,
-                                 interest i,
+hce::interface::network::backend::op_id epoll_backend::register_op(int fd,
+                                 hce::interface::network::backend::interest i,
                                  void* user,
-                                 completion_fn complete)
+                                 hce::interface::network::backend::completion_fn complete)
 {
     if(fd < 0 || !complete) {
         return 0;
@@ -168,7 +173,7 @@ op_id epoll_backend::register_op(int fd,
     return op_ptr->id;
 }
 
-bool epoll_backend::cancel(op_id id) {
+bool epoll_backend::cancel(hce::interface::network::backend::op_id id) {
     if(id == 0) {
         return false;
     }
@@ -270,7 +275,6 @@ void epoll_backend::io_thread_main(size_t index) {
     }
 }
 
-} // backend
 } // network
 } // detail
 } // hce

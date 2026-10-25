@@ -15,40 +15,12 @@
 #include <vector>
 
 #include <sys/epoll.h>
-#include <unistd.h>
+
+#include "network/interface.hpp"
 
 namespace hce {
 namespace detail {
 namespace network {
-namespace backend {
-
-/**
- @brief Interest mask for a registered operation.
- */
-enum class interest : uint32_t {
-    read  = EPOLLIN,
-    write = EPOLLOUT,
-    both  = EPOLLIN | EPOLLOUT
-};
-
-/**
- @brief Completion callback invoked from an IO thread.
-
- @param fd      The file descriptor that became ready.
- @param ec      Error code (success if empty).
- @param events  Raw epoll events that fired.
- @param user    User data supplied at registration.
- */
-using completion_fn = std::function<void(
-    int fd,
-    std::error_code ec,
-    uint32_t events,
-    void* user)>;
-
-/**
- @brief Unique identifier for a registered operation (for cancellation).
- */
-using op_id = uint64_t;
 
 /**
  @brief Multi-threaded edge-triggered epoll backend.
@@ -61,8 +33,7 @@ using op_id = uint64_t;
  caller is expected to post the resume of any waiting coroutine onto a
  Hermes scheduler from inside the completion function.
  */
-class epoll_backend {
-public:
+struct epoll_backend : public hce::interface::network::backend {
     explicit epoll_backend(size_t thread_count = 1);
     ~epoll_backend();
 
@@ -92,10 +63,10 @@ public:
      @param complete Completion function (called from the owning IO thread).
      @return         Operation id that can be used for cancellation, or 0 on failure.
      */
-    op_id register_op(int fd,
-                      interest i,
+    hce::interface::network::backend::op_id register_op(int fd,
+                      hce::interface::network::backend::interest i,
                       void* user,
-                      completion_fn complete);
+                      hce::interface::network::backend::completion_fn complete);
 
     /**
      @brief Cancel a previously registered operation.
@@ -103,7 +74,7 @@ public:
      If the operation has not yet completed, its completion will be
      invoked with an operation_canceled error.
      */
-    bool cancel(op_id id);
+    bool cancel(hce::interface::network::backend::op_id id);
 
     /**
      @brief Assign a file descriptor to an IO thread (for affinity).
@@ -116,15 +87,15 @@ public:
     /**
      @return Number of IO threads.
      */
-    size_t thread_count() const { return thread_count_; }
+    size_t thread_count() const;
 
 private:
     struct op {
-        op_id id = 0;
+        hce::interface::network::backend::op_id id = 0;
         int fd = -1;
-        interest interest_ = interest::read;
+        hce::interface::network::backend::interest interest_ = interest::read;
         void* user = nullptr;
-        completion_fn complete;
+        hce::interface::network::backend::completion_fn complete;
         bool cancelled = false;
     };
 
@@ -137,23 +108,22 @@ private:
         // Protected by mutex only during registration / cancellation.
         // The IO thread itself never takes the mutex while in epoll_wait.
         std::mutex mutex;
-        std::unordered_map<op_id, std::shared_ptr<op>> ops_by_id;
+        std::unordered_map<hce::interface::network::backend::op_id, std::shared_ptr<op>> ops_by_id;
         std::unordered_map<int, std::shared_ptr<op>> ops_by_fd;
     };
 
     void io_thread_main(size_t index);
     thread_state& thread_for(int fd);
-    void wake(thread_state& ts);
+    ssize_t wake(thread_state& ts);
     static void set_nonblocking(int fd);
 
     const size_t thread_count_;
     std::vector<std::unique_ptr<thread_state>> threads_;
-    std::atomic<op_id> next_id_{1};
+    std::atomic<hce::interface::network::backend::op_id> next_id_{1};
     std::atomic<bool> started_{false};
     std::atomic<bool> stopped_{false};
 };
 
-} // backend
 } // network
 } // detail
 } // hce

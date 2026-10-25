@@ -1,15 +1,14 @@
 #pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis
-#include <expected>
+
 #include <span>
 #include <cstddef>
 
-#include <netinet/in.h>
-#include <sys/socket.h>
-
 #include "base.hpp"
 #include "logging.hpp"
+#include "expected.hpp"
+#include "network/interface.hpp"
 #include "network/epoll_backend.hpp"
 #include "network/socket.hpp"
 #include "atomic.hpp"
@@ -44,7 +43,7 @@ struct network : public hce::service<network>, public hce::printable {
 
         std::string host;
         uint16_t port = 0;
-        type_e type;
+        type_e type = type_e::tcp;
     };
 
     struct acceptor;
@@ -86,7 +85,7 @@ struct network : public hce::service<network>, public hce::printable {
          @param data the span of bytes to receive
          @return the resulting error code (-1 on error or >=0 bytes received)
          */
-        hce::awt<std::expected<size_t, std::error_code>> recv(std::span<std::byte> data);
+        hce::awt<hce::expected<size_t, std::error_code>> recv(std::span<std::byte> data);
 
         /**
          @brief send all data across the connection 
@@ -96,7 +95,7 @@ struct network : public hce::service<network>, public hce::printable {
          @param data the span of bytes to receive
          @return the resulting error code (-1 on error or >=0 bytes received)
          */
-        hce::awt<std::expected<size_t, std::error_code>> recv_all(std::span<std::byte> data);
+        hce::awt<hce::expected<size_t, std::error_code>> recv_all(std::span<std::byte> data);
 
         /**
          @brief close the socket connection
@@ -125,11 +124,11 @@ struct network : public hce::service<network>, public hce::printable {
      */
     struct acceptor {
         acceptor() = default;
-        acceptor(const acceptor&) delete;
+        acceptor(const acceptor&) = delete;
         acceptor(acceptor&&) noexcept;
         ~acceptor();
 
-        acceptor& operator=(const acceptor&) delete;
+        acceptor& operator=(const acceptor&) = delete;
         acceptor& operator=(acceptor&&) noexcept;
 
         /**
@@ -140,7 +139,7 @@ struct network : public hce::service<network>, public hce::printable {
 
          @return an expected connection and error code
          */
-        hce::awt<std::expected<connection, std::error_code>> accept();
+        hce::awt<hce::expected<connection, std::error_code>> accept();
 
         /**
          @brief close the socket connection
@@ -174,7 +173,7 @@ struct network : public hce::service<network>, public hce::printable {
      @param addr the address to connect to
      @return an expected connection and error code
      */
-    hce::awt<std::expected<connection, std::error_code>> connect(const address& addr);
+    hce::awt<hce::expected<connection, std::error_code>> connect(const address& addr);
 
     /**
      @brief establish a server connection
@@ -183,12 +182,17 @@ struct network : public hce::service<network>, public hce::printable {
      @param backlog the maximum length to which the queue of pending connections for sockfd may grow.
      @return an expected acceptor and error code
      */
-    std::expected<acceptor, std::error_code> listen(const address& addr, int backlog = SOMAXCONN);
+    hce::expected<acceptor, std::error_code> listen(const address& addr, int backlog = SOMAXCONN);
+
+    /// return the backend via its interface
+    hce::interface::network::backend& get_backend();
 
 private:
     network();
 
-    detail::network::epoll_backend backend;
+    hce::detail::network::epoll_backend epoll_backend;
+
+    friend hce::lifecycle;
 };
 
 }
