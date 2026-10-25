@@ -714,7 +714,7 @@ TEST(network, length_prefixed_pump_echo) {
 
     test::queue<std::string> server_status, client_status;
 
-    const std::string raw = "pumpd length-prefixed payload";
+    const std::string raw = "pumped length-prefixed payload";
     std::vector<std::byte> payload(raw.size());
     std::memcpy(payload.data(), raw.data(), raw.size());
 

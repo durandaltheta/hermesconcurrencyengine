@@ -159,7 +159,7 @@ struct network : public hce::service<network>, public hce::printable {
      */
     template<typename T>
     struct protocol {
-        virtual ~protocol() = 0;
+        virtual ~protocol(){}
 
         // Read one complete message. May call recv/recv_all internally.
         virtual hce::co<hce::expected<T, std::error_code>>
@@ -231,8 +231,8 @@ struct network : public hce::service<network>, public hce::printable {
             outbound.close();
         };
 
-        auto reader_awt = hce::schedule(reader);
-        auto writer_awt = hce::schedule(writer);
+        auto reader_awt = hce::schedule(reader());
+        auto writer_awt = hce::schedule(writer());
         co_await std::move(reader_awt);
         co_await std::move(writer_awt);
         conn.close();
