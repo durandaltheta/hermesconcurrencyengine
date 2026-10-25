@@ -113,7 +113,7 @@ struct network : public hce::service<network>, public hce::printable {
     private:
         detail::network::socket socket;
 
-        friend class acceptor;
+        friend struct acceptor;
         friend struct network;
     };
 
