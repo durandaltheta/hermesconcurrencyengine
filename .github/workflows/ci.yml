@@ -1,0 +1,196 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.compiler }} / ${{ matrix.build_type }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        build_type: [Debug, Release]
+        include:
+          - compiler: gcc
+            cxx: g++
+            cc: gcc
+          - compiler: clang
+            cxx: clang++
+            cc: clang
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            python3 \
+            python3-pip \
+            ${{ matrix.compiler == 'clang' && 'clang' || 'g++' }} \
+            ccache \
+            valgrind
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.compiler }}-${{ matrix.build_type }}
+
+      - name: Configure
+        run: |
+          export CC="${{ matrix.cc }}"
+          export CXX="${{ matrix.cxx }}"
+          cmake -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DCMAKE_C_COMPILER=$CC \
+            -DCMAKE_CXX_COMPILER=$CXX \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DBUILD_SHARED_LIBS=ON \
+            -DTIME_SENSITIVE_TESTS_ENABLED=ON
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Build and run unit tests
+        run: |
+          cmake --build build --target hce_ut --parallel $(nproc)
+          ./tst/ut_bin/hce_ut --gtest_color=yes
+
+      - name: Upload test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ matrix.compiler }}-${{ matrix.build_type }}
+          path: |
+            build/**/*.log
+            validate.log
+          if-no-files-found: ignore
+
+  sanitizer:
+    name: AddressSanitizer (${{ matrix.compiler }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        include:
+          - compiler: gcc
+            cxx: g++
+            cc: gcc
+          - compiler: clang
+            cxx: clang++
+            cc: clang
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            ninja-build \
+            python3 \
+            ${{ matrix.compiler == 'clang' && 'clang' || 'g++' }}
+
+      - name: Configure with ASan
+        run: |
+          export CC="${{ matrix.cc }}"
+          export CXX="${{ matrix.cxx }}"
+          cmake -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_C_COMPILER=$CC \
+            -DCMAKE_CXX_COMPILER=$CXX \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" \
+            -DCMAKE_C_FLAGS="-fsanitize=address -fno-omit-frame-pointer -g" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address" \
+            -DBUILD_SHARED_LIBS=ON \
+            -DTIME_SENSITIVE_TESTS_ENABLED=OFF
+
+      - name: Build and run unit tests under ASan
+        run: |
+          cmake --build build --target hce_ut --parallel $(nproc)
+          ASAN_OPTIONS=detect_leaks=1:abort_on_error=1 \
+            ./tst/ut_bin/hce_ut --gtest_color=yes
+
+  validate-basic:
+    name: Validate script (basic)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            python3 \
+            ${{ matrix.compiler == 'clang' && 'clang' || 'g++' }}
+
+      - name: Run validate basic
+        run: |
+          chmod +x validate
+          python3 validate ${{ matrix.compiler }} basic
+
+      - name: Upload validate log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validate-basic-${{ matrix.compiler }}
+          path: validate.log
+          if-no-files-found: ignore
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y doxygen graphviz
+
+      - name: Generate docs
+        run: doxygen
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./doc/html
+          publish_branch: gh-pages

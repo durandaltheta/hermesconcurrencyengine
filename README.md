@@ -66,6 +66,18 @@ make hce
 
 `libhce.a` can be linked against by user software (it should be small, at time of writing it's sub 1 megabyte). The directories `inc/` and `loguru/` will need to be added as user code include directories.
 
+## Continuous Integration
+[![CI](https://github.com/durandaltheta/hermesconcurrencyengine/actions/workflows/ci.yml/badge.svg)](https://github.com/durandaltheta/hermesconcurrencyengine/actions/workflows/ci.yml)
+
+### What the CI covers
+- **Matrix builds**: GCC + Clang × Debug + Release
+- **Unit tests**: Builds and runs `hce_ut` (GoogleTest)
+- **AddressSanitizer**: Separate job with ASan on Debug builds
+- **Validate script**: Runs the project's own `validate <compiler> basic`
+- **Documentation**: Generates Doxygen and deploys to `gh-pages` on pushes to `main`
+- **Caching**: ccache for faster rebuilds
+- **Concurrency**: Cancels in-progress runs for the same ref
+
 ## Documentation
 ### Prerequisites 
 - `doxygen`

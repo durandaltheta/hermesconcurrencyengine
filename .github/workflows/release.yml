@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build g++
+
+      - name: Configure and build Release
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
+          cmake --build build --parallel $(nproc) --target hce
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          # Static and shared libs + headers
+          cp -a inc dist/
+          cp -a loguru/*.h* dist/inc/ 2>/dev/null || true
+          find build -name 'libhce.*' -exec cp {} dist/ \;
+          tar -czf hermes-concurrency-engine-${{ github.ref_name }}.tar.gz -C dist .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: hermes-concurrency-engine-${{ github.ref_name }}.tar.gz
+          generate_release_notes: true
+          draft: false
+          prerelease: false
