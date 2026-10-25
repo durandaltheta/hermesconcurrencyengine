@@ -611,36 +611,17 @@ private:
 };
 
 struct network : public result_interface<1> {
+    virtual ~network() = default;
 
-    virtual ~network(){ 
-    }
-
-    static inline std::string info_name() { 
-        return "test::module::network";
-    }
-
-    inline std::string name() const { return network::info_name(); }
-
-    inline void wait_for_start() {
-        start_queue_.pop();
-    }
-
-    inline void wait_for_end() {
-        end_queue_.pop();
-    }
+    static inline std::string info_name() { return "test::module::network"; }
+    inline std::string name() const { return info_name(); }
 
     inline hce::awt<bool> launch() {
         return hce::schedule(launch_network_ops(this));
     }
 
 private:
-    test::queue<int> start_queue_;
-    test::queue<int> end_queue_;
-    test::queue<bool> client_ok;
-
-    // Simple self-contained TCP echo (listen + connect + round-trip)
-    hce::co<bool> launch_network_ops(network* n) {
-        n->start_queue_.push(0);
+    static hce::co<bool> launch_network_ops(network* n) {
         auto& net = hce::service<hce::network>::get();
 
         auto acc_exp = net.listen(
@@ -662,14 +643,17 @@ private:
 
         const std::string payload = "smoke";
 
-        // Client side (scheduled so it can run concurrently with accept)
+        // channel lives for the duration of this coroutine
+        auto result_ch = hce::chan<bool>::make();
+
         auto client_awt = hce::schedule(
-            [&net, port, payload, n]() -> hce::co<void> {
+            [](uint16_t port, const std::string payload, hce::chan<bool> result_ch) -> hce::co<void> {
+                auto& net = hce::service<hce::network>::get();
                 auto conn_exp = co_await net.connect(
                     {"127.0.0.1", port, hce::network::address::type_e::tcp});
 
                 if(!conn_exp) {
-                    n->client_ok.push(false);
+                    co_await result_ch.send(false);
                     co_return;
                 }
 
@@ -677,16 +661,16 @@ private:
 
                 auto send_ec = co_await conn.send_all(
                     std::as_bytes(std::span(payload)));
+
                 if(send_ec) {
-                    n->client_ok.push(false);
+                    co_await result_ch.send(false);
                     co_return;
                 }
 
                 std::vector<std::byte> buf(payload.size());
                 auto recv_exp = co_await conn.recv_all(std::span(buf));
-
                 if(!recv_exp || recv_exp.value() != payload.size()) {
-                    n->client_ok.push(false);
+                    co_await result_ch.send(false);
                     co_return;
                 }
 
@@ -696,16 +680,17 @@ private:
                     if(static_cast<char>(buf[i]) != payload[i]) match = false;
                 }
 
-                n->client_ok.push(match);
+                co_await result_ch.send(match);
                 conn.close();
                 co_return;
-            }());
+            }(port, payload, result_ch));
 
-        // Server side
+        // server side
         auto conn_exp = co_await acc.accept();
 
         if(!conn_exp) {
-            (void)client_awt;
+            result_ch.close();
+            co_await client_awt;
             co_return false;
         }
 
@@ -715,24 +700,26 @@ private:
         auto recv_exp = co_await conn.recv_all(std::span(buf));
 
         if(!recv_exp || recv_exp.value() != payload.size()) {
-            (void)client_awt;
+            result_ch.close();
+            co_await client_awt;
             co_return false;
         }
 
         auto send_ec = co_await conn.send_all(std::span(buf));
 
         if(send_ec) {
-            (void)client_awt;
+            result_ch.close();
+            co_await client_awt;
             co_return false;
         }
 
         conn.close();
         acc.close();
 
-        bool ok = n->client_ok.pop();
+        bool ok = false;
+        co_await result_ch.recv(ok);
         n->handle_result(ok);
-        (void)client_awt;
-        n->end_queue_.push(0);
+        co_await client_awt;
         co_return ok;
     }
 };
