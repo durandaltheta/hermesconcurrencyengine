@@ -31,7 +31,8 @@ enum struct command {
     receive_concurrent_req,
     receive_parallel_req,
     blocking_req,
-    timing_req
+    timing_req,
+    network_req
 };
 
 struct result : public hce::printable {
@@ -609,6 +610,133 @@ private:
     }
 };
 
+struct network : public result_interface<1> {
+
+    virtual ~network(){ 
+    }
+
+    static inline std::string info_name() { 
+        return "test::module::network";
+    }
+
+    inline std::string name() const { return network::info_name(); }
+
+    inline void wait_for_start() {
+        start_queue_.pop();
+    }
+
+    inline void wait_for_end() {
+        end_queue_.pop();
+    }
+
+    inline hce::awt<bool> launch() {
+        return hce::schedule(launch_network_ops(this));
+    }
+
+private:
+    test::queue<int> start_queue_;
+    test::queue<int> end_queue_;
+    test::queue<bool> client_ok;
+
+    // Simple self-contained TCP echo (listen + connect + round-trip)
+    hce::co<bool> launch_network_ops(network* n) {
+        n->start_queue_.push(0);
+        auto& net = hce::service<hce::network>::get();
+
+        auto acc_exp = net.listen(
+            {"127.0.0.1", 0, hce::network::address::type_e::tcp});
+        if(!acc_exp) co_return false;
+
+        auto acc = std::move(acc_exp.value());
+
+        sockaddr_in sa{};
+        socklen_t len = sizeof(sa);
+
+        if(::getsockname(acc.get_socket().fd(),
+                          reinterpret_cast<sockaddr*>(&sa), &len) < 0) {
+            co_return false;
+        }
+
+        uint16_t port = ntohs(sa.sin_port);
+        if(port == 0) co_return false;
+
+        const std::string payload = "smoke";
+
+        // Client side (scheduled so it can run concurrently with accept)
+        auto client_awt = hce::schedule(
+            [&net, port, payload, n]() -> hce::co<void> {
+                auto conn_exp = co_await net.connect(
+                    {"127.0.0.1", port, hce::network::address::type_e::tcp});
+
+                if(!conn_exp) {
+                    n->client_ok.push(false);
+                    co_return;
+                }
+
+                auto conn = std::move(conn_exp.value());
+
+                auto send_ec = co_await conn.send_all(
+                    std::as_bytes(std::span(payload)));
+                if(send_ec) {
+                    n->client_ok.push(false);
+                    co_return;
+                }
+
+                std::vector<std::byte> buf(payload.size());
+                auto recv_exp = co_await conn.recv_all(std::span(buf));
+
+                if(!recv_exp || recv_exp.value() != payload.size()) {
+                    n->client_ok.push(false);
+                    co_return;
+                }
+
+                bool match = true;
+
+                for(size_t i = 0; i < payload.size(); ++i) {
+                    if(static_cast<char>(buf[i]) != payload[i]) match = false;
+                }
+
+                n->client_ok.push(match);
+                conn.close();
+                co_return;
+            }());
+
+        // Server side
+        auto conn_exp = co_await acc.accept();
+
+        if(!conn_exp) {
+            (void)client_awt;
+            co_return false;
+        }
+
+        auto conn = std::move(conn_exp.value());
+
+        std::vector<std::byte> buf(payload.size());
+        auto recv_exp = co_await conn.recv_all(std::span(buf));
+
+        if(!recv_exp || recv_exp.value() != payload.size()) {
+            (void)client_awt;
+            co_return false;
+        }
+
+        auto send_ec = co_await conn.send_all(std::span(buf));
+
+        if(send_ec) {
+            (void)client_awt;
+            co_return false;
+        }
+
+        conn.close();
+        acc.close();
+
+        bool ok = n->client_ok.pop();
+        n->handle_result(ok);
+        (void)client_awt;
+        n->end_queue_.push(0);
+        co_return ok;
+    }
+};
+
 /*
  This object implements the shared interface between host and module for 
  communication in unit tests.
@@ -635,6 +763,7 @@ struct interface {
     parchans pchs;
     blocking blk;
     timer tmr;
+    network net;
 };
 
 

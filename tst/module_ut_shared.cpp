@@ -5,6 +5,15 @@
 #include "test_helpers.hpp"
 #include "test_module_helpers.hpp"
 
+#include "network.hpp"                 
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <span>
+#include <vector>
+#include <string>
+
 struct module_impl : public hce::module {
     virtual ~module_impl(){} 
 
@@ -50,6 +59,10 @@ private:
                     case test::module::command::timing_req:
                         HCE_INFO_FUNCTION_BODY(fname, "received command: timing_req");
                         co_await intf->resch.send(co_await intf->tmr.launch());
+                        break;
+                    case test::module::command::network_req:
+                        HCE_INFO_FUNCTION_BODY(fname, "received command: network_req");
+                        co_await intf->resch.send(co_await intf->net.launch());
                         break;
                 }
             } else {

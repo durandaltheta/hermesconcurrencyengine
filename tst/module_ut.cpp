@@ -211,3 +211,13 @@ TEST_F(module, timing){
     EXPECT_EQ(20, result.actual);
     EXPECT_EQ(0, result.error);
 }
+
+TEST_F(module, network) {
+    HCE_INFO_FUNCTION_BODY(module::fname, "send command: network_req");
+    EXPECT_TRUE((bool)test::module::interface::global()
+                    .comch.send(test::module::command::network_req));
+
+    bool success = false;
+    EXPECT_TRUE((bool)test::module::interface::global().resch.recv(success));
+    EXPECT_TRUE(success);
+}
