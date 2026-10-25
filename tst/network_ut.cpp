@@ -75,7 +75,7 @@ hce::co<void> echo_once(hce::network::acceptor acc,
 
 /// Client coroutine: connect, send a string, recv echo, verify, close.
 hce::co<void> client_echo(hce::network::address addr,
-                          const std::string& payload,
+                          std::string payload,
                           test::queue<std::string>& status) {
     auto& net = hce::service<hce::network>::get();
     auto conn_exp = co_await net.connect(addr);
