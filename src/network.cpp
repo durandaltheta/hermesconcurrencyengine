@@ -44,6 +44,14 @@ network::connection::~connection() {
     close();
 }
 
+void network::connection::shutdown_read() {
+    ::shutdown(get_socket().fd(), SHUT_RD);
+}
+
+void network::connection::shutdown_write() {
+    ::shutdown(get_socket().fd(), SHUT_WR);
+}
+
 void network::connection::close() {
     socket.close();
 }

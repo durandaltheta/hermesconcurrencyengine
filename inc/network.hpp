@@ -98,6 +98,12 @@ struct network : public hce::service<network>, public hce::printable {
          */
         hce::awt<hce::expected<size_t, std::error_code>> recv_all(std::span<std::byte> data);
 
+        /// shutdown writes on the socket
+        void shutdown_read();
+
+        /// shutdown reads on the socket
+        void shutdown_write();
+
         /**
          @brief close the socket connection
          */
@@ -216,6 +222,7 @@ struct network : public hce::service<network>, public hce::printable {
                 }
             }
 
+            conn.shutdown_read();
             inbound.close();
         };
 
@@ -228,6 +235,7 @@ struct network : public hce::service<network>, public hce::printable {
                 }
             }
 
+            conn.shutdown_write();
             outbound.close();
         };
 
