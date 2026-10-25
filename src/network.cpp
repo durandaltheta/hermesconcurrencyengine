@@ -162,56 +162,67 @@ struct send_all_awaitable :
             hce::spinlock,
             hce::awt<std::error_code>::interface>>;
 
-    bool on_ready() override { return ready_; }
 
-    void on_suspend() override {
-        base::on_suspend();
-
-        // Kick off the first attempt. We never call resume from this stack.
-        continue_send();
-    }
-
-    void continue_send() {
+    bool try_progress() {
         while(offset < data.size()) {
             std::error_code ec;
             ssize_t n = sock.send(data.subspan(offset), ec);
+
             if(n > 0) {
                 offset += static_cast<size_t>(n);
                 continue;
             }
 
             if(!ec || ec == std::errc::resource_unavailable_try_again) {
-                // Need writability. Register and return; completion will
-                // call continue_send again (or resume on hard error).
-                auto& backend = hce::service<network>::get().get_backend();
-                backend.register_op(
-                    sock.fd(),
-                    hce::interface::network::backend::interest::write,
-                    this,
-                    [](int, std::error_code ec, uint32_t, void* user) {
-                        auto* self = static_cast<send_all_awaitable*>(user);
-                        if(ec) {
-                            auto* r = new error_result;
-                            r->ec = ec;
-                            self->resume(r);
-                            return;
-                        }
-                        self->continue_send();
-                    });
-                return;
+                return false;               // need writability
             }
 
-            // Hard error — finish.
-            auto* r = new error_result;
-            r->ec = ec;
-            resume(r);
-            return;
+            // hard error
+            result = ec;
+            ready_ = true;
+            return true;
         }
 
-        // All bytes sent.
-        auto* r = new error_result;
-        r->ec = {};
-        resume(r);
+        result = {};
+        ready_ = true;
+        return true;                        // all sent
+    }
+
+    bool on_ready() override {
+        return ready_ || try_progress();
+    }
+
+    void on_suspend() override {
+        // Capture destination scheduler (fixes the earlier null dest crash).
+        hce::scheduler::reschedule<
+            hce::awaitable::lockable<
+                hce::spinlock,
+                hce::awt<std::error_code>::interface>>::on_suspend();
+
+        auto& backend = hce::service<network>::get().get_backend();
+        backend.register_op(
+            sock.fd(),
+            hce::interface::network::backend::interest::write,
+            this,
+            [](int, std::error_code ec, uint32_t, void* user) {
+                auto* self = static_cast<send_all_awaitable*>(user);
+
+                if(ec) {
+                    auto* r = new error_result;
+                    r->ec = ec;
+                    self->resume(r);
+                    return;
+                }
+
+                if(self->try_progress()) {
+                    auto* r = new error_result;
+                    r->ec = self->result;
+                    self->resume(r);
+                } else {
+                    // still need more — re-register
+                    self->on_suspend();
+                }
+            });
     }
 
     void on_resume(void* m) override {
@@ -338,15 +349,7 @@ struct recv_all_awaitable :
             hce::spinlock,
             hce::awt<hce::expected<size_t, std::error_code>>::interface>>;
 
-    bool on_ready() override { return ready_; }
-
-    void on_suspend() override {
-        base::on_suspend();
-
-        continue_recv();
-    }
-
-    void continue_recv() {
+    bool try_progress() {
         while(offset < buf.size()) {
             std::error_code ec;
             ssize_t n = sock.recv(buf.subspan(offset), ec);
@@ -354,39 +357,54 @@ struct recv_all_awaitable :
                 offset += static_cast<size_t>(n);
                 continue;
             }
-            if(n == 0 && !ec) {
-                // EOF — finish with what we have.
-                auto* r = new size_result;
-                r->value = offset;
-                resume(r);
-                return;
+            if(n == 0 && !ec) {             // EOF
+                result = offset;
+                ready_ = true;
+                return true;
             }
             if(!ec || ec == std::errc::resource_unavailable_try_again) {
-                auto& backend = hce::service<network>::get().get_backend();
-                backend.register_op(
-                    sock.fd(),
-                    hce::interface::network::backend::interest::read,
-                    this,
-                    [](int, std::error_code ec, uint32_t, void* user) {
-                        auto* self = static_cast<recv_all_awaitable*>(user);
-                        if(ec) {
-                            auto* r = new size_result;
-                            r->value = hce::unexpected(ec);
-                            self->resume(r);
-                            return;
-                        }
-                        self->continue_recv();
-                    });
-                return;
+                return false;               // need readability
             }
-            auto* r = new size_result;
-            r->value = hce::unexpected(ec);
-            resume(r);
-            return;
+            result = hce::unexpected(ec);
+            ready_ = true;
+            return true;
         }
-        auto* r = new size_result;
-        r->value = offset;
-        resume(r);
+        result = offset;
+        ready_ = true;
+        return true;
+    }
+
+    bool on_ready() override {
+        return ready_ || try_progress();
+    }
+
+    void on_suspend() override {
+        hce::scheduler::reschedule<
+            hce::awaitable::lockable<
+                hce::spinlock,
+                hce::awt<hce::expected<size_t, std::error_code>>::interface>>::on_suspend();
+
+        auto& backend = hce::service<network>::get().get_backend();
+        backend.register_op(
+            sock.fd(),
+            hce::interface::network::backend::interest::read,
+            this,
+            [](int, std::error_code ec, uint32_t, void* user) {
+                auto* self = static_cast<recv_all_awaitable*>(user);
+                if(ec) {
+                    auto* r = new size_result;
+                    r->value = hce::unexpected(ec);
+                    self->resume(r);
+                    return;
+                }
+                if(self->try_progress()) {
+                    auto* r = new size_result;
+                    r->value = std::move(self->result);
+                    self->resume(r);
+                } else {
+                    self->on_suspend();
+                }
+            });
     }
 
     void on_resume(void* m) override {
