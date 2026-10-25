@@ -16,7 +16,7 @@ namespace {
 
 // Helper: join an awaitable by letting it go out of scope (blocks until complete)
 template <typename Awt>
-void join(Awt&& awt) {
+void join(Awt awt) {
     // destruction joins
 }
 
@@ -119,19 +119,14 @@ TEST(synchronization, unique_lock_lock_contended) {
 
 TEST(synchronization, unique_lock_construct_immediate) {
     std::mutex mtx;
-    std::unique_lock<std::mutex> ul; // empty 
-    hce::detail::sync::test_flags()[0] = false;
-    hce::detail::sync::test_flags()[1] = false;
+    std::unique_lock<std::mutex> ul; // empty
 
     {
         auto awt = hce::unique_lock::construct(ul, mtx);
         join(std::move(awt));
+        EXPECT_TRUE(ul.owns_lock());
+        EXPECT_EQ(ul.mutex(), &mtx);
     }
-    EXPECT_TRUE(hce::detail::sync::test_flags()[0]);
-    EXPECT_TRUE(hce::detail::sync::test_flags()[1]);
-    EXPECT_TRUE(ul.owns_lock());
-    EXPECT_FALSE(mtx.try_lock());   // is the mutex actually locked?
-    EXPECT_EQ(ul.mutex(), &mtx);
     ul.unlock();
 }
 

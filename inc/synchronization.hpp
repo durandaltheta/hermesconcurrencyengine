@@ -36,14 +36,10 @@ private:
     hce::lockfree lf_;
 };
 
-std::vector<std::atomic<bool>>& test_flags();
-
 template <typename LOCKABLE>
 hce::co<void> construct_unique_lock(std::unique_lock<LOCKABLE>* ul, LOCKABLE* l) {
-    test_flags()[0] = true;
     co_await hce::mutex::lock(*l);
     *ul = std::unique_lock<LOCKABLE>(*l, std::adopt_lock_t{});
-    test_flags()[1] = true;
     co_return;
 }
 
