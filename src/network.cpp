@@ -52,8 +52,8 @@ bool network::connection::valid() const {
     return socket.valid();
 }
 
-int network::connection::fd() const {
-    return socket.fd();
+hce::interface::network::socket& network::connection::get_socket() {
+    return socket;
 }
 
 // ---- send ----------------------------------------------------------------
@@ -254,12 +254,12 @@ struct recv_awaitable :
                 auto* self = static_cast<recv_awaitable*>(user);
                 auto* r = new size_result;
                 if(ec) {
-                    r->value = std::unexpected(ec);
+                    r->value = hce::unexpected(ec);
                 } else {
                     std::error_code io_ec;
                     ssize_t n = self->sock.recv(self->buf, io_ec);
                     if(n < 0) {
-                        r->value = std::unexpected(io_ec);
+                        r->value = hce::unexpected(io_ec);
                     } else {
                         r->value = static_cast<size_t>(n);
                     }
@@ -343,7 +343,7 @@ struct recv_all_awaitable :
                         auto* self = static_cast<recv_all_awaitable*>(user);
                         if(ec) {
                             auto* r = new size_result;
-                            r->value = std::unexpected(ec);
+                            r->value = hce::unexpected(ec);
                             self->resume(r);
                             return;
                         }
@@ -352,7 +352,7 @@ struct recv_all_awaitable :
                 return;
             }
             auto* r = new size_result;
-            r->value = std::unexpected(ec);
+            r->value = hce::unexpected(ec);
             resume(r);
             return;
         }
@@ -410,8 +410,8 @@ void network::acceptor::close() {
     socket.close();
 }
 
-int network::acceptor::fd() const {
-    return socket.fd();
+hce::interface::network::socket& network::acceptor::get_socket() {
+    return socket;
 }
 
 struct accept_awaitable :
@@ -445,7 +445,7 @@ struct accept_awaitable :
                 auto* self = static_cast<accept_awaitable*>(user);
                 auto* r = new connection_result;
                 if(ec) {
-                    r->value = std::unexpected(ec);
+                    r->value = hce::unexpected(ec);
                 } else {
                     sockaddr_storage addr{};
                     socklen_t len = sizeof(addr);
@@ -454,11 +454,11 @@ struct accept_awaitable :
                                         &len,
                                         SOCK_NONBLOCK | SOCK_CLOEXEC);
                     if(cfd < 0) {
-                        r->value = std::unexpected(std::error_code(
+                        r->value = hce::unexpected(std::error_code(
                             errno, std::system_category()));
                     } else {
                         network::connection conn;
-                        conn.socket = detail::network::socket(cfd);
+                        conn.get_socket() = detail::network::socket(cfd);
                         r->value = std::move(conn);
                     }
                 }
@@ -545,7 +545,7 @@ struct connect_awaitable :
                                &hints, &res);
         if(rc != 0) {
             auto* r = new connection_result;
-            r->value = std::unexpected(std::make_error_code(
+            r->value = hce::unexpected(std::make_error_code(
                 std::errc::host_unreachable));
             resume(r);
             return;
@@ -557,13 +557,13 @@ struct connect_awaitable :
         if(fd < 0) {
             ::freeaddrinfo(res);
             auto* r = new connection_result;
-            r->value = std::unexpected(std::error_code(
+            r->value = hce::unexpected(std::error_code(
                 errno, std::system_category()));
             resume(r);
             return;
         }
 
-        pending.socket = detail::network::socket(fd);
+        pending.get_socket() = detail::network::socket(fd);
 
         int cr = ::connect(fd, res->ai_addr, res->ai_addrlen);
         ::freeaddrinfo(res);
@@ -576,7 +576,7 @@ struct connect_awaitable :
         }
         if(errno != EINPROGRESS) {
             auto* r = new connection_result;
-            r->value = std::unexpected(std::error_code(
+            r->value = hce::unexpected(std::error_code(
                 errno, std::system_category()));
             resume(r);
             return;
@@ -591,13 +591,13 @@ struct connect_awaitable :
                 auto* self = static_cast<connect_awaitable*>(user);
                 auto* r = new connection_result;
                 if(ec) {
-                    r->value = std::unexpected(ec);
+                    r->value = hce::unexpected(ec);
                 } else {
                     int err = 0;
                     socklen_t len = sizeof(err);
                     if(::getsockopt(fd, SOL_SOCKET, SO_ERROR,
                                      &err, &len) < 0 || err != 0) {
-                        r->value = std::unexpected(std::error_code(
+                        r->value = hce::unexpected(std::error_code(
                             err ? err : errno, std::system_category()));
                     } else {
                         r->value = std::move(self->pending);
@@ -639,7 +639,7 @@ network::listen(const address& addr, int backlog) {
     int fd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
 
     if(fd < 0) {
-        return std::unexpected(std::error_code(errno, std::system_category()));
+        return hce::unexpected(std::error_code(errno, std::system_category()));
     }
 
     int one = 1;
@@ -653,18 +653,18 @@ network::listen(const address& addr, int backlog) {
         sa.sin_addr.s_addr = INADDR_ANY;
     } else if(::inet_pton(AF_INET, addr.host.c_str(), &sa.sin_addr) != 1) {
         ::close(fd);
-        return std::unexpected(
+        return hce::unexpected(
             std::make_error_code(std::errc::invalid_argument));
     }
 
     if(::bind(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) < 0) {
         ::close(fd);
-        return std::unexpected(std::error_code(errno, std::system_category()));
+        return hce::unexpected(std::error_code(errno, std::system_category()));
     }
 
     if(::listen(fd, backlog) < 0) {
         ::close(fd);
-        return std::unexpected(std::error_code(errno, std::system_category()));
+        return hce::unexpected(std::error_code(errno, std::system_category()));
     }
 
     acceptor a;
@@ -672,8 +672,8 @@ network::listen(const address& addr, int backlog) {
     return a;
 }
     
-network::backend& network::get_backend() {
-    return epoll_backend;
+hce::interface::network::backend& network::get_backend() {
+    return backend;
 }
 
 } // hce

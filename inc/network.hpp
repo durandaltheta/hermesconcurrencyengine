@@ -107,10 +107,8 @@ struct network : public hce::service<network>, public hce::printable {
          */
         bool valid() const;
 
-        /**
-         @return the underlying file descriptor
-         */
-        int fd() const;
+        /// return the socket via its interface
+        hce::interface::network::socket& get_socket();
 
     private:
         detail::network::socket socket;
@@ -146,10 +144,8 @@ struct network : public hce::service<network>, public hce::printable {
          */
         void close();
 
-        /**
-         @return the underlying file descriptor
-         */
-        int fd() const;
+        /// return the socket via its interface
+        hce::interface::network::socket& get_socket();
 
     private:
         detail::network::socket socket;
@@ -190,7 +186,7 @@ struct network : public hce::service<network>, public hce::printable {
 private:
     network();
 
-    hce::detail::network::epoll_backend epoll_backend;
+    hce::detail::network::epoll_backend backend;
 
     friend hce::lifecycle;
 };

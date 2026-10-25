@@ -7,12 +7,12 @@
 namespace hce {
 
 template <class E>
-class unexpected {
-public:
+struct unexpected {
     explicit unexpected(E e) : err_(std::move(e)) {}
     const E& error() const & { return err_; }
     E&       error()       & { return err_; }
     E&&      error()      && { return std::move(err_); }
+
 private:
     E err_;
 };
@@ -21,8 +21,10 @@ template <class E>
 unexpected(E) -> unexpected<E>;
 
 template <class T, class E>
-class expected {
-public:
+struct expected {
+    // default to unexpected (so it is never in an uninitialized state)
+    expected() : data_(unexpected<E>(E{})) {}
+
     expected(T v) : data_(std::move(v)) {}
     expected(unexpected<E> u) : data_(std::move(u)) {}
 

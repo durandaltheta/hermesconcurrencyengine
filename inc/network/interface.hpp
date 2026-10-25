@@ -3,6 +3,8 @@
 //Author: Blayne Dennis
 
 #include <functional>
+#include <system_error>
+#include <span>
 
 #include <unistd.h>
 #include <netinet/in.h>
@@ -12,6 +14,28 @@
 namespace hce {
 namespace interface {
 namespace network {
+
+struct socket {
+    virtual ~socket() = 0;
+    virtual int fd() const = 0;
+    virtual bool valid() const = 0;
+
+    virtual void close() = 0;
+
+    // low-level helpers used by awaitables.
+    virtual std::error_code set_nonblocking() = 0;
+    virtual std::error_code bind(const sockaddr* addr, socklen_t len) = 0;
+    virtual std::error_code listen(int backlog = SOMAXCONN) = 0;
+    virtual std::error_code connect(const sockaddr* addr, socklen_t len) = 0;
+
+    /*
+     Returns bytes transferred or -1 + ec on error.
+
+     EAGAIN / EWOULDBLOCK means the caller should re-register interest.
+     */
+    virtual ssize_t send(std::span<const std::byte> data, std::error_code& ec) = 0;
+    virtual ssize_t recv(std::span<std::byte> buf, std::error_code& ec) = 0;
+}; // socket
 
 struct backend {
     /**
@@ -93,7 +117,7 @@ struct backend {
      @return Number of IO threads.
      */
     virtual size_t thread_count() const = 0;
-};
+}; // backend
 
 } // network
 } // interface

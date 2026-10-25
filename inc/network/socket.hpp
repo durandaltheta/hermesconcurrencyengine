@@ -21,7 +21,7 @@ namespace network {
  This is the object awaitables hold. The backend only cares about the raw file 
  descriptor.
  */
-struct socket {
+struct socket : public hce::interface::network::socket {
     socket() = default;
     explicit socket(int fd) : fd_(fd) {}
     ~socket() { close(); }
