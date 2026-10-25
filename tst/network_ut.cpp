@@ -538,7 +538,6 @@ hce::co<void> lp_echo_once(hce::network::acceptor acc,
     }
 
     auto conn = std::move(conn_exp.value());
-
     auto msg_exp = co_await hce::schedule(len_pref.recv(conn));
 
     if(!msg_exp) {
@@ -696,11 +695,14 @@ TEST(network, length_prefixed_echo) {
     std::vector<std::byte> payload(raw.size());
     std::memcpy(payload.data(), raw.data(), raw.size());
 
-    hce::schedule(lp_echo_once(std::move(acc), server_status));
-    hce::schedule(lp_client({"127.0.0.1", port}, payload, client_status));
+    auto server_awt = hce::schedule(lp_echo_once(std::move(acc), server_status));
+    auto client_awt = hce::schedule(lp_client({"127.0.0.1", port}, payload, client_status));
 
     EXPECT_EQ(server_status.pop(), "ok");
     EXPECT_EQ(client_status.pop(), "ok");
+
+    (void)server_awt;
+    (void)client_awt;
 }
 
 TEST(network, length_prefixed_pump_echo) {
@@ -718,11 +720,14 @@ TEST(network, length_prefixed_pump_echo) {
     std::vector<std::byte> payload(raw.size());
     std::memcpy(payload.data(), raw.data(), raw.size());
 
-    hce::schedule(pump_echo_once(std::move(acc), server_status));
-    hce::schedule(pump_client({"127.0.0.1", port}, payload, client_status));
+    auto server_awt = hce::schedule(pump_echo_once(std::move(acc), server_status));
+    auto client_awt = hce::schedule(pump_client({"127.0.0.1", port}, payload, client_status));
 
     EXPECT_EQ(server_status.pop(), "ok");
     EXPECT_EQ(client_status.pop(), "ok");
+
+    (void)server_awt;
+    (void)client_awt;
 }
 
 TEST(network, length_prefixed_empty_and_modest) {
