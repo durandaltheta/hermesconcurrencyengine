@@ -9,9 +9,25 @@
 namespace hce {
 namespace network {
 
-// -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Helpers — result objects that cross the resume boundary.
+// ---------------------------------------------------------------------------
+
+struct error_result {
+    std::error_code ec;
+};
+
+struct size_result {
+    std::expected<size_t, std::error_code> value;
+};
+
+struct connection_result {
+    std::expected<network::connection, std::error_code> value;
+};
+
+// ---------------------------------------------------------------------------
 // connection
-// -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 
 network::connection::connection(connection&& other) noexcept
     : socket(std::move(other.socket))
@@ -41,7 +57,7 @@ int network::connection::fd() const {
     return socket.fd();
 }
 
-// ---- send -------------------------------------------------------------------
+// ---- send ----------------------------------------------------------------
 
 struct send_awaitable :
     public hce::scheduler::reschedule<
@@ -72,29 +88,30 @@ struct send_awaitable :
             this,
             [](int, std::error_code ec, uint32_t, void* user) {
                 auto* self = static_cast<send_awaitable*>(user);
-                // Package the result so on_resume can pick it up.
-                // We complete immediately from the IO thread via resume().
-                auto* result = new std::error_code(ec);
+                auto* r = new error_result;
+                r->ec = ec;
+
                 if(!ec) {
                     std::error_code io_ec;
                     ssize_t n = self->sock.send(self->data, io_ec);
                     if(n < 0) {
-                        *result = io_ec;
+                        r->ec = io_ec;
                     } else if(n == 0) {
-                        *result = std::make_error_code(
+                        r->ec = std::make_error_code(
                             std::errc::resource_unavailable_try_again);
                     } else {
                         self->bytes = static_cast<size_t>(n);
                     }
                 }
-                self->resume(result);
+
+                self->resume(r);
             });
     }
 
     void on_resume(void* m) override {
-        auto* ec = static_cast<std::error_code*>(m);
-        result = *ec;
-        delete ec;
+        auto* r = static_cast<error_result*>(m);
+        result = r->ec;
+        delete r;
         ready_ = true;
     }
 
@@ -113,7 +130,7 @@ network::connection::send(std::span<const std::byte> data) {
     return hce::awt<std::error_code>(new send_awaitable(socket, data));
 }
 
-// ---- send_all ---------------------------------------------------------------
+// ---- send_all ------------------------------------------------------------
 
 struct send_all_awaitable :
     public hce::scheduler::reschedule<
@@ -137,18 +154,22 @@ struct send_all_awaitable :
     bool on_ready() override { return ready_; }
 
     void on_suspend() override {
-        try_send();
+        // Kick off the first attempt. We never call resume from this stack.
+        continue_send();
     }
 
-    void try_send() {
-        while (offset < data.size()) {
+    void continue_send() {
+        while(offset < data.size()) {
             std::error_code ec;
             ssize_t n = sock.send(data.subspan(offset), ec);
             if(n > 0) {
                 offset += static_cast<size_t>(n);
                 continue;
             }
+
             if(!ec || ec == std::errc::resource_unavailable_try_again) {
+                // Need writability. Register and return; completion will
+                // call continue_send again (or resume on hard error).
                 auto& backend = hce::service<network>::get().backend;
                 backend.register_op(
                     sock.fd(),
@@ -157,23 +178,33 @@ struct send_all_awaitable :
                     [](int, std::error_code ec, uint32_t, void* user) {
                         auto* self = static_cast<send_all_awaitable*>(user);
                         if(ec) {
-                            self->resume(new std::error_code(ec));
+                            auto* r = new error_result;
+                            r->ec = ec;
+                            self->resume(r);
                             return;
                         }
-                        self->try_send();
+                        self->continue_send();
                     });
                 return;
             }
-            resume(new std::error_code(ec));
+
+            // Hard error — finish.
+            auto* r = new error_result;
+            r->ec = ec;
+            resume(r);
             return;
         }
-        resume(new std::error_code{});
+
+        // All bytes sent.
+        auto* r = new error_result;
+        r->ec = {};
+        resume(r);
     }
 
     void on_resume(void* m) override {
-        auto* ec = static_cast<std::error_code*>(m);
-        result = *ec;
-        delete ec;
+        auto* r = static_cast<error_result*>(m);
+        result = r->ec;
+        delete r;
         ready_ = true;
     }
 
@@ -192,7 +223,7 @@ network::connection::send_all(std::span<const std::byte> data) {
     return hce::awt<std::error_code>(new send_all_awaitable(socket, data));
 }
 
-// ---- recv -------------------------------------------------------------------
+// ---- recv ----------------------------------------------------------------
 
 struct recv_awaitable :
     public hce::scheduler::reschedule<
@@ -222,26 +253,25 @@ struct recv_awaitable :
             this,
             [](int, std::error_code ec, uint32_t, void* user) {
                 auto* self = static_cast<recv_awaitable*>(user);
+                auto* r = new size_result;
                 if(ec) {
-                    self->resume(new std::expected<size_t, std::error_code>(
-                        std::unexpected(ec)));
+                    r->value = std::unexpected(ec);
                 } else {
                     std::error_code io_ec;
                     ssize_t n = self->sock.recv(self->buf, io_ec);
                     if(n < 0) {
-                        self->resume(new std::expected<size_t, std::error_code>(
-                            std::unexpected(io_ec)));
+                        r->value = std::unexpected(io_ec);
                     } else {
-                        self->resume(new std::expected<size_t, std::error_code>(
-                            static_cast<size_t>(n)));
+                        r->value = static_cast<size_t>(n);
                     }
                 }
+                self->resume(r);
             });
     }
 
     void on_resume(void* m) override {
-        auto* r = static_cast<std::expected<size_t, std::error_code>*>(m);
-        result = std::move(*r);
+        auto* r = static_cast<size_result*>(m);
+        result = std::move(r->value);
         delete r;
         ready_ = true;
     }
@@ -263,7 +293,7 @@ network::connection::recv(std::span<std::byte> data) {
         new recv_awaitable(socket, data));
 }
 
-// ---- recv_all ---------------------------------------------------------------
+// ---- recv_all ------------------------------------------------------------
 
 struct recv_all_awaitable :
     public hce::scheduler::reschedule<
@@ -286,11 +316,11 @@ struct recv_all_awaitable :
     bool on_ready() override { return ready_; }
 
     void on_suspend() override {
-        try_recv();
+        continue_recv();
     }
 
-    void try_recv() {
-        while (offset < buf.size()) {
+    void continue_recv() {
+        while(offset < buf.size()) {
             std::error_code ec;
             ssize_t n = sock.recv(buf.subspan(offset), ec);
             if(n > 0) {
@@ -298,8 +328,10 @@ struct recv_all_awaitable :
                 continue;
             }
             if(n == 0 && !ec) {
-                // EOF
-                resume(new std::expected<size_t, std::error_code>(offset));
+                // EOF — finish with what we have.
+                auto* r = new size_result;
+                r->value = offset;
+                resume(r);
                 return;
             }
             if(!ec || ec == std::errc::resource_unavailable_try_again) {
@@ -311,25 +343,28 @@ struct recv_all_awaitable :
                     [](int, std::error_code ec, uint32_t, void* user) {
                         auto* self = static_cast<recv_all_awaitable*>(user);
                         if(ec) {
-                            self->resume(
-                                new std::expected<size_t, std::error_code>(
-                                    std::unexpected(ec)));
+                            auto* r = new size_result;
+                            r->value = std::unexpected(ec);
+                            self->resume(r);
                             return;
                         }
-                        self->try_recv();
+                        self->continue_recv();
                     });
                 return;
             }
-            resume(new std::expected<size_t, std::error_code>(
-                std::unexpected(ec)));
+            auto* r = new size_result;
+            r->value = std::unexpected(ec);
+            resume(r);
             return;
         }
-        resume(new std::expected<size_t, std::error_code>(offset));
+        auto* r = new size_result;
+        r->value = offset;
+        resume(r);
     }
 
     void on_resume(void* m) override {
-        auto* r = static_cast<std::expected<size_t, std::error_code>*>(m);
-        result = std::move(*r);
+        auto* r = static_cast<size_result*>(m);
+        result = std::move(r->value);
         delete r;
         ready_ = true;
     }
@@ -352,9 +387,9 @@ network::connection::recv_all(std::span<std::byte> data) {
         new recv_all_awaitable(socket, data));
 }
 
-// -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 // acceptor
-// -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 
 network::acceptor::acceptor(acceptor&& other) noexcept
     : socket(std::move(other.socket))
@@ -409,38 +444,32 @@ struct accept_awaitable :
             this,
             [](int, std::error_code ec, uint32_t, void* user) {
                 auto* self = static_cast<accept_awaitable*>(user);
+                auto* r = new connection_result;
                 if(ec) {
-                    self->resume(
-                        new std::expected<network::connection, std::error_code>(
-                            std::unexpected(ec)));
-                    return;
-                }
-
-                sockaddr_storage addr{};
-                socklen_t len = sizeof(addr);
-                int cfd = ::accept4(self->sock.fd(),
-                                    reinterpret_cast<sockaddr*>(&addr),
-                                    &len,
-                                    SOCK_NONBLOCK | SOCK_CLOEXEC);
-                if(cfd < 0) {
-                    self->resume(
-                        new std::expected<network::connection, std::error_code>(
-                            std::unexpected(std::error_code(
-                                errno, std::system_category()))));
+                    r->value = std::unexpected(ec);
                 } else {
-                    network::connection conn;
-                    conn.socket = detail::network::socket(cfd);
-                    self->resume(
-                        new std::expected<network::connection, std::error_code>(
-                            std::move(conn)));
+                    sockaddr_storage addr{};
+                    socklen_t len = sizeof(addr);
+                    int cfd = ::accept4(self->sock.fd(),
+                                        reinterpret_cast<sockaddr*>(&addr),
+                                        &len,
+                                        SOCK_NONBLOCK | SOCK_CLOEXEC);
+                    if(cfd < 0) {
+                        r->value = std::unexpected(std::error_code(
+                            errno, std::system_category()));
+                    } else {
+                        network::connection conn;
+                        conn.socket = detail::network::socket(cfd);
+                        r->value = std::move(conn);
+                    }
                 }
+                self->resume(r);
             });
     }
 
     void on_resume(void* m) override {
-        auto* r = static_cast<
-            std::expected<network::connection, std::error_code>*>(m);
-        result = std::move(*r);
+        auto* r = static_cast<connection_result*>(m);
+        result = std::move(r->value);
         delete r;
         ready_ = true;
     }
@@ -462,9 +491,9 @@ network::acceptor::accept() {
         new accept_awaitable(socket));
 }
 
-// -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 // network service
-// -----------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 
 network::network()
     : backend(hce::config::network::thread_count())
@@ -516,9 +545,10 @@ struct connect_awaitable :
                                std::to_string(addr.port).c_str(),
                                &hints, &res);
         if(rc != 0) {
-            resume(new std::expected<network::connection, std::error_code>(
-                std::unexpected(std::make_error_code(
-                    std::errc::host_unreachable))));
+            auto* r = new connection_result;
+            r->value = std::unexpected(std::make_error_code(
+                std::errc::host_unreachable));
+            resume(r);
             return;
         }
 
@@ -527,9 +557,10 @@ struct connect_awaitable :
                           res->ai_protocol);
         if(fd < 0) {
             ::freeaddrinfo(res);
-            resume(new std::expected<network::connection, std::error_code>(
-                std::unexpected(std::error_code(errno,
-                                                std::system_category()))));
+            auto* r = new connection_result;
+            r->value = std::unexpected(std::error_code(
+                errno, std::system_category()));
+            resume(r);
             return;
         }
 
@@ -539,15 +570,16 @@ struct connect_awaitable :
         ::freeaddrinfo(res);
 
         if(cr == 0) {
-            resume(new std::expected<network::connection, std::error_code>(
-                std::move(pending)));
+            auto* r = new connection_result;
+            r->value = std::move(pending);
+            resume(r);
             return;
         }
-
         if(errno != EINPROGRESS) {
-            resume(new std::expected<network::connection, std::error_code>(
-                std::unexpected(std::error_code(errno,
-                                                std::system_category()))));
+            auto* r = new connection_result;
+            r->value = std::unexpected(std::error_code(
+                errno, std::system_category()));
+            resume(r);
             return;
         }
 
@@ -558,34 +590,27 @@ struct connect_awaitable :
             this,
             [](int fd, std::error_code ec, uint32_t, void* user) {
                 auto* self = static_cast<connect_awaitable*>(user);
+                auto* r = new connection_result;
                 if(ec) {
-                    self->resume(
-                        new std::expected<network::connection, std::error_code>(
-                            std::unexpected(ec)));
-                    return;
-                }
-
-                int err = 0;
-                socklen_t len = sizeof(err);
-                if(::getsockopt(fd, SOL_SOCKET, SO_ERROR,
-                                 &err, &len) < 0 || err != 0) {
-                    self->resume(
-                        new std::expected<network::connection, std::error_code>(
-                            std::unexpected(std::error_code(
-                                err ? err : errno,
-                                std::system_category()))));
+                    r->value = std::unexpected(ec);
                 } else {
-                    self->resume(
-                        new std::expected<network::connection, std::error_code>(
-                            std::move(self->pending)));
+                    int err = 0;
+                    socklen_t len = sizeof(err);
+                    if(::getsockopt(fd, SOL_SOCKET, SO_ERROR,
+                                     &err, &len) < 0 || err != 0) {
+                        r->value = std::unexpected(std::error_code(
+                            err ? err : errno, std::system_category()));
+                    } else {
+                        r->value = std::move(self->pending);
+                    }
                 }
+                self->resume(r);
             });
     }
 
     void on_resume(void* m) override {
-        auto* r = static_cast<
-            std::expected<network::connection, std::error_code>*>(m);
-        result = std::move(*r);
+        auto* r = static_cast<connection_result*>(m);
+        result = std::move(r->value);
         delete r;
         ready_ = true;
     }
@@ -613,6 +638,7 @@ network::connect(const address& addr) {
 std::expected<network::acceptor, std::error_code>
 network::listen(const address& addr, int backlog) {
     int fd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+
     if(fd < 0) {
         return std::unexpected(std::error_code(errno, std::system_category()));
     }
@@ -649,3 +675,4 @@ network::listen(const address& addr, int backlog) {
 
 } // network
 } // hce
+
