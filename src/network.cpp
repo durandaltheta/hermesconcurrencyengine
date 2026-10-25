@@ -44,6 +44,14 @@ network::connection::~connection() {
     close();
 }
 
+void network::connection::shutdown_read() {
+    ::shutdown(get_socket().fd(), SHUT_RD);
+}
+
+void network::connection::shutdown_write() {
+    ::shutdown(get_socket().fd(), SHUT_WR);
+}
+
 void network::connection::close() {
     socket.close();
 }
@@ -761,6 +769,59 @@ network::listen(const address& addr, int backlog) {
 
 hce::interface::network::backend& network::get_backend() {
     return backend;
+}
+
+hce::network::length_prefixed::~length_prefixed() { }
+
+hce::co<hce::expected<std::vector<std::byte>, std::error_code>>
+hce::network::length_prefixed::recv(hce::network::connection& conn) {
+    uint32_t len_be = 0;
+    auto len_span = std::as_writable_bytes(std::span(&len_be, 1));
+    auto len_exp = co_await conn.recv_all(len_span);
+
+    if(!len_exp || len_exp.value() != sizeof(uint32_t)) {
+        // clean EOF or truncated length prefix
+        co_return hce::unexpected(
+            len_exp ? std::make_error_code(std::errc::connection_reset)
+                    : len_exp.error());
+    }
+
+    const uint32_t len = ntohl(len_be);
+
+    if(len > max_payload) {
+        co_return hce::unexpected(std::make_error_code(std::errc::message_size));
+    }
+
+    std::vector<std::byte> payload(len);
+    auto payload_exp = co_await conn.recv_all(payload);
+
+    if(!payload_exp || payload_exp.value() != len) {
+        co_return hce::unexpected(
+            payload_exp ? std::make_error_code(std::errc::connection_reset)
+                        : payload_exp.error());
+    }
+
+    co_return payload;
+}
+
+hce::co<std::error_code>
+hce::network::length_prefixed::send(
+        hce::network::connection& conn, 
+        std::vector<std::byte> msg) 
+{
+    if(msg.size() > max_payload) {
+        co_return std::make_error_code(std::errc::message_size);
+    }
+
+    const uint32_t len = static_cast<uint32_t>(msg.size());
+    const uint32_t len_be = htonl(len);
+    auto len_span = std::as_bytes(std::span(&len_be, 1));
+
+    if(auto ec = co_await conn.send_all(len_span)) {
+        co_return ec;
+    }
+
+    co_return co_await conn.send_all(msg);
 }
 
 } // hce

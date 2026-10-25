@@ -14,6 +14,7 @@
 #include "atomic.hpp"
 #include "coroutine.hpp"
 #include "scheduler.hpp"
+#include "channel.hpp"
 
 namespace hce {
 namespace config {
@@ -97,6 +98,12 @@ struct network : public hce::service<network>, public hce::printable {
          */
         hce::awt<hce::expected<size_t, std::error_code>> recv_all(std::span<std::byte> data);
 
+        /// shutdown writes on the socket
+        void shutdown_read();
+
+        /// shutdown reads on the socket
+        void shutdown_write();
+
         /**
          @brief close the socket connection
          */
@@ -152,6 +159,94 @@ struct network : public hce::service<network>, public hce::printable {
 
         friend struct network;
     };
+
+    /**
+     @brief protocol interface for converting a raw connection to a specific data type
+     */
+    template<typename T>
+    struct protocol {
+        virtual ~protocol(){}
+
+        // Read one complete message. May call recv/recv_all internally.
+        virtual hce::co<hce::expected<T, std::error_code>>
+        recv(hce::network::connection& conn) = 0;
+
+        // Write one complete message. May call send/send_all internally.
+        virtual hce::co<std::error_code>
+        send(hce::network::connection& conn, T msg) = 0;
+    };
+
+    /**
+     @brief length-prefixed binary framing protocol implementation 
+
+     Length prefixing a binary blob is a common framing protocol pattern.
+
+     It is included here as an optional helper.
+
+     Message layout: uint32_t length (network order) followed by that many payload bytes.
+     T is std::vector<std::byte>.
+     */
+    struct length_prefixed : public protocol<std::vector<std::byte>> {
+        static constexpr size_t max_payload = 16 * 1024 * 1024; // arbitrary safety limit
+
+        ~length_prefixed();
+
+        hce::co<hce::expected<std::vector<std::byte>, std::error_code>>
+        recv(hce::network::connection& conn);
+
+        hce::co<std::error_code>
+        send(hce::network::connection& conn, std::vector<std::byte> msg);
+    };
+
+    /**
+     @brief pump data between a connection and inbound/outbound channels over some protocol
+     */
+    template<typename T>
+    static hce::co<void> pump(
+        hce::network::protocol<T>& proto,
+        hce::network::connection conn,
+        hce::chan<T> inbound,  // connection -> user
+        hce::chan<T> outbound) // user -> connection
+    {
+        // Two concurrent directions.
+        auto reader = [&]() -> hce::co<void> {
+            while(conn.valid()) {
+                auto msg = co_await hce::schedule(proto.recv(conn));
+
+                if(!msg) { 
+                    break; // error or clean EOF
+                }
+
+                if(!co_await inbound.send(std::move(msg.value()))) {
+                    break; // user closed the channel 
+                }
+            }
+
+            conn.shutdown_read();
+            inbound.close();
+            co_return;
+        };
+
+        auto writer = [&]() -> hce::co<void> {
+            T msg;
+
+            while(co_await outbound.recv(msg)) {
+                if(auto ec = co_await hce::schedule(proto.send(conn, std::move(msg)))) {
+                    break;
+                }
+            }
+
+            conn.shutdown_write();
+            outbound.close();
+            co_return;
+        };
+
+        auto reader_awt = hce::schedule(reader());
+        auto writer_awt = hce::schedule(writer());
+        co_await std::move(reader_awt);
+        co_await std::move(writer_awt);
+        conn.close();
+    }
 
     network(const network&) = delete;
     network(network&&) = delete;
