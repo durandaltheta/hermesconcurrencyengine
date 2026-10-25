@@ -529,7 +529,7 @@ namespace {
 
 hce::co<void> lp_echo_once(hce::network::acceptor acc,
                            test::queue<std::string>& status) {
-    hce::length_prefixed len_pref;
+    hce::network::length_prefixed len_pref;
     auto conn_exp = co_await acc.accept();
 
     if(!conn_exp) {
@@ -539,14 +539,14 @@ hce::co<void> lp_echo_once(hce::network::acceptor acc,
 
     auto conn = std::move(conn_exp.value());
 
-    auto msg_exp = co_await len_pref.recv(conn);
+    auto msg_exp = co_await hce::schedule(len_pref.recv(conn));
 
     if(!msg_exp) {
         status.push("recv failed: " + msg_exp.error().message());
         co_return;
     }
 
-    if(auto ec = co_await len_pref.send(conn, std::move(msg_exp.value()))) {
+    if(auto ec = co_await hce::schedule(len_pref.send(conn, std::move(msg_exp.value())))) {
         status.push("send failed: " + ec.message());
         co_return;
     }
@@ -559,7 +559,7 @@ hce::co<void> lp_client(hce::network::address addr,
                         std::vector<std::byte> payload,
                         test::queue<std::string>& status) {
     auto& net = hce::service<hce::network>::get();
-    hce::length_prefixed len_pref;
+    hce::network::length_prefixed len_pref;
     auto conn_exp = co_await net.connect(addr);
 
     if(!conn_exp) {
@@ -569,12 +569,12 @@ hce::co<void> lp_client(hce::network::address addr,
 
     auto conn = std::move(conn_exp.value());
 
-    if(auto ec = co_await len_pref.send(conn, payload)) {
+    if(auto ec = co_await hce::schedule(len_pref.send(conn, payload))) {
         status.push("send failed: " + ec.message());
         co_return;
     }
 
-    auto msg_exp = co_await len_pref.recv(conn);
+    auto msg_exp = co_await hce::schedule(len_pref.recv(conn));
 
     if(!msg_exp) {
         status.push("recv failed: " + msg_exp.error().message());
@@ -605,7 +605,7 @@ hce::co<void> pump_echo_once(hce::network::acceptor acc,
 
     auto inbound  = hce::chan<std::vector<std::byte>>::make();
     auto outbound = hce::chan<std::vector<std::byte>>::make();
-    hce::length_prefixed len_pref;
+    hce::network::length_prefixed len_pref;
 
     // Pump runs until both directions finish.
     auto pump = hce::schedule(
@@ -647,7 +647,7 @@ hce::co<void> pump_client(hce::network::address addr,
     auto conn = std::move(conn_exp.value());
     auto inbound  = hce::chan<std::vector<std::byte>>::make();
     auto outbound = hce::chan<std::vector<std::byte>>::make();
-    hce::length_prefixed len_pref;
+    hce::network::length_prefixed len_pref;
 
     auto pump = hce::schedule(
         hce::network::pump<std::vector<std::byte>>(

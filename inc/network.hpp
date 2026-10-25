@@ -205,7 +205,7 @@ struct network : public hce::service<network>, public hce::printable {
         // Two concurrent directions.
         auto reader = [&]() -> hce::co<void> {
             while(conn.valid()) {
-                auto msg = co_await proto.recv(conn);
+                auto msg = co_await hce::schedule(proto.recv(conn));
 
                 if(!msg) { 
                     break; // error or clean EOF
@@ -223,7 +223,7 @@ struct network : public hce::service<network>, public hce::printable {
             T msg;
 
             while(co_await outbound.recv(msg)) {
-                if(auto ec = co_await proto.send(conn, std::move(msg))) {
+                if(auto ec = co_await hce::schedule(proto.send(conn, std::move(msg)))) {
                     break;
                 }
             }
