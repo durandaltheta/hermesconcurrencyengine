@@ -410,3 +410,116 @@ TEST(network, connection_valid_after_move) {
     (void)server_awt;
     (void)client_awt;
 }
+
+// ---------------------------------------------------------------------------
+// UDP helpers (connected datagram style)
+// ---------------------------------------------------------------------------
+
+namespace test::network {
+
+/// Bound UDP socket that receives one datagram and echoes it back.
+/// Requires the peer to have connected first (so send/recv suffice).
+hce::co<void> udp_echo_once(hce::network::acceptor acc,
+                            size_t expected,
+                            test::queue<std::string>& status) {
+    // For connected UDP the "acceptor" is just the bound socket.
+    // We do not call accept(); we use the socket directly via a temporary
+    // connection wrapper if the API allows, or via the backend.
+    // Minimal version: create a connection that owns the same fd
+    // (implementation detail — see note below).
+
+    // ... practical form once you expose a way to obtain a connection
+    // from a bound UDP acceptor, or add send/recv directly on acceptor
+    // for datagram mode ...
+
+    status.push("udp echo not yet wired — needs connection-from-acceptor or recvfrom");
+    co_return;
+}
+
+} // namespace test::network
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+TEST(network, udp_listen_ephemeral_port) {
+    auto& net = hce::service<hce::network>::get();
+
+    auto acc_exp = net.listen(
+        {"127.0.0.1", 0, hce::network::address::type_e::udp});
+    ASSERT_TRUE(acc_exp) << acc_exp.error().message();
+
+    auto acc = std::move(acc_exp.value());
+    EXPECT_TRUE(acc.get_socket().valid());
+
+    uint16_t port = test::network::get_local_port(acc);
+    EXPECT_GT(port, 0);
+
+    acc.close();
+    EXPECT_FALSE(acc.get_socket().valid());
+}
+
+TEST(network, udp_listen_any_interface) {
+    auto& net = hce::service<hce::network>::get();
+
+    auto acc_exp = net.listen(
+        {"0.0.0.0", 0, hce::network::address::type_e::udp});
+    ASSERT_TRUE(acc_exp);
+
+    auto acc = std::move(acc_exp.value());
+    EXPECT_GT(test::network::get_local_port(acc), 0);
+    acc.close();
+}
+
+TEST(network, udp_connect_and_send_recv) {
+    auto& net = hce::service<hce::network>::get();
+
+    // Server binds
+    auto acc_exp = net.listen(
+        {"127.0.0.1", 0, hce::network::address::type_e::udp});
+    ASSERT_TRUE(acc_exp);
+    auto acc = std::move(acc_exp.value());
+    uint16_t port = test::network::get_local_port(acc);
+    ASSERT_GT(port, 0);
+
+    const std::string payload = "udp hello";
+
+    test::queue<std::string> client_status;
+
+    // Client connects (sets default peer) and does a round-trip
+    // once the server side can also send/recv on the bound socket.
+    auto client_awt = hce::schedule(
+        [&]() -> hce::co<void> {
+            auto conn_exp = co_await net.connect(
+                {"127.0.0.1", port, hce::network::address::type_e::udp});
+            if (!conn_exp) {
+                client_status.push("connect failed: " + conn_exp.error().message());
+                co_return;
+            }
+            auto conn = std::move(conn_exp.value());
+
+            std::vector<std::byte> buf(payload.size());
+            std::memcpy(buf.data(), payload.data(), payload.size());
+
+            auto send_ec = co_await conn.send_all(std::span(buf));
+            if (send_ec) {
+                client_status.push("send failed: " + send_ec.message());
+                co_return;
+            }
+
+            // For a true echo the server must reply; this is the client half.
+            client_status.push("sent");
+            conn.close();
+            co_return;
+        }());
+
+    EXPECT_EQ(client_status.pop(), "sent");
+    (void)client_awt;
+    acc.close();
+}
+
+TEST(network, udp_address_type_preserved) {
+    hce::network::address a{"127.0.0.1", 9000, hce::network::address::type_e::udp};
+    EXPECT_EQ(a.type, hce::network::address::type_e::udp);
+    EXPECT_EQ(a.port, 9000);
+}

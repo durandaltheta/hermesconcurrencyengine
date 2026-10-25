@@ -128,7 +128,7 @@ socket socket::create_udp() {
     return s;
 }
 
-std::string to_string(const sockaddr* addr) {
+std::string socket::to_string(const sockaddr* addr) {
     if(!addr) {
         return {};
     }

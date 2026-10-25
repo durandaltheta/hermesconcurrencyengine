@@ -608,7 +608,9 @@ struct connect_awaitable :
 
         addrinfo hints{};
         hints.ai_family = AF_UNSPEC;
-        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_socktype = (addr.type == hce::network::address::type_e::udp) 
+            ? SOCK_DGRAM 
+            : SOCK_STREAM;
         addrinfo* res = nullptr;
         int rc = ::getaddrinfo(addr.host.c_str(),
                                std::to_string(addr.port).c_str(),
@@ -707,9 +709,11 @@ network::connect(const address& addr) {
 
 hce::expected<network::acceptor, std::error_code>
 network::listen(const address& addr, int backlog) {
-    int fd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+    const bool is_udp = (addr.type == address::type_e::udp);
+    int socktype = is_udp ? SOCK_DGRAM : SOCK_STREAM;
 
-    if(fd < 0) {
+    int fd = ::socket(AF_INET, socktype | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+    if (fd < 0) {
         return hce::unexpected(std::error_code(errno, std::system_category()));
     }
 
@@ -719,21 +723,20 @@ network::listen(const address& addr, int backlog) {
     sockaddr_in sa{};
     sa.sin_family = AF_INET;
     sa.sin_port = htons(addr.port);
-
-    if(addr.host.empty() || addr.host == "0.0.0.0") {
+    if (addr.host.empty() || addr.host == "0.0.0.0") {
         sa.sin_addr.s_addr = INADDR_ANY;
-    } else if(::inet_pton(AF_INET, addr.host.c_str(), &sa.sin_addr) != 1) {
+    } else if (::inet_pton(AF_INET, addr.host.c_str(), &sa.sin_addr) != 1) {
         ::close(fd);
-        return hce::unexpected(
-            std::make_error_code(std::errc::invalid_argument));
+        return hce::unexpected(std::make_error_code(std::errc::invalid_argument));
     }
 
-    if(::bind(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) < 0) {
+    if (::bind(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) < 0) {
         ::close(fd);
         return hce::unexpected(std::error_code(errno, std::system_category()));
     }
 
-    if(::listen(fd, backlog) < 0) {
+    // UDP has no listen()
+    if (!is_udp && ::listen(fd, backlog) < 0) {
         ::close(fd);
         return hce::unexpected(std::error_code(errno, std::system_category()));
     }
@@ -742,7 +745,7 @@ network::listen(const address& addr, int backlog) {
     a.socket = detail::network::socket(fd);
     return a;
 }
-    
+
 hce::interface::network::backend& network::get_backend() {
     return backend;
 }

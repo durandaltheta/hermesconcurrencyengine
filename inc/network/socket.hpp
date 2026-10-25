@@ -63,6 +63,8 @@ struct socket : public hce::interface::network::socket {
     static socket create_tcp();
     static socket create_udp();
 
+    static std::string to_string(const sockaddr* addr);
+
 private:
     int fd_ = -1;
 };
