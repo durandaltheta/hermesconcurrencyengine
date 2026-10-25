@@ -36,10 +36,10 @@ private:
     hce::lockfree lf_;
 };
 
-template <typename LOCKABLE>
-hce::co<void> construct_unique_lock(std::unique_lock<LOCKABLE>* ul, LOCKABLE* l) {
+template <typename UNIQUE_LOCKABLE, typename LOCKABLE>
+hce::co<void> construct_unique_lock(UNIQUE_LOCKABLE* ul, LOCKABLE* l) {
     co_await hce::mutex::lock(*l);
-    *ul = std::unique_lock<LOCKABLE>(*l, std::adopt_lock_t{});
+    *ul = UNIQUE_LOCKABLE(*l, std::adopt_lock_t{});
     co_return;
 }
 
@@ -69,13 +69,13 @@ namespace unique_lock {
 
  Works with std::unique_lock<std::mutex>
  */
-template <typename LOCKABLE>
-hce::awt<void> construct(std::unique_lock<LOCKABLE>& ul, LOCKABLE& l) {
+template <typename UNIQUE_LOCKABLE, typename LOCKABLE>
+hce::awt<void> construct(UNIQUE_LOCKABLE& ul, LOCKABLE& l) {
     return hce::schedule(hce::detail::sync::construct_unique_lock(&ul, &l));
 }
 
-template <typename LOCKABLE>
-hce::awt<void> lock(std::unique_lock<LOCKABLE>& ul) {
+template <typename UNIQUE_LOCKABLE>
+hce::awt<void> lock(UNIQUE_LOCKABLE& ul) {
     return ul.try_lock()
         ? hce::awt<void>(new hce::detail::sync::done)
         : hce::block([&]{ ul.lock(); });
@@ -86,8 +86,8 @@ hce::awt<void> lock(std::unique_lock<LOCKABLE>& ul) {
 
  Works with std::unique_lock<std::timed_mutex>
  */
-template <typename LOCKABLE, typename DURATION>
-hce::awt<bool> try_lock_for(std::unique_lock<LOCKABLE>& ul, const DURATION& dur) {
+template <typename UNIQUE_LOCKABLE, typename DURATION>
+hce::awt<bool> try_lock_for(UNIQUE_LOCKABLE& ul, const DURATION& dur) {
     return hce::block([&,dur]() -> bool{ return ul.try_lock_for(dur); });
 }
 
@@ -96,8 +96,8 @@ hce::awt<bool> try_lock_for(std::unique_lock<LOCKABLE>& ul, const DURATION& dur)
 
  Works with std::unique_lock<std::timed_mutex>
  */
-template <typename LOCKABLE, typename TIMEPOINT>
-hce::awt<bool> try_lock_until(std::unique_lock<LOCKABLE>& ul, const TIMEPOINT& tp) {
+template <typename UNIQUE_LOCKABLE, typename TIMEPOINT>
+hce::awt<bool> try_lock_until(UNIQUE_LOCKABLE& ul, const TIMEPOINT& tp) {
     return hce::block([&,tp]() -> bool { return ul.try_lock_until(tp); });
 }
 

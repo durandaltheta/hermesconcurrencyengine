@@ -13,6 +13,7 @@ HCE_EXPORT hce::scheduler::global* scheduler_global_implementation_ = nullptr;
 HCE_EXPORT hce::threadpool* threadpool_implementation_ = nullptr;
 HCE_EXPORT hce::blocking* blocking_implementation_ = nullptr;
 HCE_EXPORT hce::timer* timer_implementation_ = nullptr;
+HCE_EXPORT hce::network* network_implementation_ = nullptr;
 HCE_EXPORT hce::lifecycle* lifecycle_implementation_ = nullptr;
 
 template <>
@@ -43,6 +44,11 @@ hce::blocking*& hce::service<hce::blocking>::ptr_ref() {
 template <>
 hce::timer*& hce::service<hce::timer>::ptr_ref() {
     return timer_implementation_;
+}
+
+template <>
+hce::network*& hce::service<hce::network>::ptr_ref() {
+    return network_implementation_;
 }
 
 template <>

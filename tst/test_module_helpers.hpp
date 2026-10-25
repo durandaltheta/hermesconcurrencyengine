@@ -31,7 +31,8 @@ enum struct command {
     receive_concurrent_req,
     receive_parallel_req,
     blocking_req,
-    timing_req
+    timing_req,
+    network_req
 };
 
 struct result : public hce::printable {
@@ -609,6 +610,120 @@ private:
     }
 };
 
+struct network : public result_interface<1> {
+    virtual ~network() = default;
+
+    static inline std::string info_name() { return "test::module::network"; }
+    inline std::string name() const { return info_name(); }
+
+    inline hce::awt<bool> launch() {
+        return hce::schedule(launch_network_ops(this));
+    }
+
+private:
+    static hce::co<bool> launch_network_ops(network* n) {
+        auto& net = hce::service<hce::network>::get();
+
+        auto acc_exp = net.listen(
+            {"127.0.0.1", 0, hce::network::address::type_e::tcp});
+        if(!acc_exp) co_return false;
+
+        auto acc = std::move(acc_exp.value());
+
+        sockaddr_in sa{};
+        socklen_t len = sizeof(sa);
+
+        if(::getsockname(acc.get_socket().fd(),
+                          reinterpret_cast<sockaddr*>(&sa), &len) < 0) {
+            co_return false;
+        }
+
+        uint16_t port = ntohs(sa.sin_port);
+        if(port == 0) co_return false;
+
+        const std::string payload = "smoke";
+
+        // channel lives for the duration of this coroutine
+        auto result_ch = hce::chan<bool>::make();
+
+        auto client_awt = hce::schedule(
+            [](uint16_t port, const std::string payload, hce::chan<bool> result_ch) -> hce::co<void> {
+                auto& net = hce::service<hce::network>::get();
+                auto conn_exp = co_await net.connect(
+                    {"127.0.0.1", port, hce::network::address::type_e::tcp});
+
+                if(!conn_exp) {
+                    co_await result_ch.send(false);
+                    co_return;
+                }
+
+                auto conn = std::move(conn_exp.value());
+
+                auto send_ec = co_await conn.send_all(
+                    std::as_bytes(std::span(payload)));
+
+                if(send_ec) {
+                    co_await result_ch.send(false);
+                    co_return;
+                }
+
+                std::vector<std::byte> buf(payload.size());
+                auto recv_exp = co_await conn.recv_all(std::span(buf));
+                if(!recv_exp || recv_exp.value() != payload.size()) {
+                    co_await result_ch.send(false);
+                    co_return;
+                }
+
+                bool match = true;
+
+                for(size_t i = 0; i < payload.size(); ++i) {
+                    if(static_cast<char>(buf[i]) != payload[i]) match = false;
+                }
+
+                co_await result_ch.send(match);
+                conn.close();
+                co_return;
+            }(port, payload, result_ch));
+
+        // server side
+        auto conn_exp = co_await acc.accept();
+
+        if(!conn_exp) {
+            result_ch.close();
+            co_await client_awt;
+            co_return false;
+        }
+
+        auto conn = std::move(conn_exp.value());
+
+        std::vector<std::byte> buf(payload.size());
+        auto recv_exp = co_await conn.recv_all(std::span(buf));
+
+        if(!recv_exp || recv_exp.value() != payload.size()) {
+            result_ch.close();
+            co_await client_awt;
+            co_return false;
+        }
+
+        auto send_ec = co_await conn.send_all(std::span(buf));
+
+        if(send_ec) {
+            result_ch.close();
+            co_await client_awt;
+            co_return false;
+        }
+
+        conn.close();
+        acc.close();
+
+        bool ok = false;
+        co_await result_ch.recv(ok);
+        n->handle_result(ok);
+        co_await client_awt;
+        co_return ok;
+    }
+};
+
 /*
  This object implements the shared interface between host and module for 
  communication in unit tests.
@@ -635,6 +750,7 @@ struct interface {
     parchans pchs;
     blocking blk;
     timer tmr;
+    network net;
 };
 
 

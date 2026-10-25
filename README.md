@@ -10,7 +10,7 @@ This framework is designed to make using `c++20` coroutines in real code much ea
 A simple example where a coroutine is constructed, scheduled, and communicated with asynchronously. 
 
 [example_001 source](ex/src/example_001.cpp)
-```
+```cpp
 #include <iostream>
 #include <hce.hpp>
 
@@ -100,7 +100,7 @@ Each `hce` compatible coroutine must:
 
 ### Coroutines must utilize coroutine keywords
 Utilize one or more of the following `c++20` coroutine keywords:
-```
+```cpp
 co_return // coroutine specific 'return' statement
 co_await // used to safely block a coroutine on a returned awaitable object
 ```
@@ -108,7 +108,7 @@ co_await // used to safely block a coroutine on a returned awaitable object
 `co_yield` keyword is not utilized by this framework.
 
 NOTE: `awaitable` objects are returned from various functions in this framework with the type `hce::awt<AWAITABLE_RETURN_TYPE>`. `AWAITABLE_RETURN_TYPE` is the type returned from the awaitable when `co_await`ed:
-```
+```cpp
 // given this function
 hce::awt<int> awaitable_function();
 
@@ -122,7 +122,7 @@ hce::co<int> my_coroutine() {
 ### Coroutines return a valid type
 The `hce` coroutine function must specify its return type as `hce::co<COROUTINE_RETURN_TYPE>`. `COROUTINE_RETURN_TYPE` is the type of the returned value by the `co_return` statement.
 
-```
+```cpp
 hce::co<int> my_coroutine_returning_int() {
     co_return 3;
 }
@@ -132,7 +132,7 @@ hce::co<int> my_coroutine_returning_int() {
 The coroutine function must be exactly one stack frame in size, all `co_return`, `co_await`, and `co_yield` statements associated with a single coroutine happen directly in the coroutine body.
 
 Bad:
-```
+```cpp
 int inner_frame() {
     co_return 3; // BAD, inner is its own stack frame and is not a coroutine
 }
@@ -144,14 +144,14 @@ hce::co<int> outer_frame() {
 ```
 
 Good:
-```
+```cpp
 hce::co<int> valid() {
     co_return 3; 
 }
 ```
 
 Good:
-```
+```cpp
 int inner_frame() {
     return 3; 
 }
@@ -162,7 +162,7 @@ hce::co<int> outer_frame() {
 ```
 
 ### Further Examples and Explanations
-```
+```cpp
 #include <string> 
 #include <hce.hpp>
 
@@ -189,7 +189,7 @@ Generate `Doxygen` documentation to see more for `hce` coroutine creation.
 To initialize the framework user code is responsible for calling `hce::initialize()` and holding onto the resulting `std::unique_ptr<hce::lifecycle>`. The returned pointer should stay in scope until all other `hce` operations have completed and joined. `hce::initialize()` can accept a `hce::lifecycle::config` object, providing a variety of options to configure the framework before it starts. Generate the `doxygen` documentation to see more.
 
 Here are some of the most important high level operations (all of which rely on `hce::lifecycle` staying in existence):
-```
+```cpp
 // Schedule a coroutine and return an awaitable which can be awaited to return the coroutine return value
 hce::awt<T> hce::schedule(co);
 
@@ -201,7 +201,7 @@ hce::awt<T> hce::block(Callable, args...);
 ```
 
 A simple example program:
-```
+```cpp
 #include <iostream>
 #include <hce.hpp> 
 
@@ -232,7 +232,7 @@ Generate `Doxygen` documentation to see more for `hce::lifecycle` creation, conf
 ## Scheduling  
 ### Concurrent
 `hce::co<T>`s can be scheduled for execution on the calling thread's `hce::scheduler` (or the global `hce::scheduler` as a fallback) with `hce::schedule()`:
-```
+```cpp
 hce::co<int> my_coroutine2() { 
     /* ... */
 }
@@ -262,7 +262,7 @@ Parallel scheduling allows for potentially more usage of CPU resources, but has 
 NOTE: The default count of threads in the `hce::threadpool` is 1, disabling parallelism. See below on how to configure the system to spawn more. Calls to `hce::threadpool::schedule()` will always function, but will only select the global scheduler if the threadpool size is `1`.
 
 `hce::co<T>`s can be scheduled for on some `hce::scheduler` managed by the `hce::threadpool` with `hce::threadpool::schedule()`:
-```
+```cpp
 hce::co<int> my_coroutine2() { 
     /* ... */
 }
@@ -292,7 +292,7 @@ Generate `Doxygen` documentation to see more for `hce::threadpool` creation, con
 This library allows communication between coroutines, threads, and any combination there-in using `hce::chan<T>`s, a specialized communication mechanism allowing transfer of data.
 
 A simple example program:
-```
+```cpp
 #include <iostream>
 #include <hce.hpp> 
 
@@ -350,7 +350,7 @@ Arbitrary functions which may block a calling coroutine are unsafe to use direct
 Instead, those functions can be executed with a call to `hce::block()` to safely block the coroutine without blocking the system thread:
 
 A simple example program:
-```
+```cpp
 #include <iostream>
 #include <chrono>
 #include <hce.hpp> 
@@ -390,17 +390,17 @@ Generate `Doxygen` documentation to see more for `hce::block()` behavior and con
 A coroutine can implement a non-blocking code by using `hce::yield<T>` objects. `co_await`ing an instance of an `hce::yield<T>` object yields a value as the result of the `co_await` statement, but suspends execution of the coroutine allowing other coroutines to run first. 
 
 Example:
-```
+```cpp
 int i = co_await hce::yield<int>(3); // i == 3 when coroutine resumes
 ```
 
 `hce::yield<void>` is a legal instance of `hce::yield`, but returns no value, merely suspending execution of the calling coroutine:
-```
+```cpp
  co_await hce::yield<void>(); 
 ```
 
 `hce::yield<T>` can be returned arbitrarily from functions as well. Best practice is to implement non-blocking code which might fail to return an `hce::yield` templated to the result of the operation. The calling coroutine can then `co_await` the non-blocking operation until it succeeds, or the coroutine executes some fallback behavior:
-```
+```cpp
 enum result {
     success,
     failure
@@ -465,20 +465,20 @@ Works with any type that provides `try_lock()` / `lock()` (e.g. `std::mutex`, `s
 ### Unique lock
 
 ```cpp
-template <typename LOCKABLE>
-hce::awt<void> hce::unique_lock::construct(std::unique_lock<LOCKABLE>& ul, LOCKABLE& l);
+template <typename UNIQUE_LOCKABLE, typename LOCKABLE>
+hce::awt<void> construct(UNIQUE_LOCKABLE& ul, LOCKABLE& l);
 
-template <typename LOCKABLE>
-hce::awt<void> hce::unique_lock::lock(std::unique_lock<LOCKABLE>& ul);
+template <typename UNIQUE_LOCKABLE>
+hce::awt<void> lock(UNIQUE_LOCKABLE& ul);
 
-template <typename LOCKABLE, typename DURATION>
-hce::awt<bool> hce::unique_lock::try_lock_for(std::unique_lock<LOCKABLE>& ul, const DURATION& dur);
+template <typename UNIQUE_LOCKABLE, typename DURATION>
+hce::awt<bool> try_lock_for(UNIQUE_LOCKABLE& ul, const DURATION& dur);
 
-template <typename LOCKABLE, typename TIMEPOINT>
-hce::awt<bool> hce::unique_lock::try_lock_until(std::unique_lock<LOCKABLE>& ul, const TIMEPOINT& tp);
+template <typename UNIQUE_LOCKABLE, typename TIMEPOINT>
+hce::awt<bool> try_lock_until(UNIQUE_LOCKABLE& ul, const TIMEPOINT& tp) {
 ```
 
-`construct` is the normal way to obtain a locked `std::unique_lock` from a coroutine (it performs the lock then adopts ownership). The other overloads mirror the corresponding `std::unique_lock` members, again using the try-then-block pattern (or always blocking for the timed variants).
+`construct` is the normal way to obtain a locked `std::unique_lock` (ex: `std::unique_lock<std::mutex>`) from a coroutine (it performs the lock then adopts ownership). The other overloads mirror the corresponding `std::unique_lock` members, again using the try-then-block pattern (or always blocking for the timed variants).
 
 ```cpp
 std::mutex mtx;
@@ -518,7 +518,7 @@ Use the synchronization helpers when you must interoperate with code that alread
 
 ## Timers
 Coroutines can use the following API to start/check/cancel timers:
-```
+```cpp
 /**
  @brief optionally ensure the timer service thread is running 
 
@@ -580,9 +580,118 @@ hce::awt<void> hce::sleep(const hce::chrono::time_point& timeout);
 hce::awt<void> hce::sleep(const hce::chrono::duration& dur);
 ```
 
+## Network
+
+The framework includes an asynchronous TCP/UDP networking service built on an epoll-based backend. It lets coroutines open client connections, accept server connections, and perform non-blocking send/receive without blocking the scheduler or requiring manual `hce::block()` / `hce::yield()` glue.
+
+The service is registered automatically with the `lifecycle`. Access it with:
+
+```cpp
+auto& net = hce::service<hce::network>::get();
+```
+
+Worker thread count is controlled by `hce::config::network::thread_count()`. A value of `0` defaults to hardware concurrency. The backend assigns accepted/connected sockets to IO threads for affinity.
+
+### Address
+
+```cpp
+struct hce::network::address {
+    std::string host;
+    uint16_t port = 0;
+    enum struct type_e { tcp, udp } type = type_e::tcp;
+};
+```
+
+### Client
+
+`connect` returns an awaitable that yields a movable `connection` (or an error):
+
+```cpp
+hce::co<void> client() {
+    auto& net = hce::service<hce::network>::get();
+
+    auto conn_exp = co_await net.connect({
+        .host = "127.0.0.1",
+        .port = 8080,
+        .type = hce::network::address::type_e::tcp
+    });
+
+    if (!conn_exp) {
+        // handle conn_exp.error()
+        co_return;
+    }
+
+    auto conn = std::move(conn_exp.value());
+
+    std::vector<std::byte> payload{/* ... */};
+    auto send_ec = co_await conn.send_all(payload);
+    if (send_ec) {
+        // handle error
+        co_return;
+    }
+
+    std::vector<std::byte> buf(1024);
+    auto recv_exp = co_await conn.recv_all(buf);
+    if (!recv_exp) {
+        // handle recv_exp.error()
+        co_return;
+    }
+
+    conn.close();
+}
+```
+
+### Server
+
+`listen` is synchronous and returns an `acceptor` (or an error). `accept` is an awaitable that yields a ready, non-blocking `connection` already assigned to an IO thread:
+
+```cpp
+hce::co<void> server() {
+    auto& net = hce::service<hce::network>::get();
+
+    auto acc_exp = net.listen({
+        .host = "0.0.0.0",
+        .port = 8080,
+        .type = hce::network::address::type_e::tcp
+    });
+
+    if (!acc_exp) {
+        // handle acc_exp.error()
+        co_return;
+    }
+
+    auto acc = std::move(acc_exp.value());
+
+    while (true) {
+        auto conn_exp = co_await acc.accept();
+        if (!conn_exp) {
+            // handle error or shutdown
+            break;
+        }
+
+        auto conn = std::move(conn_exp.value());
+        // schedule a handler coroutine for this connection
+        hce::schedule(handle_client(std::move(conn)));
+    }
+}
+```
+
+### Connection I/O
+
+On a `connection`:
+
+- `send(std::span<const std::byte>)` / `recv(std::span<std::byte>)` — single attempt; returns bytes transferred or an error. `EAGAIN`/`EWOULDBLOCK` causes the awaitable to re-register interest.
+- `send_all` / `recv_all` — retry until the full span is transferred or an error occurs.
+- `close()` — closes the underlying socket.
+- `valid()` — true while the socket is open.
+
+Both `connection` and `acceptor` are movable (not copyable) and own their sockets. The low-level socket interface is available via `get_socket()` if you need the raw file descriptor or additional options.
+
+All network awaitables suspend the calling coroutine and resume it from the IO backend when the socket is ready, keeping the scheduler free for other work.
+
 ## Modules
 This project supports the concept of dynamically loaded plugins running coroutines via the module system. Here is the module API:
-```
+```cpp
 namespace hce {
 
 /**
@@ -637,7 +746,7 @@ struct module {
 ```
 
 Implementation is fairly simple. You will need a host which is compiled against the `hce` library that initializes the framework and imports the module. An example host that communicates to the module:
-```
+```cpp
 #include <string>
 #include <hce/hce.hpp>
 
@@ -664,7 +773,7 @@ int main() {
 ```
 
 Write a dynamically linked library and compile it against the same `hce` library with the necessary API and `hce::module` implementation:
-```
+```cpp
 #include <iostream>
 #include <string>
 #include <hce/hce.hpp>

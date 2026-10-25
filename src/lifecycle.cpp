@@ -161,6 +161,10 @@ hce::lifecycle::config::timer::timer() :
     algorithm(&(hce::timer::default_timeout_algorithm))
 { }
 
+hce::lifecycle::config::network::network() :
+    thread_count(1)
+{ }
+
 std::unique_ptr<hce::lifecycle> hce::lifecycle::initialize(hce::lifecycle::config c) {
     return std::unique_ptr<hce::lifecycle>(
         new lifecycle(

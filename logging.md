@@ -145,8 +145,3 @@ An example debuggable non-production design might:
 - Compile user application with `HCELOGLIMIT` to the necessary level when compiling user code (for example, `6` to enable up to "low criticality" logging)
 - Compile `HCELOGLEVEL` to some low default level when compiling this library (maybe `2`, to only print "high" criticality logs, or `4` to print "medium" criticality logs) 
 - On threads where debugging becomes necessary, set the thread local logging level (calling `hce::printable::thread_log_level(6)` or `hce::scheduler::log_level(6)`) to make that thread print "low" criticality logs)
-
-## Developer Logging Notes
-Because of the unusual nature of logging in this project (the mix of compile time configuration with `HCELOGLIMIT` and the runtime configuration with `HCELOGLEVEL`) the basic pattern of writing project code with logging is any time logging is required for `HCE` project code, it shall only be written in a header (IE, inline code).
-
-Where pre-compiled code is necessary (a la, `.cpp` files) no logging code is generally included unless there is a very good reason and the code is not in a critical section (called only once or infrequently, not in very time sensitive processing loop). 
