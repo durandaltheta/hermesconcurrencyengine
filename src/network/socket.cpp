@@ -73,13 +73,13 @@ ssize_t socket::send(std::span<const std::byte> data, std::error_code& ec) {
 
     if(n < 0) {
         if(errno == EAGAIN || errno == EWOULDBLOCK) {
-            return 0; // would block
+            ec = std::make_error_code(std::errc::resource_unavailable_try_again);
+            return -1;
         }
 
         ec = std::error_code(errno, std::system_category());
         return -1;
     }
-
     return n;
 }
 
@@ -89,13 +89,15 @@ ssize_t socket::recv(std::span<std::byte> buf, std::error_code& ec) {
 
     if(n < 0) {
         if(errno == EAGAIN || errno == EWOULDBLOCK) {
-            return 0; // would block
+            ec = std::make_error_code(std::errc::resource_unavailable_try_again);
+            return -1;
         }
 
         ec = std::error_code(errno, std::system_category());
         return -1;
     }
 
+    // n == 0 is a real EOF; n > 0 is data.
     return n;
 }
 
