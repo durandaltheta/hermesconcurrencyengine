@@ -465,20 +465,20 @@ Works with any type that provides `try_lock()` / `lock()` (e.g. `std::mutex`, `s
 ### Unique lock
 
 ```cpp
-template <typename LOCKABLE>
-hce::awt<void> hce::unique_lock::construct(std::unique_lock<LOCKABLE>& ul, LOCKABLE& l);
+template <typename UNIQUE_LOCKABLE, typename LOCKABLE>
+hce::awt<void> construct(UNIQUE_LOCKABLE& ul, LOCKABLE& l);
 
-template <typename LOCKABLE>
-hce::awt<void> hce::unique_lock::lock(std::unique_lock<LOCKABLE>& ul);
+template <typename UNIQUE_LOCKABLE>
+hce::awt<void> lock(UNIQUE_LOCKABLE& ul);
 
-template <typename LOCKABLE, typename DURATION>
-hce::awt<bool> hce::unique_lock::try_lock_for(std::unique_lock<LOCKABLE>& ul, const DURATION& dur);
+template <typename UNIQUE_LOCKABLE, typename DURATION>
+hce::awt<bool> try_lock_for(UNIQUE_LOCKABLE& ul, const DURATION& dur);
 
-template <typename LOCKABLE, typename TIMEPOINT>
-hce::awt<bool> hce::unique_lock::try_lock_until(std::unique_lock<LOCKABLE>& ul, const TIMEPOINT& tp);
+template <typename UNIQUE_LOCKABLE, typename TIMEPOINT>
+hce::awt<bool> try_lock_until(UNIQUE_LOCKABLE& ul, const TIMEPOINT& tp) {
 ```
 
-`construct` is the normal way to obtain a locked `std::unique_lock` from a coroutine (it performs the lock then adopts ownership). The other overloads mirror the corresponding `std::unique_lock` members, again using the try-then-block pattern (or always blocking for the timed variants).
+`construct` is the normal way to obtain a locked `std::unique_lock` (ex: `std::unique_lock<std::mutex>`) from a coroutine (it performs the lock then adopts ownership). The other overloads mirror the corresponding `std::unique_lock` members, again using the try-then-block pattern (or always blocking for the timed variants).
 
 ```cpp
 std::mutex mtx;

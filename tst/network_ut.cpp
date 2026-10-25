@@ -157,6 +157,18 @@ hce::co<void> multi_echo(hce::network::acceptor acc,
     co_return;
 }
 
+hce::co<void> try_connect_refused(hce::network::address addr,
+                                  test::queue<std::string>& status) {
+    auto& net = hce::service<hce::network>::get();
+    auto conn_exp = co_await net.connect(addr);
+    if (conn_exp) {
+        status.push("unexpected success");
+    } else {
+        status.push("failed as expected: " + conn_exp.error().message());
+    }
+    co_return;
+}
+
 } // namespace test::network
 
 // ---------------------------------------------------------------------------
@@ -318,22 +330,11 @@ TEST(network, multiple_sequential_clients) {
 }
 
 TEST(network, connect_refused) {
-    auto& net = hce::service<hce::network>::get();
-
-    // Port 1 is almost certainly not listening
-    hce::network::address addr{
-        "127.0.0.1", 1, hce::network::address::type_e::tcp};
-
+    hce::network::address addr{"127.0.0.1", 1, hce::network::address::type_e::tcp};
     test::queue<std::string> status;
-    auto awt = hce::schedule([&]() -> hce::co<void> {
-        auto conn_exp = co_await net.connect(addr);
-        if(conn_exp) {
-            status.push("unexpected success");
-        } else {
-            status.push("failed as expected: " + conn_exp.error().message());
-        }
-        co_return;
-    }());
+
+    auto awt = hce::schedule(
+        test::network::try_connect_refused(addr, status));
 
     auto msg = status.pop();
     EXPECT_TRUE(msg.find("failed as expected") != std::string::npos);
