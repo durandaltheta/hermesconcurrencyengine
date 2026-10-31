@@ -3,6 +3,7 @@
 //Author: Blayne Dennis
 
 #include <span>
+#include <string>
 #include <cstddef>
 
 #include "base.hpp"
@@ -177,25 +178,42 @@ struct network : public hce::service<network>, public hce::printable {
     };
 
     /**
-     @brief length-prefixed binary framing protocol implementation 
-
-     Length prefixing a binary blob is a common framing protocol pattern.
-
-     It is included here as an optional helper.
-
-     Message layout: uint32_t length (network order) followed by that many payload bytes.
-     T is std::vector<std::byte>.
+     @brief length-prefixed protocol implementations
      */
-    struct length_prefixed : public protocol<std::vector<std::byte>> {
-        static constexpr size_t max_payload = 16 * 1024 * 1024; // arbitrary safety limit
+    struct length_prefixed {
+        /**
+         @brief length-prefixed binary framing protocol implementation 
 
-        ~length_prefixed();
+         Length prefixing a binary blob is a common framing protocol pattern.
 
-        hce::co<hce::expected<std::vector<std::byte>, std::error_code>>
-        recv(hce::network::connection& conn);
+         It is included here as an optional helper.
 
-        hce::co<std::error_code>
-        send(hce::network::connection& conn, std::vector<std::byte> msg);
+         Message layout: uint32_t length (network order) followed by that many payload bytes.
+         T is std::vector<std::byte>.
+         */
+        struct byte : public protocol<std::vector<std::byte>> {
+            static constexpr size_t max_payload = 16 * 1024 * 1024; // arbitrary safety limit
+
+            ~byte();
+
+            hce::co<hce::expected<std::vector<std::byte>, std::error_code>>
+            recv(hce::network::connection& conn);
+
+            hce::co<std::error_code>
+            send(hce::network::connection& conn, std::vector<std::byte> msg);
+        };
+
+        struct string : public protocol<std::vector<std::byte>> {
+            static constexpr size_t max_payload = 16 * 1024 * 1024; // arbitrary safety limit
+
+            ~string();
+
+            hce::co<hce::expected<std::vector<std::string>, std::error_code>>
+            recv(hce::network::connection& conn);
+
+            hce::co<std::error_code>
+            send(hce::network::connection& conn, std::vector<std::string> msg);
+        };
     };
 
     /**

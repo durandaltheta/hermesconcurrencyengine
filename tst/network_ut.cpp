@@ -529,7 +529,7 @@ namespace {
 
 hce::co<void> lp_echo_once(hce::network::acceptor acc,
                            test::queue<std::string>& status) {
-    hce::network::length_prefixed len_pref;
+    hce::network::length_prefixed::byte len_pref;
     auto conn_exp = co_await acc.accept();
 
     if(!conn_exp) {
@@ -558,7 +558,7 @@ hce::co<void> lp_client(hce::network::address addr,
                         std::vector<std::byte> payload,
                         test::queue<std::string>& status) {
     auto& net = hce::service<hce::network>::get();
-    hce::network::length_prefixed len_pref;
+    hce::network::length_prefixed::byte len_pref;
     auto conn_exp = co_await net.connect(addr);
 
     if(!conn_exp) {
@@ -604,7 +604,7 @@ hce::co<void> pump_echo_once(hce::network::acceptor acc,
 
     auto inbound  = hce::chan<std::vector<std::byte>>::make();
     auto outbound = hce::chan<std::vector<std::byte>>::make();
-    hce::network::length_prefixed len_pref;
+    hce::network::length_prefixed::byte len_pref;
 
     // Pump runs until both directions finish.
     auto pump = hce::schedule(
@@ -646,7 +646,7 @@ hce::co<void> pump_client(hce::network::address addr,
     auto conn = std::move(conn_exp.value());
     auto inbound  = hce::chan<std::vector<std::byte>>::make();
     auto outbound = hce::chan<std::vector<std::byte>>::make();
-    hce::network::length_prefixed len_pref;
+    hce::network::length_prefixed::byte len_pref;
 
     auto pump = hce::schedule(
         hce::network::pump<std::vector<std::byte>>(
@@ -680,7 +680,7 @@ hce::co<void> pump_client(hce::network::address addr,
 
 } // anonymous
 
-TEST(network, length_prefixed_echo) {
+TEST(network, length_prefixed_byte_echo) {
     auto& net = hce::service<hce::network>::get();
     auto acc_exp = net.listen({"127.0.0.1", 0});
     ASSERT_TRUE(acc_exp) << acc_exp.error().message();
@@ -705,7 +705,7 @@ TEST(network, length_prefixed_echo) {
     (void)client_awt;
 }
 
-TEST(network, length_prefixed_pump_echo) {
+TEST(network, length_prefixed_byte_pump_echo) {
     auto& net = hce::service<hce::network>::get();
     auto acc_exp = net.listen({"127.0.0.1", 0});
     ASSERT_TRUE(acc_exp) << acc_exp.error().message();
