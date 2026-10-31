@@ -203,16 +203,27 @@ struct network : public hce::service<network>, public hce::printable {
             send(hce::network::connection& conn, std::vector<std::byte> msg);
         };
 
-        struct string : public protocol<std::vector<std::byte>> {
+        /**
+         @brief length-prefixed base64 string framing protocol implementation 
+
+         This protocol converts length framed base64 strings.
+         */
+        struct base64 : public protocol<std::vector<std::byte>> {
             static constexpr size_t max_payload = 16 * 1024 * 1024; // arbitrary safety limit
 
-            ~string();
+            ~base64();
 
-            hce::co<hce::expected<std::vector<std::string>, std::error_code>>
-            recv(hce::network::connection& conn);
+            template<class STRING> 
+            hce::co<hce::expected<std::vector<STRING>, std::error_code>>
+            recv(hce::network::connection& conn) {
+                //todo
+            }
 
+            template<class STRING> 
             hce::co<std::error_code>
-            send(hce::network::connection& conn, std::vector<std::string> msg);
+            send(hce::network::connection& conn, std::vector<STRING> msg) {
+                //todo
+            }
         };
     };
 
