@@ -192,7 +192,7 @@ struct network : public hce::service<network>, public hce::printable {
          T is std::vector<std::byte>.
          */
         struct byte : public protocol<std::vector<std::byte>> {
-            static constexpr size_t max_payload = 16 * 1024 * 1024; // arbitrary safety limit
+            static constexpr size_t max_payload = 16 * 1024 * 1024; ///< arbitrary safety limit
 
             ~byte();
 
@@ -207,26 +207,24 @@ struct network : public hce::service<network>, public hce::printable {
          @brief length-prefixed base64 string framing protocol implementation 
 
          This protocol converts length framed base64 strings.
+
+         The input and output is an std::string with default templates.
          */
-        struct base64 : public protocol<std::vector<std::byte>> {
-            static constexpr size_t max_payload = 16 * 1024 * 1024; // arbitrary safety limit
+        template<
+            class CharT = char,  
+            class Traits = std::char_traits<CharT>,
+            class Allocator = std::allocator<CharT>
+        >
+        struct base64 : public protocol<std::basic_string<CharT,Traits,Allocator>> {
+            using STRING = std::basic_string<CharT,Traits,Allocator>;
+
+            static constexpr size_t max_payload = 16 * 1024 * 1024; ///< arbitrary safety limit
 
             ~base64();
 
-            template<
-                class CharT, 
-                class Traits, 
-                class Allocator 
-            >
             hce::co<
                 hce::expected<
-                    std::vector<
-                        std::basic_string<
-                            CharT, 
-                            Traits, 
-                            Allocator 
-                        >
-                    >, 
+                    std::vector<STRING>, 
                     std::error_code 
                 >
             >
@@ -235,22 +233,8 @@ struct network : public hce::service<network>, public hce::printable {
                 //TODO
             }
 
-            template<
-                class CharT, 
-                class Traits, 
-                class Allocator 
-            >
-            hce::co<
-                std::error_code 
-            >
-            send(hce::network::connection& conn, 
-                 std::vector<
-                     std::basic_string<
-                         CharT, 
-                         Traits, 
-                         Allocator
-                     >
-                 > msg) 
+            hce::co<std::error_code>
+            send(hce::network::connection& conn, std::vector<STRING> msg) 
             {
                 //TODO
             }
