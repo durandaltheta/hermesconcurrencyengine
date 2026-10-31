@@ -213,16 +213,46 @@ struct network : public hce::service<network>, public hce::printable {
 
             ~base64();
 
-            template<class STRING> 
-            hce::co<hce::expected<std::vector<STRING>, std::error_code>>
-            recv(hce::network::connection& conn) {
-                //todo
+            template<
+                class CharT, 
+                class Traits, 
+                class Allocator 
+            >
+            hce::co<
+                hce::expected<
+                    std::vector<
+                        std::basic_string<
+                            CharT, 
+                            Traits, 
+                            Allocator 
+                        >
+                    >, 
+                    std::error_code 
+                >
+            >
+            recv(hce::network::connection& conn) 
+            {
+                //TODO
             }
 
-            template<class STRING> 
-            hce::co<std::error_code>
-            send(hce::network::connection& conn, std::vector<STRING> msg) {
-                //todo
+            template<
+                class CharT, 
+                class Traits, 
+                class Allocator 
+            >
+            hce::co<
+                std::error_code 
+            >
+            send(hce::network::connection& conn, 
+                 std::vector<
+                     std::basic_string<
+                         CharT, 
+                         Traits, 
+                         Allocator
+                     >
+                 > msg) 
+            {
+                //TODO
             }
         };
     };
