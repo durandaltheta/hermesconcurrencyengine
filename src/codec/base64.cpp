@@ -77,19 +77,19 @@ base64::decode(std::string_view encoded) {
         const char c2 = encoded[i + 2];
         const char c3 = encoded[i + 3];
 
-        // first two characters of a quartet must be data
         const uint8_t a = decode_table[static_cast<uint8_t>(c0)];
         const uint8_t b = decode_table[static_cast<uint8_t>(c1)];
         if(a == 0xFF || b == 0xFF) {
             return hce::unexpected(std::make_error_code(std::errc::invalid_argument));
         }
 
-        // padding rules:
-        // - '=' may only appear in the last quartet
-        // - if c2 is '=', c3 must also be '='
-        // - no non-padding characters after a padding character
+        // padding may only appear in the final quartet
         if(c2 == '=') {
             if(c3 != '=' || i + 4 != encoded.size()) {
+                return hce::unexpected(std::make_error_code(std::errc::invalid_argument));
+            }
+            // two-pad: low 4 bits of second character must be zero
+            if((b & 0x0F) != 0) {
                 return hce::unexpected(std::make_error_code(std::errc::invalid_argument));
             }
         } else if(c3 == '=') {
@@ -102,6 +102,11 @@ base64::decode(std::string_view encoded) {
         const uint8_t d = (c3 == '=') ? 0 : decode_table[static_cast<uint8_t>(c3)];
 
         if((c2 != '=' && c == 0xFF) || (c3 != '=' && d == 0xFF)) {
+            return hce::unexpected(std::make_error_code(std::errc::invalid_argument));
+        }
+
+        // one-pad: low 2 bits of third character must be zero
+        if(c3 == '=' && c2 != '=' && (c & 0x03) != 0) {
             return hce::unexpected(std::make_error_code(std::errc::invalid_argument));
         }
 
