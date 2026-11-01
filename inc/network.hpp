@@ -237,8 +237,6 @@ struct network : public hce::service<network>, public hce::printable {
 
             static constexpr size_t max_payload = 16 * 1024 * 1024; ///< arbitrary safety limit
 
-            ~base64();
-
             hce::co<hce::expected<
                 std::basic_string<CharT, Traits, Allocator>,
                 std::error_code> 

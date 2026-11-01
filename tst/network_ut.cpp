@@ -1,6 +1,16 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis
 
+#include <atomic>
+#include <cstring>
+#include <span>
+#include <string>
+#include <vector>
+
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include <gtest/gtest.h>
 
 #include "network.hpp"
@@ -8,17 +18,7 @@
 #include "coroutine.hpp"
 #include "service.hpp"
 #include "test_helpers.hpp"
-
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
-#include <atomic>
-#include <cstring>
-#include <span>
-#include <string>
-#include <vector>
+#include "codec/base64.hpp"
 
 namespace test::network {
 
@@ -726,4 +726,114 @@ TEST(network, length_prefixed_byte_pump_echo) {
 
     (void)server_awt;
     (void)client_awt;
+}
+
+namespace {
+
+std::vector<std::byte> to_bytes(std::string_view s) {
+    std::vector<std::byte> out(s.size());
+    std::memcpy(out.data(), s.data(), s.size());
+    return out;
+}
+
+std::string from_bytes(const std::vector<std::byte>& b) {
+    return std::string(reinterpret_cast<const char*>(b.data()), b.size());
+}
+
+} // namespace
+
+TEST(network, base64_empty) {
+    EXPECT_EQ(hce::base64::encode({}), "");
+
+    auto dec = hce::base64::decode("");
+    ASSERT_TRUE(dec);
+    EXPECT_TRUE(dec.value().empty());
+}
+
+TEST(network, base64_padding_cases) {
+    // 1 byte -> 2 pad
+    EXPECT_EQ(hce::base64::encode(to_bytes("f")), "Zg==");
+    auto d1 = hce::base64::decode("Zg==");
+    ASSERT_TRUE(d1);
+    EXPECT_EQ(from_bytes(d1.value()), "f");
+
+    // 2 bytes -> 1 pad
+    EXPECT_EQ(hce::base64::encode(to_bytes("fo")), "Zm8=");
+    auto d2 = hce::base64::decode("Zm8=");
+    ASSERT_TRUE(d2);
+    EXPECT_EQ(from_bytes(d2.value()), "fo");
+
+    // 3 bytes -> no pad
+    EXPECT_EQ(hce::base64::encode(to_bytes("foo")), "Zm9v");
+    auto d3 = hce::base64::decode("Zm9v");
+    ASSERT_TRUE(d3);
+    EXPECT_EQ(from_bytes(d3.value()), "foo");
+}
+
+TEST(network, base64_known_vectors) {
+    EXPECT_EQ(hce::base64::encode(to_bytes("Hello")), "SGVsbG8=");
+    EXPECT_EQ(hce::base64::encode(to_bytes("Hello, World!")), "SGVsbG8sIFdvcmxkIQ==");
+    EXPECT_EQ(hce::base64::encode(to_bytes("Man")), "TWFu");
+    EXPECT_EQ(hce::base64::encode(to_bytes("any carnal pleasure")),
+              "YW55IGNhcm5hbCBwbGVhc3VyZQ==");
+}
+
+TEST(network, base64_round_trip) {
+    const std::string inputs[] = {
+        "",
+        "a",
+        "ab",
+        "abc",
+        "Hello, World!",
+        std::string(100, 'x'),
+        std::string("\0\x01\xff", 3),
+    };
+
+    for(const auto& in : inputs) {
+        auto encoded = hce::base64::encode(to_bytes(in));
+        auto decoded = hce::base64::decode(encoded);
+        ASSERT_TRUE(decoded) << "failed on input of size " << in.size();
+        EXPECT_EQ(from_bytes(decoded.value()), in);
+    }
+}
+
+TEST(network, base64_string_helpers) {
+    const std::string original = "test string";
+
+    auto encoded = hce::base64::encode(original);
+    EXPECT_EQ(encoded, "dGVzdCBzdHJpbmc=");
+
+    auto decoded = hce::base64::decode_to<char>(encoded);
+    ASSERT_TRUE(decoded);
+    EXPECT_EQ(decoded.value(), original);
+}
+
+TEST(network, base64_invalid_length) {
+    EXPECT_FALSE(hce::base64::decode("Zg="));   // not multiple of 4
+    EXPECT_FALSE(hce::base64::decode("Z"));
+    EXPECT_FALSE(hce::base64::decode("Zg"));
+}
+
+TEST(network, base64_invalid_characters) {
+    EXPECT_FALSE(hce::base64::decode("Zg=0"));  // invalid char
+    EXPECT_FALSE(hce::base64::decode("@@@@"));
+    EXPECT_FALSE(hce::base64::decode("Zg===")); // extra padding
+}
+
+TEST(network, base64_bad_padding) {
+    EXPECT_FALSE(hce::base64::decode("Z==="));
+    EXPECT_FALSE(hce::base64::decode("Zm=="));
+    EXPECT_FALSE(hce::base64::decode("=Zg="));
+}
+
+TEST(network, base64_binary_round_trip) {
+    std::vector<std::byte> data(256);
+    for(size_t i = 0; i < data.size(); ++i) {
+        data[i] = static_cast<std::byte>(i);
+    }
+
+    auto encoded = hce::base64::encode(data);
+    auto decoded = hce::base64::decode(encoded);
+    ASSERT_TRUE(decoded);
+    EXPECT_EQ(decoded.value(), data);
 }

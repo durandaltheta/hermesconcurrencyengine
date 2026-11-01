@@ -35,7 +35,11 @@ struct base64 {
     /**
      @brief encode a string's bytes to base64
      */
-    template<class CharT, class Traits, class Allocator>
+    template<
+        class CharT = char,  
+        class Traits = std::char_traits<CharT>,
+        class Allocator = std::allocator<CharT>
+    >
     static std::basic_string<CharT, Traits, Allocator>
     encode(const std::basic_string<CharT, Traits, Allocator>& s) {
         auto bytes = std::as_bytes(std::span(s.data(), s.size()));
@@ -47,7 +51,11 @@ struct base64 {
     /**
      @brief decode base64 into a string of the given character type
      */
-    template<class CharT, class Traits, class Allocator>
+    template<
+        class CharT = char,  
+        class Traits = std::char_traits<CharT>,
+        class Allocator = std::allocator<CharT>
+    >
     static hce::expected<
         std::basic_string<CharT, Traits, Allocator>,
         std::error_code>
