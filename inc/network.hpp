@@ -208,10 +208,10 @@ struct network : public hce::service<network>, public hce::printable {
             ~byte();
 
             hce::co<hce::expected<std::vector<std::byte>, std::error_code>>
-            recv(hce::network::connection& conn);
+            recv(hce::network::connection& conn) override;
 
             hce::co<std::error_code>
-            send(hce::network::connection& conn, std::vector<std::byte> msg);
+            send(hce::network::connection& conn, std::vector<std::byte> msg) override;
         };
 
         /**
@@ -243,7 +243,7 @@ struct network : public hce::service<network>, public hce::printable {
                 std::basic_string<CharT, Traits, Allocator>,
                 std::error_code> 
             >
-            recv(connection& conn) {
+            recv(connection& conn) override {
                 uint32_t len_be = 0;
                 auto len_span = std::as_writable_bytes(std::span(&len_be, 1));
                 auto len_exp = co_await conn.recv_all(len_span);
@@ -277,7 +277,7 @@ struct network : public hce::service<network>, public hce::printable {
                 co_return std::move(decoded.value());
             }
 
-            hce::co<std::error_code> send(connection& conn, STRING msg) {
+            hce::co<std::error_code> send(connection& conn, STRING msg) override {
                 auto b64 = hce::base64::encode(msg);
                 if(b64.size() > max_payload) {
                     co_return std::make_error_code(std::errc::message_size);
