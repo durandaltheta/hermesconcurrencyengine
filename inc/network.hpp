@@ -5,6 +5,7 @@
 #include <span>
 #include <string>
 #include <cstddef>
+#include <optional>
 
 #include <arpa/inet.h>  // ntohl / htonl
 
