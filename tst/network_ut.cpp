@@ -742,7 +742,7 @@ std::string from_bytes(const std::vector<std::byte>& b) {
 
 } // namespace
 
-TEST(network, base64_empty) {
+TEST(network, length_prefixed_base64_empty) {
     EXPECT_EQ(hce::base64::encode({}), "");
 
     auto dec = hce::base64::decode("");
@@ -750,7 +750,7 @@ TEST(network, base64_empty) {
     EXPECT_TRUE(dec.value().empty());
 }
 
-TEST(network, base64_padding_cases) {
+TEST(network, length_prefixed_base64_padding_cases) {
     // 1 byte -> 2 pad
     EXPECT_EQ(hce::base64::encode(to_bytes("f")), "Zg==");
     auto d1 = hce::base64::decode("Zg==");
@@ -770,7 +770,7 @@ TEST(network, base64_padding_cases) {
     EXPECT_EQ(from_bytes(d3.value()), "foo");
 }
 
-TEST(network, base64_known_vectors) {
+TEST(network, length_prefixed_base64_known_vectors) {
     EXPECT_EQ(hce::base64::encode(to_bytes("Hello")), "SGVsbG8=");
     EXPECT_EQ(hce::base64::encode(to_bytes("Hello, World!")), "SGVsbG8sIFdvcmxkIQ==");
     EXPECT_EQ(hce::base64::encode(to_bytes("Man")), "TWFu");
@@ -778,7 +778,7 @@ TEST(network, base64_known_vectors) {
               "YW55IGNhcm5hbCBwbGVhc3VyZQ==");
 }
 
-TEST(network, base64_round_trip) {
+TEST(network, length_prefixed_base64_round_trip) {
     const std::string inputs[] = {
         "",
         "a",
@@ -797,7 +797,7 @@ TEST(network, base64_round_trip) {
     }
 }
 
-TEST(network, base64_string_helpers) {
+TEST(network, length_prefixed_base64_string_helpers) {
     const std::string original = "test string";
 
     auto encoded = hce::base64::encode(original);
@@ -808,25 +808,25 @@ TEST(network, base64_string_helpers) {
     EXPECT_EQ(decoded.value(), original);
 }
 
-TEST(network, base64_invalid_length) {
+TEST(network, length_prefixed_base64_invalid_length) {
     EXPECT_FALSE(hce::base64::decode("Zg="));   // not multiple of 4
     EXPECT_FALSE(hce::base64::decode("Z"));
     EXPECT_FALSE(hce::base64::decode("Zg"));
 }
 
-TEST(network, base64_invalid_characters) {
+TEST(network, length_prefixed_base64_invalid_characters) {
     EXPECT_FALSE(hce::base64::decode("Zg=0"));  // invalid char
     EXPECT_FALSE(hce::base64::decode("@@@@"));
     EXPECT_FALSE(hce::base64::decode("Zg===")); // extra padding
 }
 
-TEST(network, base64_bad_padding) {
+TEST(network, length_prefixed_base64_bad_padding) {
     EXPECT_FALSE(hce::base64::decode("Z==="));
     EXPECT_FALSE(hce::base64::decode("Zm=="));
     EXPECT_FALSE(hce::base64::decode("=Zg="));
 }
 
-TEST(network, base64_binary_round_trip) {
+TEST(network, length_prefixed_base64_binary_round_trip) {
     std::vector<std::byte> data(256);
     for(size_t i = 0; i < data.size(); ++i) {
         data[i] = static_cast<std::byte>(i);

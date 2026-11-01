@@ -63,39 +63,56 @@ std::string base64::encode(std::span<const std::byte> data) {
 
 hce::expected<std::vector<std::byte>, std::error_code>
 base64::decode(std::string_view encoded) {
-    // strip trailing padding for length check; we still validate it
-    size_t len = encoded.size();
-    while(len > 0 && encoded[len - 1] == '=') {
-        --len;
-    }
-
     if(encoded.size() % 4 != 0) {
         return hce::unexpected(std::make_error_code(std::errc::invalid_argument));
     }
 
     std::vector<std::byte> out;
-    out.reserve((len * 3) / 4);
+    out.reserve((encoded.size() / 4) * 3);
 
     size_t i = 0;
-    while(i + 3 < encoded.size()) {
-        uint8_t a = decode_table[static_cast<uint8_t>(encoded[i])];
-        uint8_t b = decode_table[static_cast<uint8_t>(encoded[i + 1])];
-        uint8_t c = decode_table[static_cast<uint8_t>(encoded[i + 2])];
-        uint8_t d = decode_table[static_cast<uint8_t>(encoded[i + 3])];
+    while(i < encoded.size()) {
+        const char c0 = encoded[i];
+        const char c1 = encoded[i + 1];
+        const char c2 = encoded[i + 2];
+        const char c3 = encoded[i + 3];
 
-        if(a == 0xFF || b == 0xFF ||
-           (encoded[i + 2] != '=' && c == 0xFF) ||
-           (encoded[i + 3] != '=' && d == 0xFF)) {
+        // first two characters of a quartet must be data
+        const uint8_t a = decode_table[static_cast<uint8_t>(c0)];
+        const uint8_t b = decode_table[static_cast<uint8_t>(c1)];
+        if(a == 0xFF || b == 0xFF) {
+            return hce::unexpected(std::make_error_code(std::errc::invalid_argument));
+        }
+
+        // padding rules:
+        // - '=' may only appear in the last quartet
+        // - if c2 is '=', c3 must also be '='
+        // - no non-padding characters after a padding character
+        if(c2 == '=') {
+            if(c3 != '=' || i + 4 != encoded.size()) {
+                return hce::unexpected(std::make_error_code(std::errc::invalid_argument));
+            }
+        } else if(c3 == '=') {
+            if(i + 4 != encoded.size()) {
+                return hce::unexpected(std::make_error_code(std::errc::invalid_argument));
+            }
+        }
+
+        const uint8_t c = (c2 == '=') ? 0 : decode_table[static_cast<uint8_t>(c2)];
+        const uint8_t d = (c3 == '=') ? 0 : decode_table[static_cast<uint8_t>(c3)];
+
+        if((c2 != '=' && c == 0xFF) || (c3 != '=' && d == 0xFF)) {
             return hce::unexpected(std::make_error_code(std::errc::invalid_argument));
         }
 
         out.push_back(static_cast<std::byte>((a << 2) | (b >> 4)));
-        if(encoded[i + 2] != '=') {
+        if(c2 != '=') {
             out.push_back(static_cast<std::byte>(((b & 0x0F) << 4) | (c >> 2)));
         }
-        if(encoded[i + 3] != '=') {
+        if(c3 != '=') {
             out.push_back(static_cast<std::byte>(((c & 0x03) << 6) | d));
         }
+
         i += 4;
     }
 
