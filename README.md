@@ -864,8 +864,8 @@ struct hce::network::pump {
     static state launch(
         hce::network::protocol<T>& proto,
         hce::network::connection conn,
-        hce::chan<T> inbound,   // connection → user
-        hce::chan<T> outbound); // user → connection
+        hce::chan<T> inbound,   // connection -> user
+        hce::chan<T> outbound); // user -> connection
 };
 ```
 
