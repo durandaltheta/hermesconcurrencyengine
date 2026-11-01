@@ -607,12 +607,11 @@ hce::co<void> pump_echo_once(hce::network::acceptor acc,
     hce::network::length_prefixed::byte len_pref;
 
     // Pump runs until both directions finish.
-    auto pump = hce::schedule(
-        hce::network::pump<std::vector<std::byte>>(
+    auto state = hce::network::pump::launch<std::vector<std::byte>>(
             len_pref,
             std::move(conn), 
             inbound, 
-            outbound));
+            outbound);
 
     std::vector<std::byte> msg;
 
@@ -628,7 +627,7 @@ hce::co<void> pump_echo_once(hce::network::acceptor acc,
 
     // Close our side so the pump can finish.
     outbound.close();
-    co_await std::move(pump);
+    co_await std::move(state.awt);
     status.push("ok");
 }
 
@@ -648,12 +647,11 @@ hce::co<void> pump_client(hce::network::address addr,
     auto outbound = hce::chan<std::vector<std::byte>>::make();
     hce::network::length_prefixed::byte len_pref;
 
-    auto pump = hce::schedule(
-        hce::network::pump<std::vector<std::byte>>(
+    auto state = hce::network::pump::launch<std::vector<std::byte>>(
             len_pref,
             std::move(conn), 
             inbound, 
-            outbound));
+            outbound);
 
     if(!co_await outbound.send(payload)) {
         status.push("outbound send failed");
@@ -674,7 +672,7 @@ hce::co<void> pump_client(hce::network::address addr,
         co_return;
     }
 
-    co_await std::move(pump);
+    co_await std::move(state.awt);
     status.push("ok");
 }
 

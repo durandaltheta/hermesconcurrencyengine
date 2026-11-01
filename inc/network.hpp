@@ -6,9 +6,12 @@
 #include <string>
 #include <cstddef>
 
+#include <arpa/inet.h>  // ntohl / htonl
+
 #include "base.hpp"
 #include "logging.hpp"
 #include "expected.hpp"
+#include "codec/base64.hpp"
 #include "network/interface.hpp"
 #include "network/epoll_backend.hpp"
 #include "network/socket.hpp"
@@ -178,13 +181,21 @@ struct network : public hce::service<network>, public hce::printable {
     };
 
     /**
-     @brief length-prefixed protocol implementations
+     @brief length-prefixed protocol implementations 
+
+     Length prefixing is a common pattern in communication. Two programs written 
+     with this library can make use of the protocols in this section to 
+     implement communication.
      */
     struct length_prefixed {
         /**
          @brief length-prefixed binary framing protocol implementation 
 
-         Length prefixing a binary blob is a common framing protocol pattern.
+         Length prefixing a binary blob is a common framing protocol pattern. 
+
+         This protocol can be combined with a binary serialization framework 
+         like flatbuffers or protobuffers to data in a highly efficient 
+         manner.
 
          It is included here as an optional helper.
 
@@ -208,7 +219,13 @@ struct network : public hce::service<network>, public hce::printable {
 
          This protocol converts length framed base64 strings.
 
-         The input and output is an std::string with default templates.
+         This protocol allows convenient sending and receiving of data, as 
+         long as that data can be converted to and from some intermediate 
+         language like JSON or YAML. This is less efficient than pure binary 
+         but is simple to implement for all kinds of APIs.
+
+         The input and output is compatible with std::string (an instantiation 
+         of std::basic_string).
          */
         template<
             class CharT = char,  
@@ -222,74 +239,189 @@ struct network : public hce::service<network>, public hce::printable {
 
             ~base64();
 
-            hce::co<
-                hce::expected<
-                    std::vector<STRING>, 
-                    std::error_code 
-                >
+            hce::co<hce::expected<
+                std::basic_string<CharT, Traits, Allocator>,
+                std::error_code> 
             >
-            recv(hce::network::connection& conn) 
-            {
-                //TODO
+            recv(connection& conn) {
+                uint32_t len_be = 0;
+                auto len_span = std::as_writable_bytes(std::span(&len_be, 1));
+                auto len_exp = co_await conn.recv_all(len_span);
+
+                if(!len_exp || len_exp.value() != sizeof(uint32_t)) {
+                    co_return hce::unexpected(
+                        len_exp ? std::make_error_code(std::errc::connection_reset)
+                                : len_exp.error());
+                }
+
+                const uint32_t len = ntohl(len_be);
+                if(len > max_payload) {
+                    co_return hce::unexpected(std::make_error_code(std::errc::message_size));
+                }
+
+                std::string b64(len, '\0');
+                auto b64_span = std::as_writable_bytes(std::span(b64.data(), b64.size()));
+                auto payload_exp = co_await conn.recv_all(b64_span);
+
+                if(!payload_exp || payload_exp.value() != len) {
+                    co_return hce::unexpected(
+                        payload_exp ? std::make_error_code(std::errc::connection_reset)
+                                    : payload_exp.error());
+                }
+
+                auto decoded = hce::base64::decode_to<CharT, Traits, Allocator>(b64);
+                if(!decoded) {
+                    co_return hce::unexpected(decoded.error());
+                }
+
+                co_return std::move(decoded.value());
             }
 
-            hce::co<std::error_code>
-            send(hce::network::connection& conn, std::vector<STRING> msg) 
-            {
-                //TODO
+            hce::co<std::error_code> send(connection& conn, STRING msg) {
+                auto b64 = hce::base64::encode(msg);
+                if(b64.size() > max_payload) {
+                    co_return std::make_error_code(std::errc::message_size);
+                }
+
+                const uint32_t len = static_cast<uint32_t>(b64.size());
+                const uint32_t len_be = htonl(len);
+                auto len_span = std::as_bytes(std::span(&len_be, 1));
+
+                if(auto ec = co_await conn.send_all(len_span)) {
+                    co_return ec;
+                }
+
+                auto b64_span = std::as_bytes(std::span(b64.data(), b64.size()));
+                co_return co_await conn.send_all(b64_span);
             }
         };
     };
 
     /**
-     @brief pump data between a connection and inbound/outbound channels over some protocol
+     @brief abstracts data transfer over a connection using a protocol and handling of errors
      */
-    template<typename T>
-    static hce::co<void> pump(
-        hce::network::protocol<T>& proto,
-        hce::network::connection conn,
-        hce::chan<T> inbound,  // connection -> user
-        hce::chan<T> outbound) // user -> connection
-    {
-        // Two concurrent directions.
-        auto reader = [&]() -> hce::co<void> {
-            while(conn.valid()) {
-                auto msg = co_await hce::schedule(proto.recv(conn));
+    struct pump {
+        /**
+         @brief track the state of the pump operations
+         */
+        struct state {
+            /**
+             @brief the resulting state of some pump operation
+             
+             If has_value(), contains the error_code the connection ended on, 
+             else, the channel was closed.
+             */
+            using result = std::optional<std::error_code>;
 
-                if(!msg) { 
-                    break; // error or clean EOF
-                }
+            state();
+            state(const state&) = delete;
+            state(state&&);
 
-                if(!co_await inbound.send(std::move(msg.value()))) {
-                    break; // user closed the channel 
-                }
-            }
+            /// closes in & out channels
+            ~state();
 
-            conn.shutdown_read();
-            inbound.close();
-            co_return;
+            state& operator=(const state&) = delete;
+            state& operator=(state&&);
+
+            /// The awaitable to join with the pump coroutine
+            hce::awt<void> awt; 
+
+            /// buffered channel containing the state of the input pump operation
+            hce::chan<result> in; 
+
+            /// buffered channel containing the state of the output pump operation
+            hce::chan<result> out;
         };
 
-        auto writer = [&]() -> hce::co<void> {
-            T msg;
+        /**
+         @brief launch operations to pump data between a connection and inbound/outbound channels over some protocol 
+         */
+        template<typename T>
+        static state launch(
+            hce::network::protocol<T>& proto,
+            hce::network::connection conn,
+            hce::chan<T> inbound,  // connection -> user
+            hce::chan<T> outbound) // user -> connection
+        {
+            state st;
+            st.awt = hce::schedule(
+                pump::operation<T>(
+                    proto,
+                    std::move(conn),
+                    std::move(inbound),
+                    st.in,
+                    std::move(outbound),
+                    st.out));
 
-            while(co_await outbound.recv(msg)) {
-                if(auto ec = co_await hce::schedule(proto.send(conn, std::move(msg)))) {
-                    break;
+            return st;
+        }
+
+    private:
+        template<typename T>
+        static hce::co<void> operation(
+            hce::network::protocol<T>& proto,
+            hce::network::connection conn,
+            hce::chan<T> inbound,  
+            hce::chan<state::result> inresult,
+            hce::chan<T> outbound,
+            hce::chan<state::result> outresult)
+        {
+            // Two concurrent directions.
+            auto reader = [&]() -> hce::co<void> {
+                state::result res;
+
+                while(conn.valid()) {
+                    auto msg = co_await hce::schedule(proto.recv(conn));
+
+                    if(!msg) { 
+                        res = msg.error();
+                        co_await inresult.send(res);
+                        break; // error or clean EOF
+                    }
+
+                    if(!co_await inbound.send(std::move(msg.value()))) {
+                        break; // user closed the channel 
+                    }
                 }
-            }
 
-            conn.shutdown_write();
-            outbound.close();
+                if(!res) {
+                    co_await inresult.send(res);
+                }
+
+                conn.shutdown_read();
+                inbound.close();
+                co_return;
+            };
+
+            auto writer = [&]() -> hce::co<void> {
+                T msg;
+                state::result res;
+
+                while(co_await outbound.recv(msg)) {
+                    if(auto ec = co_await hce::schedule(proto.send(conn, std::move(msg)))) {
+                        res = ec;
+                        co_await outresult.send(res);
+                        break;
+                    }
+                }
+
+                if(!res) {
+                    co_await outresult.send(res);
+                }
+
+                conn.shutdown_write();
+                outbound.close();
+                co_return;
+            };
+
+            auto reader_awt = hce::schedule(reader());
+            auto writer_awt = hce::schedule(writer());
+            co_await std::move(reader_awt);
+            co_await std::move(writer_awt);
+            conn.close();
             co_return;
-        };
-
-        auto reader_awt = hce::schedule(reader());
-        auto writer_awt = hce::schedule(writer());
-        co_await std::move(reader_awt);
-        co_await std::move(writer_awt);
-        conn.close();
-    }
+        }
+    };
 
     network(const network&) = delete;
     network(network&&) = delete;
