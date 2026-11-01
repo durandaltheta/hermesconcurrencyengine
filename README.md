@@ -836,23 +836,47 @@ struct line_protocol : hce::network::protocol<std::string> {
 
 ### The `pump` helper
 
-Once you have a protocol, you often want to move messages between a connection and the rest of your application without manually writing the read/write loops. `hce::network::pump` does exactly that:
+Once you have a protocol, you often want to move messages between a connection and the rest of your application without manually writing the read/write loops. `hce::network::pump` does exactly that.
 
 ```cpp
-template<typename T>
-static hce::co<void> hce::network::pump(
-    hce::network::protocol<T>& proto,
-    hce::network::connection conn,
-    hce::chan<T> inbound,   // connection → user
-    hce::chan<T> outbound)  // user → connection
+struct hce::network::pump {
+    struct state {
+        using result = std::optional<std::error_code>;
+
+        /// Awaitable that completes when both directions have finished.
+        hce::awt<void> awt;
+
+        /// Result of the inbound (connection → user) direction.
+        /// Empty optional means the channel was closed cleanly;
+        /// a value means the connection ended with that error_code.
+        hce::chan<result> in;
+
+        /// Result of the outbound (user → connection) direction.
+        hce::chan<result> out;
+    };
+
+    /// Launch a bidirectional pump.
+    ///
+    /// The protocol object must remain alive for the lifetime of the pump
+    /// (until `state.awt` completes). The connection is moved in and closed
+    /// when both directions finish.
+    template<typename T>
+    static state launch(
+        hce::network::protocol<T>& proto,
+        hce::network::connection conn,
+        hce::chan<T> inbound,   // connection → user
+        hce::chan<T> outbound); // user → connection
+};
 ```
 
-It launches two concurrent directions:
+`launch` starts two concurrent directions and returns a `state` you can use to join and observe the outcome:
 
 - **Reader** — repeatedly calls `proto.recv(conn)` and sends each complete message into the `inbound` channel. Stops on error, EOF, or when the channel is closed.
 - **Writer** — receives messages from the `outbound` channel and calls `proto.send(conn, msg)`. Stops when the channel is closed or a send fails.
 
-When both directions finish, the connection is closed. Half-closes (`shutdown_read` / `shutdown_write`) are performed as each direction ends so the peer can observe the shutdown cleanly.
+When a direction ends it performs the corresponding half-close (`shutdown_read` / `shutdown_write`) so the peer can observe a clean shutdown. When both directions finish, the connection is fully closed.
+
+The `in` and `out` channels in `state` report why each direction stopped. An empty `std::optional` means the corresponding channel was closed by the user; a value means the connection ended with that error.
 
 #### Example: pumping a length-prefixed connection into channels
 
@@ -860,26 +884,104 @@ When both directions finish, the connection is closed. Half-closes (`shutdown_re
 hce::co<void> handle_client(hce::network::connection conn) {
     auto inbound  = hce::chan<std::vector<std::byte>>::make();
     auto outbound = hce::chan<std::vector<std::byte>>::make();
-    hce::network::length_prefixed proto;
+    hce::network::length_prefixed::byte proto;
 
     // Pump runs in the background; we talk only to the channels.
-    auto pump_awt = hce::schedule(
-        hce::network::pump<std::vector<std::byte>>(
-            proto, std::move(conn), inbound, outbound));
+    auto state = hce::network::pump::launch<std::vector<std::byte>>(
+        proto, std::move(conn), inbound, outbound);
 
     // Application logic talks to channels only.
     std::vector<std::byte> msg;
-    while (co_await inbound.recv(msg)) {
+    while(co_await inbound.recv(msg)) {
         // process msg, possibly reply
-        co_await outbound.send(/* response */);
+        if (!co_await outbound.send(/* response */)) {
+            break;
+        }
     }
 
     outbound.close();
-    co_await std::move(pump_awt);
+    co_await std::move(state.awt);
 }
 ```
 
-This pattern keeps protocol framing and connection lifetime management separate from application logic. The same channels can be used from multiple coroutines, combined with other `hce` primitives (`select`, timeouts, etc.), or forwarded to other services.
+This pattern keeps protocol framing and connection lifetime management separate from application logic. The same channels can be used from multiple coroutines, combined with other `hce` primitives (timeouts, etc.), or forwarded to other services. The protocol object must outlive the pump (it is taken by reference).
+
+#### Example: length-prefixed base64 echo 
+The base64 protocol frames strings by first base64-encoding them, then applying a length prefix to the encoded form. The length on the wire is the size of the base64 data, not the original string.
+```cpp 
+hce::co<void> handle_client(hce::network::connection conn) {
+    hce::network::length_prefixed::base64<> proto;
+
+    while(conn.valid()) {
+        auto msg_exp = co_await hce::schedule(proto.recv(conn));
+
+        if(!msg_exp) {
+            // clean close, truncation, or decode failure
+            break;
+        }
+
+        // Echo the original string back.
+        if(auto ec = co_await hce::schedule(
+                proto.send(conn, std::move(msg_exp.value())))) {
+            break;
+        }
+    }
+
+    conn.close();
+}
+```
+
+Client side:
+```cpp
+hce::co<void> client() {
+    auto& net = hce::service<hce::network>::get();
+    auto conn_exp = co_await net.connect({.host = "127.0.0.1", .port = 8080});
+
+    if(!conn_exp) {
+        co_return;
+    }
+
+    auto conn = std::move(conn_exp.value());
+    hce::network::length_prefixed::base64<> proto;
+
+    std::string payload = "Hello, base64-framed world!";
+
+    if(auto ec = co_await hce::schedule(proto.send(conn, payload))) {
+        // handle error
+        co_return;
+    }
+
+    auto reply = co_await hce::schedule(proto.recv(conn));
+
+    if(reply) {
+        // reply.value() == payload
+    }
+}
+```
+
+The same protocol works with the pump (channels carry `std::string`):
+```cpp
+auto inbound  = hce::chan<std::string>::make();
+auto outbound = hce::chan<std::string>::make();
+hce::network::length_prefixed::base64<> proto;
+
+auto state = hce::network::pump::launch<std::string>(
+    proto, std::move(conn), inbound, outbound);
+
+std::string msg;
+
+while(co_await inbound.recv(msg)) {
+    co_await outbound.send(std::move(msg));  // echo
+}
+
+outbound.close();
+co_await std::move(state.awt);
+```
+
+##### Notes:
+- The length prefix is the size of the base64 encoding (so a 16 MiB max_payload limit applies after the ~4/3 expansion).
+- Decode failures (invalid base64 on the wire) surface as an error from recv.
+- The default instantiation (base64<>) uses std::string; the template parameters let you use other std::basic_string specializations if needed.
 
 ### Summary
 
@@ -887,8 +989,8 @@ This pattern keeps protocol framing and connection lifetime management separate 
 |-------|----------------|---------------|
 | Socket / epoll backend | Non-blocking readiness, thread affinity | internal |
 | `connection` | Byte stream I/O (`send`/`recv`/`send_all`/`recv_all`) | `connection` |
-| `protocol<T>` | Framing + serialization into application messages | `length_prefixed`, user-defined |
-| `pump` | Bidirectional message shuttle between connection and channels | — |
+| `protocol<T>` | Framing + serialization into application messages | `length_prefixed::byte`, `length_prefixed::base64`, user-defined |
+| `pump` | Bidirectional message shuttle between connection and channels | `pump::state` |
 | Application | Business logic | channels, coroutines |
 
 Protocols are optional. You can stay at the byte level forever if that matches your protocol (e.g. raw UDP datagrams, or a custom binary format you prefer to parse yourself). When you want message-oriented communication, implement (or reuse) a `protocol<T>` and, if desired, let `pump` move the messages for you.
