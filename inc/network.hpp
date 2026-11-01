@@ -308,20 +308,26 @@ struct network : public hce::service<network>, public hce::printable {
             /**
              @brief the resulting state of some pump operation
              
-             If has_value(), contains the error_code the connection ended on, 
-             else, the channel was closed.
+             If has_value() == true, contains the error_code the connection 
+             ended on.
+
+             An error_code does not necessarily mean an error occurred, only 
+             that side of the pump operation ended due to the connection closed.
+
+             If has_value() == false, then that side of the pump operation ended 
+             due to that channel being closed early.
              */
             using result = std::optional<std::error_code>;
 
             state();
             state(const state&) = delete;
-            state(state&&);
+            state(state&&) = default;
 
             /// closes in & out channels
             ~state();
 
             state& operator=(const state&) = delete;
-            state& operator=(state&&);
+            state& operator=(state&&) = default;
 
             /// The awaitable to join with the pump coroutine
             hce::awt<void> awt; 

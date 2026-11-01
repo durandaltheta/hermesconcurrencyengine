@@ -837,19 +837,5 @@ network::pump::state::~state() {
     out.close();
 }
 
-network::pump::state::state(network::pump::state&& rhs) {
-    awt = std::move(rhs.awt);
-    in = std::move(rhs.in);
-    out = std::move(rhs.out);
-}
-            
-network::pump::state& hce::network::pump::state::operator=(
-        hce::network::pump::state&& rhs) {
-    awt = std::move(rhs.awt);
-    in = std::move(rhs.in);
-    out = std::move(rhs.out);
-    return *this;
-}
-
 } // hce
 
