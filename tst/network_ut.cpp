@@ -1,6 +1,16 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis
 
+#include <atomic>
+#include <cstring>
+#include <span>
+#include <string>
+#include <vector>
+
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include <gtest/gtest.h>
 
 #include "network.hpp"
@@ -8,17 +18,7 @@
 #include "coroutine.hpp"
 #include "service.hpp"
 #include "test_helpers.hpp"
-
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
-#include <atomic>
-#include <cstring>
-#include <span>
-#include <string>
-#include <vector>
+#include "codec/base64.hpp"
 
 namespace test::network {
 
@@ -529,7 +529,7 @@ namespace {
 
 hce::co<void> lp_echo_once(hce::network::acceptor acc,
                            test::queue<std::string>& status) {
-    hce::network::length_prefixed len_pref;
+    hce::network::length_prefixed::byte len_pref;
     auto conn_exp = co_await acc.accept();
 
     if(!conn_exp) {
@@ -558,7 +558,7 @@ hce::co<void> lp_client(hce::network::address addr,
                         std::vector<std::byte> payload,
                         test::queue<std::string>& status) {
     auto& net = hce::service<hce::network>::get();
-    hce::network::length_prefixed len_pref;
+    hce::network::length_prefixed::byte len_pref;
     auto conn_exp = co_await net.connect(addr);
 
     if(!conn_exp) {
@@ -604,15 +604,14 @@ hce::co<void> pump_echo_once(hce::network::acceptor acc,
 
     auto inbound  = hce::chan<std::vector<std::byte>>::make();
     auto outbound = hce::chan<std::vector<std::byte>>::make();
-    hce::network::length_prefixed len_pref;
+    hce::network::length_prefixed::byte len_pref;
 
     // Pump runs until both directions finish.
-    auto pump = hce::schedule(
-        hce::network::pump<std::vector<std::byte>>(
+    auto state = hce::network::pump::launch<std::vector<std::byte>>(
             len_pref,
             std::move(conn), 
             inbound, 
-            outbound));
+            outbound);
 
     std::vector<std::byte> msg;
 
@@ -628,7 +627,7 @@ hce::co<void> pump_echo_once(hce::network::acceptor acc,
 
     // Close our side so the pump can finish.
     outbound.close();
-    co_await std::move(pump);
+    co_await std::move(state.awt);
     status.push("ok");
 }
 
@@ -646,14 +645,13 @@ hce::co<void> pump_client(hce::network::address addr,
     auto conn = std::move(conn_exp.value());
     auto inbound  = hce::chan<std::vector<std::byte>>::make();
     auto outbound = hce::chan<std::vector<std::byte>>::make();
-    hce::network::length_prefixed len_pref;
+    hce::network::length_prefixed::byte len_pref;
 
-    auto pump = hce::schedule(
-        hce::network::pump<std::vector<std::byte>>(
+    auto state = hce::network::pump::launch<std::vector<std::byte>>(
             len_pref,
             std::move(conn), 
             inbound, 
-            outbound));
+            outbound);
 
     if(!co_await outbound.send(payload)) {
         status.push("outbound send failed");
@@ -674,13 +672,13 @@ hce::co<void> pump_client(hce::network::address addr,
         co_return;
     }
 
-    co_await std::move(pump);
+    co_await std::move(state.awt);
     status.push("ok");
 }
 
 } // anonymous
 
-TEST(network, length_prefixed_echo) {
+TEST(network, length_prefixed_byte_echo) {
     auto& net = hce::service<hce::network>::get();
     auto acc_exp = net.listen({"127.0.0.1", 0});
     ASSERT_TRUE(acc_exp) << acc_exp.error().message();
@@ -705,7 +703,7 @@ TEST(network, length_prefixed_echo) {
     (void)client_awt;
 }
 
-TEST(network, length_prefixed_pump_echo) {
+TEST(network, length_prefixed_byte_pump_echo) {
     auto& net = hce::service<hce::network>::get();
     auto acc_exp = net.listen({"127.0.0.1", 0});
     ASSERT_TRUE(acc_exp) << acc_exp.error().message();
@@ -726,6 +724,463 @@ TEST(network, length_prefixed_pump_echo) {
     EXPECT_EQ(server_status.pop(), "ok");
     EXPECT_EQ(client_status.pop(), "ok");
 
+    (void)server_awt;
+    (void)client_awt;
+}
+
+// ---------------------------------------------------------------------------
+// Additional helpers for length-prefixed protocols
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// Echo one message using length_prefixed::base64.
+hce::co<void> lp_base64_echo_once(hce::network::acceptor acc,
+                                  test::queue<std::string>& status) {
+    hce::network::length_prefixed::base64<> proto;
+    auto conn_exp = co_await acc.accept();
+    if(!conn_exp) {
+        status.push("accept failed: " + conn_exp.error().message());
+        co_return;
+    }
+
+    auto conn = std::move(conn_exp.value());
+    auto msg_exp = co_await hce::schedule(proto.recv(conn));
+    if(!msg_exp) {
+        status.push("recv failed: " + msg_exp.error().message());
+        co_return;
+    }
+
+    if(auto ec = co_await hce::schedule(proto.send(conn, std::move(msg_exp.value())))) {
+        status.push("send failed: " + ec.message());
+        co_return;
+    }
+
+    conn.close();
+    status.push("ok");
+}
+
+/// Client that sends a string via length_prefixed::base64 and expects the echo.
+hce::co<void> lp_base64_client(hce::network::address addr,
+                               std::string payload,
+                               test::queue<std::string>& status) {
+    auto& net = hce::service<hce::network>::get();
+    hce::network::length_prefixed::base64<> proto;
+    auto conn_exp = co_await net.connect(addr);
+    if(!conn_exp) {
+        status.push("connect failed: " + conn_exp.error().message());
+        co_return;
+    }
+
+    auto conn = std::move(conn_exp.value());
+
+    if(auto ec = co_await hce::schedule(proto.send(conn, payload))) {
+        status.push("send failed: " + ec.message());
+        co_return;
+    }
+
+    auto msg_exp = co_await hce::schedule(proto.recv(conn));
+    if(!msg_exp) {
+        status.push("recv failed: " + msg_exp.error().message());
+        co_return;
+    }
+
+    if(msg_exp.value() != payload) {
+        status.push("payload mismatch");
+        co_return;
+    }
+
+    conn.close();
+    status.push("ok");
+}
+
+/// Pump-based echo using length_prefixed::base64.
+hce::co<void> pump_base64_echo_once(hce::network::acceptor acc,
+                                    test::queue<std::string>& status) {
+    auto conn_exp = co_await acc.accept();
+    if(!conn_exp) {
+        status.push("accept failed: " + conn_exp.error().message());
+        co_return;
+    }
+
+    auto conn = std::move(conn_exp.value());
+    auto inbound  = hce::chan<std::string>::make();
+    auto outbound = hce::chan<std::string>::make();
+    hce::network::length_prefixed::base64<> proto;
+
+    auto state = hce::network::pump::launch<std::string>(
+        proto, std::move(conn), inbound, outbound);
+
+    std::string msg;
+    if(!co_await inbound.recv(msg)) {
+        status.push("inbound closed early");
+        co_return;
+    }
+
+    if(!co_await outbound.send(std::move(msg))) {
+        status.push("outbound send failed");
+        co_return;
+    }
+
+    outbound.close();
+    co_await std::move(state.awt);
+    status.push("ok");
+}
+
+hce::co<void> pump_base64_client(hce::network::address addr,
+                                 std::string payload,
+                                 test::queue<std::string>& status) {
+    auto& net = hce::service<hce::network>::get();
+    auto conn_exp = co_await net.connect(addr);
+    if(!conn_exp) {
+        status.push("connect failed: " + conn_exp.error().message());
+        co_return;
+    }
+
+    auto conn = std::move(conn_exp.value());
+    auto inbound  = hce::chan<std::string>::make();
+    auto outbound = hce::chan<std::string>::make();
+    hce::network::length_prefixed::base64<> proto;
+
+    auto state = hce::network::pump::launch<std::string>(
+        proto, std::move(conn), inbound, outbound);
+
+    if(!co_await outbound.send(payload)) {
+        status.push("outbound send failed");
+        co_return;
+    }
+    outbound.close();
+
+    std::string echoed;
+    if(!co_await inbound.recv(echoed)) {
+        status.push("inbound closed early");
+        co_return;
+    }
+
+    if(echoed != payload) {
+        status.push("payload mismatch");
+        co_return;
+    }
+
+    co_await std::move(state.awt);
+    status.push("ok");
+}
+
+} // anonymous
+
+// ---------------------------------------------------------------------------
+// length_prefixed::byte additional tests
+// ---------------------------------------------------------------------------
+
+TEST(network, length_prefixed_byte_empty_payload) {
+    auto& net = hce::service<hce::network>::get();
+    auto acc_exp = net.listen({"127.0.0.1", 0});
+    ASSERT_TRUE(acc_exp);
+    auto acc = std::move(acc_exp.value());
+    const uint16_t port = test::network::get_local_port(acc);
+    ASSERT_GT(port, 0);
+
+    test::queue<std::string> server_status, client_status;
+    std::vector<std::byte> empty;
+
+    auto server_awt = hce::schedule(lp_echo_once(std::move(acc), server_status));
+    auto client_awt = hce::schedule(lp_client({"127.0.0.1", port}, empty, client_status));
+
+    EXPECT_EQ(server_status.pop(), "ok");
+    EXPECT_EQ(client_status.pop(), "ok");
+    (void)server_awt;
+    (void)client_awt;
+}
+
+TEST(network, length_prefixed_byte_multiple_messages) {
+    auto& net = hce::service<hce::network>::get();
+    auto acc_exp = net.listen({"127.0.0.1", 0});
+    ASSERT_TRUE(acc_exp);
+    auto acc = std::move(acc_exp.value());
+    const uint16_t port = test::network::get_local_port(acc);
+    ASSERT_GT(port, 0);
+
+    test::queue<std::string> server_status, client_status;
+
+    auto server = [](hce::network::acceptor acc,
+                     test::queue<std::string>& status) -> hce::co<void> {
+        hce::network::length_prefixed::byte proto;
+        auto conn_exp = co_await acc.accept();
+        if(!conn_exp) {
+            status.push("accept failed");
+            co_return;
+        }
+        auto conn = std::move(conn_exp.value());
+
+        for(int i = 0; i < 3; ++i) {
+            auto msg_exp = co_await hce::schedule(proto.recv(conn));
+            if(!msg_exp) {
+                status.push("recv failed");
+                co_return;
+            }
+            if(auto ec = co_await hce::schedule(proto.send(conn, std::move(msg_exp.value())))) {
+                status.push("send failed");
+                co_return;
+            }
+        }
+        conn.close();
+        status.push("ok");
+    };
+
+    auto client = [](hce::network::address addr,
+                     test::queue<std::string>& status) -> hce::co<void> {
+        auto& net = hce::service<hce::network>::get();
+        hce::network::length_prefixed::byte proto;
+        auto conn_exp = co_await net.connect(addr);
+        if(!conn_exp) {
+            status.push("connect failed");
+            co_return;
+        }
+        auto conn = std::move(conn_exp.value());
+
+        const std::vector<std::string> payloads = {"one", "two", "three"};
+        for(const auto& p : payloads) {
+            std::vector<std::byte> msg(p.size());
+            std::memcpy(msg.data(), p.data(), p.size());
+
+            if(auto ec = co_await hce::schedule(proto.send(conn, msg))) {
+                status.push("send failed");
+                co_return;
+            }
+            auto recv_exp = co_await hce::schedule(proto.recv(conn));
+            if(!recv_exp || recv_exp.value() != msg) {
+                status.push("mismatch");
+                co_return;
+            }
+        }
+        conn.close();
+        status.push("ok");
+    };
+
+    auto server_awt = hce::schedule(server(std::move(acc), server_status));
+    auto client_awt = hce::schedule(client({"127.0.0.1", port}, client_status));
+
+    EXPECT_EQ(server_status.pop(), "ok");
+    EXPECT_EQ(client_status.pop(), "ok");
+    (void)server_awt;
+    (void)client_awt;
+}
+
+TEST(network, length_prefixed_byte_oversized_rejected) {
+    auto& net = hce::service<hce::network>::get();
+    auto acc_exp = net.listen({"127.0.0.1", 0});
+    ASSERT_TRUE(acc_exp);
+    auto acc = std::move(acc_exp.value());
+    const uint16_t port = test::network::get_local_port(acc);
+    ASSERT_GT(port, 0);
+
+    test::queue<std::string> server_status, client_status;
+
+    auto server = [](hce::network::acceptor acc,
+                     test::queue<std::string>& status) -> hce::co<void> {
+        hce::network::length_prefixed::byte proto;
+        auto conn_exp = co_await acc.accept();
+        if(!conn_exp) {
+            status.push("accept failed");
+            co_return;
+        }
+        auto conn = std::move(conn_exp.value());
+
+        auto msg_exp = co_await hce::schedule(proto.recv(conn));
+        if(msg_exp) {
+            status.push("unexpected success");
+        } else if(msg_exp.error() == std::errc::message_size) {
+            status.push("ok");
+        } else {
+            status.push("wrong error: " + msg_exp.error().message());
+        }
+        conn.close();
+    };
+
+    auto client = [](hce::network::address addr,
+                     test::queue<std::string>& status) -> hce::co<void> {
+        auto& net = hce::service<hce::network>::get();
+        auto conn_exp = co_await net.connect(addr);
+        if(!conn_exp) {
+            status.push("connect failed");
+            co_return;
+        }
+        auto conn = std::move(conn_exp.value());
+
+        // Advertise a length just over the limit (do not send the body).
+        const uint32_t too_big = static_cast<uint32_t>(
+            hce::network::length_prefixed::byte::max_payload + 1);
+        const uint32_t len_be = htonl(too_big);
+        auto len_span = std::as_bytes(std::span(&len_be, 1));
+        (void)co_await conn.send_all(len_span);
+
+        conn.close();
+        status.push("sent");
+    };
+
+    auto server_awt = hce::schedule(server(std::move(acc), server_status));
+    auto client_awt = hce::schedule(client({"127.0.0.1", port}, client_status));
+
+    EXPECT_EQ(server_status.pop(), "ok");
+    EXPECT_EQ(client_status.pop(), "sent");
+    (void)server_awt;
+    (void)client_awt;
+}
+
+// ---------------------------------------------------------------------------
+// length_prefixed::base64 network-level tests
+// ---------------------------------------------------------------------------
+
+TEST(network, length_prefixed_base64_echo) {
+    auto& net = hce::service<hce::network>::get();
+    auto acc_exp = net.listen({"127.0.0.1", 0});
+    ASSERT_TRUE(acc_exp);
+    auto acc = std::move(acc_exp.value());
+    const uint16_t port = test::network::get_local_port(acc);
+    ASSERT_GT(port, 0);
+
+    test::queue<std::string> server_status, client_status;
+    const std::string payload = "Hello, base64-framed world!";
+
+    auto server_awt = hce::schedule(lp_base64_echo_once(std::move(acc), server_status));
+    auto client_awt = hce::schedule(
+        lp_base64_client({"127.0.0.1", port}, payload, client_status));
+
+    EXPECT_EQ(server_status.pop(), "ok");
+    EXPECT_EQ(client_status.pop(), "ok");
+    (void)server_awt;
+    (void)client_awt;
+}
+
+TEST(network, length_prefixed_base64_empty) {
+    auto& net = hce::service<hce::network>::get();
+    auto acc_exp = net.listen({"127.0.0.1", 0});
+    ASSERT_TRUE(acc_exp);
+    auto acc = std::move(acc_exp.value());
+    const uint16_t port = test::network::get_local_port(acc);
+    ASSERT_GT(port, 0);
+
+    test::queue<std::string> server_status, client_status;
+
+    auto server_awt = hce::schedule(lp_base64_echo_once(std::move(acc), server_status));
+    auto client_awt = hce::schedule(
+        lp_base64_client({"127.0.0.1", port}, "", client_status));
+
+    EXPECT_EQ(server_status.pop(), "ok");
+    EXPECT_EQ(client_status.pop(), "ok");
+    (void)server_awt;
+    (void)client_awt;
+}
+
+TEST(network, length_prefixed_base64_pump_echo) {
+    auto& net = hce::service<hce::network>::get();
+    auto acc_exp = net.listen({"127.0.0.1", 0});
+    ASSERT_TRUE(acc_exp);
+    auto acc = std::move(acc_exp.value());
+    const uint16_t port = test::network::get_local_port(acc);
+    ASSERT_GT(port, 0);
+
+    test::queue<std::string> server_status, client_status;
+    const std::string payload = "pumped base64 payload";
+
+    auto server_awt = hce::schedule(pump_base64_echo_once(std::move(acc), server_status));
+    auto client_awt = hce::schedule(
+        pump_base64_client({"127.0.0.1", port}, payload, client_status));
+
+    EXPECT_EQ(server_status.pop(), "ok");
+    EXPECT_EQ(client_status.pop(), "ok");
+    (void)server_awt;
+    (void)client_awt;
+}
+
+TEST(network, length_prefixed_base64_invalid_on_wire) {
+    auto& net = hce::service<hce::network>::get();
+    auto acc_exp = net.listen({"127.0.0.1", 0});
+    ASSERT_TRUE(acc_exp);
+    auto acc = std::move(acc_exp.value());
+    const uint16_t port = test::network::get_local_port(acc);
+    ASSERT_GT(port, 0);
+
+    test::queue<std::string> server_status, client_status;
+
+    auto server = [](hce::network::acceptor acc,
+                     test::queue<std::string>& status) -> hce::co<void> {
+        hce::network::length_prefixed::base64<> proto;
+        auto conn_exp = co_await acc.accept();
+        if(!conn_exp) {
+            status.push("accept failed");
+            co_return;
+        }
+        auto conn = std::move(conn_exp.value());
+
+        auto msg_exp = co_await hce::schedule(proto.recv(conn));
+        if(msg_exp) {
+            status.push("unexpected success");
+        } else {
+            // decode failure should surface as an error_code
+            status.push("ok");
+        }
+        conn.close();
+    };
+
+    auto client = [](hce::network::address addr,
+                     test::queue<std::string>& status) -> hce::co<void> {
+        auto& net = hce::service<hce::network>::get();
+        auto conn_exp = co_await net.connect(addr);
+        if(!conn_exp) {
+            status.push("connect failed");
+            co_return;
+        }
+        auto conn = std::move(conn_exp.value());
+
+        // Length-prefixed invalid base64 ("@@@@" is invalid).
+        const std::string bad = "@@@@";
+        const uint32_t len_be = htonl(static_cast<uint32_t>(bad.size()));
+        auto len_span = std::as_bytes(std::span(&len_be, 1));
+        (void)co_await conn.send_all(len_span);
+
+        std::vector<std::byte> body(bad.size());
+        std::memcpy(body.data(), bad.data(), bad.size());
+        (void)co_await conn.send_all(std::span(body));
+
+        conn.close();
+        status.push("sent");
+    };
+
+    auto server_awt = hce::schedule(server(std::move(acc), server_status));
+    auto client_awt = hce::schedule(client({"127.0.0.1", port}, client_status));
+
+    EXPECT_EQ(server_status.pop(), "ok");
+    EXPECT_EQ(client_status.pop(), "sent");
+    (void)server_awt;
+    (void)client_awt;
+}
+
+TEST(network, length_prefixed_base64_binary_content) {
+    // base64 protocol is string-oriented, but the underlying codec handles
+    // arbitrary bytes. Round-trip a string that contains non-printable bytes
+    // after encoding/decoding.
+    auto& net = hce::service<hce::network>::get();
+    auto acc_exp = net.listen({"127.0.0.1", 0});
+    ASSERT_TRUE(acc_exp);
+    auto acc = std::move(acc_exp.value());
+    const uint16_t port = test::network::get_local_port(acc);
+    ASSERT_GT(port, 0);
+
+    test::queue<std::string> server_status, client_status;
+
+    // Build a string from raw bytes 0x00..0x0F
+    std::string payload(16, '\0');
+    for(size_t i = 0; i < payload.size(); ++i) {
+        payload[i] = static_cast<char>(i);
+    }
+
+    auto server_awt = hce::schedule(lp_base64_echo_once(std::move(acc), server_status));
+    auto client_awt = hce::schedule(
+        lp_base64_client({"127.0.0.1", port}, payload, client_status));
+
+    EXPECT_EQ(server_status.pop(), "ok");
+    EXPECT_EQ(client_status.pop(), "ok");
     (void)server_awt;
     (void)client_awt;
 }

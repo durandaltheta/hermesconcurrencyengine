@@ -7,6 +7,7 @@
 #include <netdb.h>
 
 namespace hce {
+namespace detail::network {
 
 // ---------------------------------------------------------------------------
 // Helpers — result objects that cross the resume boundary.
@@ -21,8 +22,10 @@ struct size_result {
 };
 
 struct connection_result {
-    hce::expected<network::connection, std::error_code> value;
+    hce::expected<hce::network::connection, std::error_code> value;
 };
+
+} 
 
 // ---------------------------------------------------------------------------
 // connection
@@ -102,7 +105,7 @@ struct send_awaitable :
             this,
             [](int, std::error_code ec, uint32_t, void* user) {
                 auto* self = static_cast<send_awaitable*>(user);
-                auto* r = new error_result;
+                auto* r = new detail::network::error_result;
                 r->ec = ec;
 
                 if(!ec) {
@@ -123,7 +126,7 @@ struct send_awaitable :
     }
 
     void on_resume(void* m) override {
-        auto* r = static_cast<error_result*>(m);
+        auto* r = static_cast<detail::network::error_result*>(m);
         result = r->ec;
         delete r;
         ready_ = true;
@@ -216,14 +219,14 @@ struct send_all_awaitable :
                 auto* self = static_cast<send_all_awaitable*>(user);
 
                 if(ec) {
-                    auto* r = new error_result;
+                    auto* r = new detail::network::error_result;
                     r->ec = ec;
                     self->resume(r);
                     return;
                 }
 
                 if(self->try_progress()) {
-                    auto* r = new error_result;
+                    auto* r = new detail::network::error_result;
                     r->ec = self->result;
                     self->resume(r);
                 } else {
@@ -234,7 +237,7 @@ struct send_all_awaitable :
     }
 
     void on_resume(void* m) override {
-        auto* r = static_cast<error_result*>(m);
+        auto* r = static_cast<detail::network::error_result*>(m);
         result = r->ec;
         delete r;
         ready_ = true;
@@ -292,7 +295,7 @@ struct recv_awaitable :
             this,
             [](int, std::error_code ec, uint32_t, void* user) {
                 auto* self = static_cast<recv_awaitable*>(user);
-                auto* r = new size_result;
+                auto* r = new detail::network::size_result;
                 if(ec) {
                     r->value = hce::unexpected(ec);
                 } else {
@@ -309,7 +312,7 @@ struct recv_awaitable :
     }
 
     void on_resume(void* m) override {
-        auto* r = static_cast<size_result*>(m);
+        auto* r = static_cast<detail::network::size_result*>(m);
         result = std::move(r->value);
         delete r;
         ready_ = true;
@@ -406,14 +409,14 @@ struct recv_all_awaitable :
                 auto* self = static_cast<recv_all_awaitable*>(user);
 
                 if(ec) {
-                    auto* r = new size_result;
+                    auto* r = new detail::network::size_result;
                     r->value = hce::unexpected(ec);
                     self->resume(r);
                     return;
                 }
 
                 if(self->try_progress()) {
-                    auto* r = new size_result;
+                    auto* r = new detail::network::size_result;
                     r->value = std::move(self->result);
                     self->resume(r);
                 } else {
@@ -423,7 +426,7 @@ struct recv_all_awaitable :
     }
 
     void on_resume(void* m) override {
-        auto* r = static_cast<size_result*>(m);
+        auto* r = static_cast<detail::network::size_result*>(m);
         result = std::move(r->value);
         delete r;
         ready_ = true;
@@ -512,7 +515,7 @@ struct accept_awaitable :
             this,
             [](int, std::error_code ec, uint32_t, void* user) {
                 auto* self = static_cast<accept_awaitable*>(user);
-                auto* r = new connection_result;
+                auto* r = new detail::network::connection_result;
                 if(ec) {
                     r->value = hce::unexpected(ec);
                 } else {
@@ -537,7 +540,7 @@ struct accept_awaitable :
     }
 
     void on_resume(void* m) override {
-        auto* r = static_cast<connection_result*>(m);
+        auto* r = static_cast<detail::network::connection_result*>(m);
         result = std::move(r->value);
         delete r;
         ready_ = true;
@@ -615,7 +618,7 @@ struct connect_awaitable :
 
         addrinfo hints{};
         hints.ai_family = AF_UNSPEC;
-        hints.ai_socktype = (addr.type == hce::network::address::type_e::udp)
+        hints.ai_socktype = (addr.type == network::address::type_e::udp)
             ? SOCK_DGRAM
             : SOCK_STREAM;
 
@@ -683,7 +686,7 @@ struct connect_awaitable :
             this,
             [](int fd, std::error_code ec, uint32_t, void* user) {
                 auto* self = static_cast<connect_awaitable*>(user);
-                auto* r = new connection_result;
+                auto* r = new detail::network::connection_result;
                 if(ec) {
                     r->value = hce::unexpected(ec);
                 } else {
@@ -702,7 +705,7 @@ struct connect_awaitable :
     }
 
     void on_resume(void* m) override {
-        auto* r = static_cast<connection_result*>(m);
+        auto* r = static_cast<detail::network::connection_result*>(m);
         result = std::move(r->value);
         delete r;
         ready_ = true;
@@ -771,10 +774,10 @@ hce::interface::network::backend& network::get_backend() {
     return backend;
 }
 
-hce::network::length_prefixed::~length_prefixed() { }
+network::length_prefixed::byte::~byte() { }
 
 hce::co<hce::expected<std::vector<std::byte>, std::error_code>>
-hce::network::length_prefixed::recv(hce::network::connection& conn) {
+network::length_prefixed::byte::recv(network::connection& conn) {
     uint32_t len_be = 0;
     auto len_span = std::as_writable_bytes(std::span(&len_be, 1));
     auto len_exp = co_await conn.recv_all(len_span);
@@ -805,8 +808,8 @@ hce::network::length_prefixed::recv(hce::network::connection& conn) {
 }
 
 hce::co<std::error_code>
-hce::network::length_prefixed::send(
-        hce::network::connection& conn, 
+network::length_prefixed::byte::send(
+        network::connection& conn, 
         std::vector<std::byte> msg) 
 {
     if(msg.size() > max_payload) {
@@ -822,6 +825,16 @@ hce::network::length_prefixed::send(
     }
 
     co_return co_await conn.send_all(msg);
+}
+
+network::pump::state::state():
+    in(hce::chan<state::result>::make(1)),
+    out(hce::chan<state::result>::make(1))
+{ }
+
+network::pump::state::~state() {
+    in.close();
+    out.close();
 }
 
 } // hce
