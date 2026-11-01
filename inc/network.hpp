@@ -199,8 +199,8 @@ struct network : public hce::service<network>, public hce::printable {
 
          It is included here as an optional helper.
 
-         Message layout: uint32_t length (network order) followed by that many payload bytes.
-         T is std::vector<std::byte>.
+         Message layout: uint32_t length (network order) followed by that many 
+         payload bytes.
          */
         struct byte : public protocol<std::vector<std::byte>> {
             static constexpr size_t max_payload = 16 * 1024 * 1024; ///< arbitrary safety limit
@@ -226,6 +226,9 @@ struct network : public hce::service<network>, public hce::printable {
 
          The input and output is compatible with std::string (an instantiation 
          of std::basic_string).
+
+         Message layout: uint32_t encoded base64 string length (network order) 
+         followed by that many payload bytes.
          */
         template<
             class CharT = char,  
