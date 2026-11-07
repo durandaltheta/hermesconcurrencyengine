@@ -47,6 +47,7 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/circular_buffer.hpp
     ${HCE_INCLUDE_DIR}/list.hpp
     ${HCE_INCLUDE_DIR}/timer.hpp 
+    ${HCE_INCLUDE_DIR}/transmit.hpp 
     ${HCE_INCLUDE_DIR}/codec/base64.hpp
     ${HCE_INCLUDE_DIR}/network/interface.hpp
     ${HCE_INCLUDE_DIR}/network/epoll_backend.hpp
@@ -81,6 +82,7 @@ set(HCE_SOURCE_FILES
     ${HCE_SOURCE_DIR}/network/socket.cpp
     ${HCE_SOURCE_DIR}/thread.cpp
     ${HCE_SOURCE_DIR}/threadpool.cpp
+    ${HCE_SOURCE_DIR}/transmit.cpp
     ${HCE_SOURCE_DIR}/service.cpp
     ${HCE_SOURCE_DIR}/lifecycle.cpp
     ${HCE_SOURCE_DIR}/module.cpp

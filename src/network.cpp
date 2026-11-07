@@ -142,6 +142,14 @@ struct send_awaitable :
     size_t bytes = 0;
 };
 
+std::string network::connection::info_name() {
+    return "hce::network::connection";
+}
+
+std::string network::connection::name() const {
+    return network::connection::info_name();
+}
+
 hce::awt<std::error_code>
 network::connection::send(std::span<const std::byte> data) {
     return hce::awt<std::error_code>(new send_awaitable(socket, data));
@@ -774,10 +782,10 @@ hce::interface::network::backend& network::get_backend() {
     return backend;
 }
 
-network::length_prefixed::byte::~byte() { }
+network::protocol::length_prefixed::byte::~byte() { }
 
 hce::co<hce::expected<std::vector<std::byte>, std::error_code>>
-network::length_prefixed::byte::recv(network::connection& conn) {
+network::protocol::length_prefixed::byte::recv(hce::transmit::connection& conn) {
     uint32_t len_be = 0;
     auto len_span = std::as_writable_bytes(std::span(&len_be, 1));
     auto len_exp = co_await conn.recv_all(len_span);
@@ -808,8 +816,8 @@ network::length_prefixed::byte::recv(network::connection& conn) {
 }
 
 hce::co<std::error_code>
-network::length_prefixed::byte::send(
-        network::connection& conn, 
+network::protocol::length_prefixed::byte::send(
+        hce::transmit::connection& conn, 
         std::vector<std::byte> msg) 
 {
     if(msg.size() > max_payload) {
@@ -825,16 +833,6 @@ network::length_prefixed::byte::send(
     }
 
     co_return co_await conn.send_all(msg);
-}
-
-network::pump::state::state():
-    in(hce::chan<state::result>::make(1)),
-    out(hce::chan<state::result>::make(1))
-{ }
-
-network::pump::state::~state() {
-    in.close();
-    out.close();
 }
 
 } // hce
