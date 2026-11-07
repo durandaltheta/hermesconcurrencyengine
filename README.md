@@ -698,20 +698,22 @@ Raw `send`/`recv` give you bytes. Most real applications need *messages* — dis
 
 The networking service provides a small, optional **protocol** abstraction for this purpose. A protocol is a type that knows how to read one complete message from a connection and write one complete message to a connection. It sits on top of the byte-oriented `connection` API and is free to call `recv`/`recv_all`/`send`/`send_all` (or any other connection methods) as needed.
 
+`hce::transmit::protocol` is part of `transmit.hpp`, included by default in `network.hpp`.
+
 ### The `protocol` interface
 
 ```cpp
-template<typename T>
-struct hce::network::protocol {
+template<typename RECV_T, typename SEND_T = RECV_T>
+struct hce::transmit::protocol {
     virtual ~protocol() {}
 
     // Read one complete message. May call recv/recv_all internally.
-    virtual hce::co<hce::expected<T, std::error_code>>
+    virtual hce::co<hce::expected<RECV_T, std::error_code>>
     recv(hce::network::connection& conn) = 0;
 
     // Write one complete message. May call send/send_all internally.
     virtual hce::co<std::error_code>
-    send(hce::network::connection& conn, T msg) = 0;
+    send(hce::network::connection& conn, SEND_T msg) = 0;
 };
 ```
 
@@ -724,7 +726,7 @@ Protocols are ordinary C++ types. You can use the supplied helpers or write your
 A common and simple framing scheme is a fixed-size length prefix followed by that many payload bytes. The library includes a ready-to-use implementation for binary blobs:
 
 ```cpp
-struct hce::network::length_prefixed
+struct hce::network::protocol::length_prefixed::byte
     : public hce::network::protocol<std::vector<std::byte>>
 {
     static constexpr size_t max_payload = 16 * 1024 * 1024; // safety limit
@@ -752,7 +754,7 @@ struct hce::network::length_prefixed
 
 ```cpp
 hce::co<void> handle_client(hce::network::connection conn) {
-    hce::network::length_prefixed proto;
+    hce::network::protocol::length_prefixed::byte proto;
 
     while (conn.valid()) {
         auto msg_exp = co_await hce::schedule(proto.recv(conn));
@@ -780,7 +782,7 @@ hce::co<void> client() {
     if (!conn_exp) co_return;
 
     auto conn = std::move(conn_exp.value());
-    hce::network::length_prefixed proto;
+    hce::network::protocol::length_prefixed::byte proto;
 
     std::vector<std::byte> payload{/* ... */};
     if (auto ec = co_await hce::schedule(proto.send(conn, payload))) {
@@ -803,7 +805,7 @@ Any type that implements the two methods above is a valid protocol. Common patte
 - **Length-prefixed with a different integer size or endianness**.
 - **Serialized objects** — length prefix + FlatBuffers / custom binary / etc., returning your domain type instead of `std::vector<std::byte>`.
 
-A minimal line-based example (illustrative):
+A minimal line-based example (illustrative, there's already a `hce::network::protocol::length_prefixed::base64`):
 
 ```cpp
 struct line_protocol : hce::network::protocol<std::string> {
@@ -836,10 +838,10 @@ struct line_protocol : hce::network::protocol<std::string> {
 
 ### The `pump` helper
 
-Once you have a protocol, you often want to move messages between a connection and the rest of your application without manually writing the read/write loops. `hce::network::pump` does exactly that.
+Once you have a protocol, you often want to move messages between a connection and the rest of your application without manually writing the read/write loops. `hce::transmit::pump` does exactly that (included in `transmit.hpp`, included by default in `network.hpp`).
 
 ```cpp
-struct hce::network::pump {
+struct hce::transmit::pump {
     struct state {
         using result = std::optional<std::error_code>;
 
@@ -863,7 +865,7 @@ struct hce::network::pump {
     template<typename T>
     static state launch(
         hce::network::protocol<T>& proto,
-        hce::network::connection conn,
+        hce::network::connection& conn,
         hce::chan<T> inbound,   // connection -> user
         hce::chan<T> outbound); // user -> connection
 };
@@ -884,11 +886,11 @@ The `in` and `out` channels in `state` report why each direction stopped. An emp
 hce::co<void> handle_client(hce::network::connection conn) {
     auto inbound  = hce::chan<std::vector<std::byte>>::make();
     auto outbound = hce::chan<std::vector<std::byte>>::make();
-    hce::network::length_prefixed::byte proto;
+    hce::network::protocol::length_prefixed::byte proto;
 
     // Pump runs in the background; we talk only to the channels.
-    auto state = hce::network::pump::launch<std::vector<std::byte>>(
-        proto, std::move(conn), inbound, outbound);
+    auto state = hce::transmit::pump::launch<std::vector<std::byte>>(
+        proto, conn, inbound, outbound);
 
     // Application logic talks to channels only.
     std::vector<std::byte> msg;
@@ -910,7 +912,7 @@ This pattern keeps protocol framing and connection lifetime management separate 
 The base64 protocol frames strings by first base64-encoding them, then applying a length prefix to the encoded form. The length on the wire is the size of the base64 data, not the original string.
 ```cpp 
 hce::co<void> handle_client(hce::network::connection conn) {
-    hce::network::length_prefixed::base64<> proto;
+    hce::network::protocol::length_prefixed::base64<> proto;
 
     while(conn.valid()) {
         auto msg_exp = co_await hce::schedule(proto.recv(conn));
@@ -942,7 +944,7 @@ hce::co<void> client() {
     }
 
     auto conn = std::move(conn_exp.value());
-    hce::network::length_prefixed::base64<> proto;
+    hce::network::protocol::length_prefixed::base64<> proto;
 
     std::string payload = "Hello, base64-framed world!";
 
@@ -963,10 +965,10 @@ The same protocol works with the pump (channels carry `std::string`):
 ```cpp
 auto inbound  = hce::chan<std::string>::make();
 auto outbound = hce::chan<std::string>::make();
-hce::network::length_prefixed::base64<> proto;
+hce::network::protocol::length_prefixed::base64<> proto;
 
-auto state = hce::network::pump::launch<std::string>(
-    proto, std::move(conn), inbound, outbound);
+auto state = hce::transmit::pump::launch<std::string>(
+    proto, conn, inbound, outbound);
 
 std::string msg;
 

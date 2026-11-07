@@ -66,14 +66,14 @@ struct network : public hce::service<network>, public hce::printable {
         static std::string info_name();
         std::string name() const;
 
-        hce::awt<std::error_code> send(std::span<const std::byte> data);
-        hce::awt<std::error_code> send_all(std::span<const std::byte> data);
-        hce::awt<hce::expected<size_t, std::error_code>> recv(std::span<std::byte> data);
-        hce::awt<hce::expected<size_t, std::error_code>> recv_all(std::span<std::byte> data);
-        void shutdown_read();
-        void shutdown_write();
-        void close();
-        bool valid() const;
+        hce::awt<std::error_code> send(std::span<const std::byte> data) override;
+        hce::awt<std::error_code> send_all(std::span<const std::byte> data) override;
+        hce::awt<hce::expected<size_t, std::error_code>> recv(std::span<std::byte> data) override;
+        hce::awt<hce::expected<size_t, std::error_code>> recv_all(std::span<std::byte> data) override;
+        void shutdown_read() override;
+        void shutdown_write() override;
+        void close() override;
+        bool valid() const override;
 
         /// return the socket via its interface
         hce::interface::network::socket& get_socket();
