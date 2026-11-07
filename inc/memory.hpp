@@ -11,6 +11,7 @@
  definitions.
  */
 
+#include <cstddef>
 #include <cstdlib>
 
 namespace hce {
@@ -21,17 +22,34 @@ namespace memory {
  @param size the size of the requested allocation
  @return an allocated pointer of at least `size` bytes
  */
-inline void* allocate(size_t size) {
-    return std::malloc(size);
-}
+void* allocate(std::size_t size);
 
 /**
  @brief deallocate an `memory::allocate()`d pointer of `size` bytes
  @param p the allocated pointer 
  */
-inline void deallocate(void* p) {
-    std::free(p);
-}
+void deallocate(void* p);
+
+/**
+ @brief operations here will attempt to use cached pools of memory 
+
+ hce::memory::pool::allocate() should be paired with
+ hce::memory::pool::deallocate().
+ */
+namespace pool {
+
+/**
+ @brief allocate a pointer of `size` bytes
+ @param size the size of the requested allocation
+ @return an allocated pointer of at least `size` bytes
+ */
+void* allocate(std::size_t size);
+
+/**
+ @brief deallocate an `memory::allocate()`d pointer of `size` bytes
+ @param p the allocated pointer 
+ */
+void deallocate(void* p);
 
 }
 }

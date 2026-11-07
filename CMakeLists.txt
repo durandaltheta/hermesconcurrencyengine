@@ -69,12 +69,13 @@ set(HCE_SOURCE_FILES
     ${LOGURU_DIR}/loguru.cpp
     ${HCE_SOURCE_DIR}/logging.cpp
     ${HCE_SOURCE_DIR}/cleanup.cpp
+    ${HCE_SOURCE_DIR}/codec/base64.cpp
     ${HCE_SOURCE_DIR}/coroutine.cpp
     ${HCE_SOURCE_DIR}/scheduler.cpp
     ${HCE_SOURCE_DIR}/blocking.cpp
     ${HCE_SOURCE_DIR}/synchronization.cpp
     ${HCE_SOURCE_DIR}/timer.cpp 
-    ${HCE_SOURCE_DIR}/codec/base64.cpp
+    ${HCE_SOURCE_DIR}/memory.cpp
     ${HCE_SOURCE_DIR}/network.cpp
     ${HCE_SOURCE_DIR}/network/interface.cpp
     ${HCE_SOURCE_DIR}/network/epoll_backend.cpp
