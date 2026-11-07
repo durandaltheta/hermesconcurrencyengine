@@ -441,7 +441,7 @@ struct pool_allocator : public printable {
         return std::numeric_limits<std::size_t>::max() / sizeof(T);
     }
    
-    /// allocate a block of memory the size of n*T
+    /// allocate a block of memory the size of n
     inline T* allocate(std::size_t n) {
         HCE_MIN_METHOD_ENTER("allocate", n);
         T* t;
@@ -452,7 +452,7 @@ struct pool_allocator : public printable {
             pool_.pop_back();
         } else [[unlikely]] { 
             // allocate memory if necessary
-            t = hce::allocate<T>(sizeof(T) * n);
+            t = hce::allocate<T>(n);
         }
 
         return t;

@@ -97,47 +97,12 @@ template <std::size_t MinExponent = 3,          // 8 bytes
           std::size_t NumClasses  = 10,         // up to 2^(3+9) = 4 KiB
           std::size_t BlockLimit  = 0>          // 0 → use config default
 struct size_class_pools {
+    static_assert(NumClasses > 0, "need at least one size class");
+
     static constexpr std::size_t min_exponent = MinExponent;
     static constexpr std::size_t num_classes  = NumClasses;
     static constexpr std::size_t min_size     = power_of_two_size<MinExponent>;
     static constexpr std::size_t max_size     = power_of_two_size<MinExponent + NumClasses - 1>;
-
-    size_class_pools() = default;
-
-    /// Allocate a block large enough for `bytes` (rounded up to next power of two).
-    /// Returns nullptr if the request exceeds the largest size class.
-    void* allocate(std::size_t bytes) {
-        const std::size_t idx = size_class_index<MinExponent, NumClasses>(bytes);
-        if (idx >= NumClasses) return nullptr;
-
-        return allocate_at<0>(idx);
-    }
-
-    /// Deallocate a block previously returned by allocate().
-    /// The original requested size (or the rounded size) must be supplied.
-    void deallocate(void* p, std::size_t bytes) {
-        if (!p) return;
-        const std::size_t idx = size_class_index<MinExponent, NumClasses>(bytes);
-        if (idx >= NumClasses) return;
-
-        deallocate_at<0>(idx, p);
-    }
-
-    /// Direct access to a particular size-class pool (compile-time index).
-    template <std::size_t Index>
-    auto& pool() noexcept {
-        static_assert(Index < NumClasses, "index out of range");
-        return std::get<Index>(pools_);
-    }
-
-    template <std::size_t Index>
-    const auto& pool() const noexcept {
-        static_assert(Index < NumClasses, "index out of range");
-        return std::get<Index>(pools_);
-    }
-
-private:
-    static_assert(NumClasses > 0, "need at least one size class");
 
     // Index-sequence generator that produces the tuple of pools
     template <std::size_t... Exps>
@@ -187,6 +152,40 @@ private:
         }
     }
 
+    size_class_pools() = default;
+
+    /// Allocate a block large enough for `bytes` (rounded up to next power of two).
+    /// Returns nullptr if the request exceeds the largest size class.
+    void* allocate(std::size_t bytes) {
+        const std::size_t idx = size_class_index<MinExponent, NumClasses>(bytes);
+        if (idx >= NumClasses) return nullptr;
+
+        return allocate_at<0>(idx);
+    }
+
+    /// Deallocate a block previously returned by allocate().
+    /// The original requested size (or the rounded size) must be supplied.
+    void deallocate(void* p, std::size_t bytes) {
+        if (!p) return;
+        const std::size_t idx = size_class_index<MinExponent, NumClasses>(bytes);
+        if (idx >= NumClasses) return;
+
+        deallocate_at<0>(idx, p);
+    }
+
+    /// Direct access to a particular size-class pool (compile-time index).
+    template <std::size_t Index>
+    auto& pool() noexcept {
+        static_assert(Index < NumClasses, "index out of range");
+        return std::get<Index>(pools_);
+    }
+
+    template <std::size_t Index>
+    const auto& pool() const noexcept {
+        static_assert(Index < NumClasses, "index out of range");
+        return std::get<Index>(pools_);
+    }
+
     pools_t pools_;
 };
 
@@ -204,36 +203,56 @@ static size_class_pools<min_exponent, max_buckets, 0>& tl_pools() {
 namespace hce {
 namespace memory {
 
+// Non-pooled path: header + payload, index = sentinel so pool::deallocate
+// can still route it if someone crosses the APIs.
 void* allocate(std::size_t size) {
-    return header::from(
-        header::allocate(
-            size, 
-            size_class_index<min_exponent, max_buckets>(size)));
+    constexpr uint8_t sentinel = static_cast<uint8_t>(max_buckets); // "not pooled"
+    return header::from(header::allocate(size, sentinel));
 }
 
 void deallocate(void* p) {
-    return header::deallocate(header::to(p));
+    if(!p){ return; }
+    header::deallocate(header::to(p));
 }
 
 namespace pool {
 
 void* allocate(std::size_t size) {
-    return size <= max_bucket_byte_size 
-        ? tl_pools().allocate(size) 
-        : hce::memory::allocate(size);
+    // Account for the header that will live in front of the user pointer.
+    const std::size_t needed = size + sizeof(header);
+
+    if(needed > max_bucket_byte_size) {
+        return hce::memory::allocate(size);          // sentinel header path
+    }
+
+    const std::size_t idx = size_class_index<min_exponent, max_buckets>(needed);
+    void* block = tl_pools().allocate_at<0>(idx);    // raw power-of-two block
+    
+    if(!block) {
+        return hce::memory::allocate(size);
+    }
+
+    // Embed the index at the front of the block and hand back the payload.
+    header* hdr = static_cast<header*>(block);
+    hdr->index  = static_cast<uint8_t>(idx);
+    return header::from(hdr);
 }
 
 void deallocate(void* p) {
-    // calculate where deallocation should go based on embedded header 
-    std::size_t size = header::to(p)->index;
+    if (!p) return;
 
-    if(size <= ::max_buckets) {
-        tl_pools().deallocate(p, size);
+    header* hdr = header::to(p);
+    const uint8_t idx = hdr->index;
+
+    if (idx < max_buckets) {
+        // Pooled: the block address is the header address.
+        tl_pools().deallocate_at<0>(idx, hdr);
     } else {
+        // Sentinel → original malloc path.
         hce::memory::deallocate(p);
     }
 }
 
 } // pool
-} // memory 
+} // memory
 } // hce
