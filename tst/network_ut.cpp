@@ -529,7 +529,7 @@ namespace {
 
 hce::co<void> lp_echo_once(hce::network::acceptor acc,
                            test::queue<std::string>& status) {
-    hce::network::length_prefixed::byte len_pref;
+    hce::network::protocol::length_prefixed::byte len_pref;
     auto conn_exp = co_await acc.accept();
 
     if(!conn_exp) {
@@ -558,7 +558,7 @@ hce::co<void> lp_client(hce::network::address addr,
                         std::vector<std::byte> payload,
                         test::queue<std::string>& status) {
     auto& net = hce::service<hce::network>::get();
-    hce::network::length_prefixed::byte len_pref;
+    hce::network::protocol::length_prefixed::byte len_pref;
     auto conn_exp = co_await net.connect(addr);
 
     if(!conn_exp) {
@@ -604,12 +604,12 @@ hce::co<void> pump_echo_once(hce::network::acceptor acc,
 
     auto inbound  = hce::chan<std::vector<std::byte>>::make();
     auto outbound = hce::chan<std::vector<std::byte>>::make();
-    hce::network::length_prefixed::byte len_pref;
+    hce::network::protocol::length_prefixed::byte len_pref;
 
     // Pump runs until both directions finish.
-    auto state = hce::network::pump::launch<std::vector<std::byte>>(
+    auto state = hce::transmit::pump::launch<std::vector<std::byte>>(
             len_pref,
-            std::move(conn), 
+            conn, 
             inbound, 
             outbound);
 
@@ -645,11 +645,11 @@ hce::co<void> pump_client(hce::network::address addr,
     auto conn = std::move(conn_exp.value());
     auto inbound  = hce::chan<std::vector<std::byte>>::make();
     auto outbound = hce::chan<std::vector<std::byte>>::make();
-    hce::network::length_prefixed::byte len_pref;
+    hce::network::protocol::length_prefixed::byte len_pref;
 
-    auto state = hce::network::pump::launch<std::vector<std::byte>>(
+    auto state = hce::transmit::pump::launch<std::vector<std::byte>>(
             len_pref,
-            std::move(conn), 
+            conn, 
             inbound, 
             outbound);
 
@@ -734,10 +734,10 @@ TEST(network, length_prefixed_byte_pump_echo) {
 
 namespace {
 
-/// Echo one message using length_prefixed::base64.
+/// Echo one message using protocol::length_prefixed::base64.
 hce::co<void> lp_base64_echo_once(hce::network::acceptor acc,
                                   test::queue<std::string>& status) {
-    hce::network::length_prefixed::base64<> proto;
+    hce::network::protocol::length_prefixed::base64<> proto;
     auto conn_exp = co_await acc.accept();
     if(!conn_exp) {
         status.push("accept failed: " + conn_exp.error().message());
@@ -760,12 +760,12 @@ hce::co<void> lp_base64_echo_once(hce::network::acceptor acc,
     status.push("ok");
 }
 
-/// Client that sends a string via length_prefixed::base64 and expects the echo.
+/// Client that sends a string via protocol::length_prefixed::base64 and expects the echo.
 hce::co<void> lp_base64_client(hce::network::address addr,
                                std::string payload,
                                test::queue<std::string>& status) {
     auto& net = hce::service<hce::network>::get();
-    hce::network::length_prefixed::base64<> proto;
+    hce::network::protocol::length_prefixed::base64<> proto;
     auto conn_exp = co_await net.connect(addr);
     if(!conn_exp) {
         status.push("connect failed: " + conn_exp.error().message());
@@ -794,7 +794,7 @@ hce::co<void> lp_base64_client(hce::network::address addr,
     status.push("ok");
 }
 
-/// Pump-based echo using length_prefixed::base64.
+/// Pump-based echo using protocol::length_prefixed::base64.
 hce::co<void> pump_base64_echo_once(hce::network::acceptor acc,
                                     test::queue<std::string>& status) {
     auto conn_exp = co_await acc.accept();
@@ -806,10 +806,10 @@ hce::co<void> pump_base64_echo_once(hce::network::acceptor acc,
     auto conn = std::move(conn_exp.value());
     auto inbound  = hce::chan<std::string>::make();
     auto outbound = hce::chan<std::string>::make();
-    hce::network::length_prefixed::base64<> proto;
+    hce::network::protocol::length_prefixed::base64<> proto;
 
-    auto state = hce::network::pump::launch<std::string>(
-        proto, std::move(conn), inbound, outbound);
+    auto state = hce::transmit::pump::launch<std::string>(
+        proto, conn, inbound, outbound);
 
     std::string msg;
     if(!co_await inbound.recv(msg)) {
@@ -840,10 +840,10 @@ hce::co<void> pump_base64_client(hce::network::address addr,
     auto conn = std::move(conn_exp.value());
     auto inbound  = hce::chan<std::string>::make();
     auto outbound = hce::chan<std::string>::make();
-    hce::network::length_prefixed::base64<> proto;
+    hce::network::protocol::length_prefixed::base64<> proto;
 
-    auto state = hce::network::pump::launch<std::string>(
-        proto, std::move(conn), inbound, outbound);
+    auto state = hce::transmit::pump::launch<std::string>(
+        proto, conn, inbound, outbound);
 
     if(!co_await outbound.send(payload)) {
         status.push("outbound send failed");
@@ -869,7 +869,7 @@ hce::co<void> pump_base64_client(hce::network::address addr,
 } // anonymous
 
 // ---------------------------------------------------------------------------
-// length_prefixed::byte additional tests
+// protocol::length_prefixed::byte additional tests
 // ---------------------------------------------------------------------------
 
 TEST(network, length_prefixed_byte_empty_payload) {
@@ -904,7 +904,7 @@ TEST(network, length_prefixed_byte_multiple_messages) {
 
     auto server = [](hce::network::acceptor acc,
                      test::queue<std::string>& status) -> hce::co<void> {
-        hce::network::length_prefixed::byte proto;
+        hce::network::protocol::length_prefixed::byte proto;
         auto conn_exp = co_await acc.accept();
         if(!conn_exp) {
             status.push("accept failed");
@@ -930,7 +930,7 @@ TEST(network, length_prefixed_byte_multiple_messages) {
     auto client = [](hce::network::address addr,
                      test::queue<std::string>& status) -> hce::co<void> {
         auto& net = hce::service<hce::network>::get();
-        hce::network::length_prefixed::byte proto;
+        hce::network::protocol::length_prefixed::byte proto;
         auto conn_exp = co_await net.connect(addr);
         if(!conn_exp) {
             status.push("connect failed");
@@ -978,7 +978,7 @@ TEST(network, length_prefixed_byte_oversized_rejected) {
 
     auto server = [](hce::network::acceptor acc,
                      test::queue<std::string>& status) -> hce::co<void> {
-        hce::network::length_prefixed::byte proto;
+        hce::network::protocol::length_prefixed::byte proto;
         auto conn_exp = co_await acc.accept();
         if(!conn_exp) {
             status.push("accept failed");
@@ -1009,7 +1009,7 @@ TEST(network, length_prefixed_byte_oversized_rejected) {
 
         // Advertise a length just over the limit (do not send the body).
         const uint32_t too_big = static_cast<uint32_t>(
-            hce::network::length_prefixed::byte::max_payload + 1);
+            hce::network::protocol::length_prefixed::byte::max_payload + 1);
         const uint32_t len_be = htonl(too_big);
         auto len_span = std::as_bytes(std::span(&len_be, 1));
         (void)co_await conn.send_all(len_span);
@@ -1028,7 +1028,7 @@ TEST(network, length_prefixed_byte_oversized_rejected) {
 }
 
 // ---------------------------------------------------------------------------
-// length_prefixed::base64 network-level tests
+// protocol::length_prefixed::base64 network-level tests
 // ---------------------------------------------------------------------------
 
 TEST(network, length_prefixed_base64_echo) {
@@ -1105,7 +1105,7 @@ TEST(network, length_prefixed_base64_invalid_on_wire) {
 
     auto server = [](hce::network::acceptor acc,
                      test::queue<std::string>& status) -> hce::co<void> {
-        hce::network::length_prefixed::base64<> proto;
+        hce::network::protocol::length_prefixed::base64<> proto;
         auto conn_exp = co_await acc.accept();
         if(!conn_exp) {
             status.push("accept failed");
