@@ -51,5 +51,6 @@ void* allocate(std::size_t size);
  */
 void deallocate(void* p);
 
-}
-}
+} // pool
+} // memory
+} // hce

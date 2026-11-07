@@ -24,19 +24,19 @@ hce::coroutine hce::coroutine::promise_type::get_return_object_on_allocation_fai
 }
 
 void* hce::coroutine::promise_type::cleanup_alloc(size_t n) {
-    return hce::memory::allocate(n);
+    return hce::memory::pool::allocate(n);
 }
 
 void hce::coroutine::promise_type::cleanup_dealloc(void* p) {
-    hce::memory::deallocate(p);
+    hce::memory::pool::deallocate(p);
 }
 
 void* hce::coroutine::promise_type::operator new(std::size_t n) noexcept {
-    return hce::memory::allocate(n);
+    return hce::memory::pool::allocate(n);
 }
 
 void hce::coroutine::promise_type::operator delete(void* ptr) noexcept {
-    hce::memory::deallocate(ptr);
+    hce::memory::pool::deallocate(ptr);
 }
 
 hce::coroutine hce::coroutine::promise_type::get_return_object() {
@@ -275,11 +275,11 @@ hce::awaitable::interface::~interface() {
 }
 
 void* hce::awaitable::interface::operator new(std::size_t n) noexcept {
-    return hce::memory::allocate(n);
+    return hce::memory::pool::allocate(n);
 }
 
 void hce::awaitable::interface::operator delete(void* ptr) noexcept {
-    hce::memory::deallocate(ptr);
+    hce::memory::pool::deallocate(ptr);
 }
 
 

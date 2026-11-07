@@ -75,8 +75,8 @@ inline constexpr std::size_t size_class_index(std::size_t bytes) noexcept {
     constexpr std::size_t min_size = power_of_two_size<MinExponent>;
     constexpr std::size_t max_size = power_of_two_size<MinExponent + NumClasses - 1>;
 
-    if (bytes <= min_size) return 0;
-    if (bytes > max_size) return NumClasses;   // sentinel: too large
+    if(bytes <= min_size){ return 0; }
+    if(bytes > max_size){ return NumClasses; }  // sentinel: too large
 
     std::size_t rounded = next_power_of_two(bytes);
     return log2_floor(rounded) - MinExponent;
@@ -96,31 +96,7 @@ inline constexpr std::size_t size_class_index(std::size_t bytes) noexcept {
 template <std::size_t MinExponent = 3,          // 8 bytes
           std::size_t NumClasses  = 10,         // up to 2^(3+9) = 4 KiB
           std::size_t BlockLimit  = 0>          // 0 → use config default
-class size_class_pools {
-    static_assert(NumClasses > 0, "need at least one size class");
-
-    // Helper: pool type for a given exponent
-    template <std::size_t Exp>
-    using pool_t = pool_allocator<
-        power_of_two_block<
-            power_of_two_size<Exp>>>;
-
-    // Index-sequence generator that produces the tuple of pools
-    template <std::size_t... Exps>
-    static auto make_pools(std::index_sequence<Exps...>) {
-        if constexpr (BlockLimit == 0) {
-            return std::tuple<pool_t<MinExponent + Exps>...>{};
-        } else {
-            return std::tuple<pool_t<MinExponent + Exps>...>(
-                pool_t<MinExponent + Exps>(BlockLimit)...);
-        }
-    }
-
-    using pools_t = decltype(make_pools(std::make_index_sequence<NumClasses>{}));
-
-    pools_t pools_;
-
-public:
+struct size_class_pools {
     static constexpr std::size_t min_exponent = MinExponent;
     static constexpr std::size_t num_classes  = NumClasses;
     static constexpr std::size_t min_size     = power_of_two_size<MinExponent>;
@@ -161,6 +137,27 @@ public:
     }
 
 private:
+    static_assert(NumClasses > 0, "need at least one size class");
+
+    // Index-sequence generator that produces the tuple of pools
+    template <std::size_t... Exps>
+    static auto make_pools(std::index_sequence<Exps...>) {
+        if constexpr (BlockLimit == 0) {
+            return std::tuple<pool_t<MinExponent + Exps>...>{};
+        } else {
+            return std::tuple<pool_t<MinExponent + Exps>...>(
+                pool_t<MinExponent + Exps>(BlockLimit)...);
+        }
+    }
+
+    // Helper: pool type for a given exponent
+    template <std::size_t Exp>
+    using pool_t = hce::pool_allocator<
+        power_of_two_block<
+            power_of_two_size<Exp>>>;
+
+    using pools_t = decltype(make_pools(std::make_index_sequence<NumClasses>{}));
+
     // Runtime-index dispatch via recursive compile-time unrolling
     template <std::size_t I>
     void* allocate_at(std::size_t idx) {
@@ -189,12 +186,13 @@ private:
             deallocate_at<I + 1>(idx, ptr);
         }
     }
+
+    pools_t pools_;
 };
 
 constexpr std::size_t min_exponent = 3; // 8 bytes, 64 bit
 constexpr std::size_t max_buckets = 11;
-constexpr std::size_t max_bucket_byte_size = 
-    1ull << (min_exponent + max_buckets - 1);
+constexpr std::size_t max_bucket_byte_size = 1ull << (min_exponent + max_buckets - 1);
 
 static size_class_pools<min_exponent, max_buckets, 0>& tl_pools() {
     thread_local size_class_pools<min_exponent, max_buckets, 0> p;
