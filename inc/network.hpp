@@ -2,6 +2,8 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis
 
+#include <arpa/inet.h>  // ntohl / htonl
+
 #include "base.hpp"
 #include "logging.hpp"
 #include "expected.hpp"
