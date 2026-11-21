@@ -41,20 +41,20 @@ private:
 
 namespace hce {
 
-erased::erased(multiplex::interface* i, multiplex::interface::deleter d) :
+multiplex::erased::erased(multiplex::interface* i, multiplex::interface::deleter d) :
     interface(i),
     deleter(d)
 {
 }
         
-erased::erased(erased&& rhs) {
+multiplex::erased::erased(multiplex::erased&& rhs) {
     interface = rhs.interface;
     deleter = rhs.deleter;
     rhs.interface = nullptr;
     rhs.deleter = nullptr;
 }
 
-erased::~erased() {
+multiplex::erased::~erased() {
     if(deleter) {
         deleter(interface);
         deleter = nullptr;
@@ -62,17 +62,18 @@ erased::~erased() {
     }
 }
         
-erased& erased::operator=(erased&& rhs) {
+multiplex::erased& multiplex::erased::operator=(multiplex::erased&& rhs) {
     std::swap(interface, rhs.interface);
     std::swap(deleter, rhs.deleter);
+    return *this;
 }
 
 void multiplex::guard_mgr::unblock() {
     round_robin rr(current_idx);
 
-    for (std::size_t n = 0; n < children.size(); ++n) {
-        std::size_t idx = rr.next(children.size());
-        auto& child = children[idx];
+    for(std::size_t n = 0; n < guard.children.size(); ++n) {
+        std::size_t idx = rr.next(guard.children.size());
+        auto& child = guard.children[idx];
 
         if(child.ctx) {
             child.unblock(child.ctx);
@@ -80,7 +81,7 @@ void multiplex::guard_mgr::unblock() {
     }
 
     // update the starting index for next time after completing the loop
-    current_idx = rr.next(children.size());
+    current_idx = rr.next(guard.children.size());
 }
 
 bool multiplex::guard_mgr::try_claim() {
@@ -102,7 +103,7 @@ void multiplex::guard_mgr::release() {
 }
 
 multiplex::~multiplex() {
-    if(guard_mgr_.close == false) {
+    if(guard_mgr_.finished.load(std::memory_order_acquire) == false) {
         std::stringstream ss;
         ss << "did not call hce::multiplex::finish() on "
            << *this;
@@ -111,11 +112,11 @@ multiplex::~multiplex() {
 }
 
 std::string multiplex::info_name() { 
-    return type::templatize<T>("hce::multiplex"); 
+    return "hce::multiplex"; 
 }
 
 std::string multiplex::name() const { 
-    return multiplex::::info_name(); 
+    return multiplex::info_name(); 
 }
 
 hce::awt<void> multiplex::finish() {
@@ -130,10 +131,11 @@ hce::awt<void> multiplex::finish() {
             // remove the guard from the channels and end forwarding operations
             for(size_t idx; idx < self->elements_.size(); ++idx) {
                 self->unmanage_(idx);
+                auto& intf = *(self->elements_[idx].e.interface);
 
-                if(i.awt.valid()) {
+                if(intf.awt.valid()) {
                     // join with the forwarding coroutine
-                    co_await std::move(i.awt);
+                    co_await std::move(intf.awt);
                 }
             }
 
@@ -144,18 +146,18 @@ hce::awt<void> multiplex::finish() {
         }
     };
 
-    return hce::schedule(local::op, this);
+    return hce::schedule(local::op(this));
 }
 
-hce::co<bool> multiplex::select() {
-    return hce::schedule(multiplex::selector, this);
+hce::awt<bool> multiplex::select() {
+    return hce::schedule(multiplex::selector_(this));
 }
 
 hce::co<bool> multiplex::selector_(multiplex* parent) {
     auto& p = *parent;
     result_t result;
 
-    if(co_await p.received_(result)) {
+    if(co_await p.received_.recv(result)) {
         auto& intf = *(p.elements_[result.idx].e.interface);
 
         if(result.done) {
@@ -186,13 +188,15 @@ void multiplex::launch_() {
     for(const auto& e : elements_) {
         e.e.interface->launch();
     }
+
+    guard_mgr_.finished.store(false, std::memory_order_release);
 }
     
 void multiplex::unmanage_(size_t idx) {
     // unmanage a channel and let it operate independently
     elements_[idx].e.interface->set_guard(nullptr);
     auto& child = guard_mgr_.guard.children[idx];
-    child.unblock(child.context);
+    child.unblock(child.ctx);
 }
 
 };

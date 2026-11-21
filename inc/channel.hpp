@@ -114,7 +114,6 @@ struct interface : public printable {
     /// attempt receive a value
     virtual hce::yield<channel::result> try_recv(T& t) = 0;
 
-protected:
     /// register a guard object
     virtual void set_guard(detail::guard*) = 0;
 
@@ -403,7 +402,6 @@ struct unbuffered : public interface<T> {
         }
     }
 
-protected:
     inline void set_guard(detail::guard* g) { 
         HCE_LOW_METHOD_ENTER("set_guard");
         std::lock_guard<LOCK> lk(lk_);
@@ -520,7 +518,7 @@ private:
 
             auto awt = parked_recv_.front();
             parked_recv_.pop();
-            awt->resume(awt->destination);
+            awt->resume(((recv_interface*)awt)->destination);
         }
     }
 
@@ -683,7 +681,6 @@ struct buffered : public interface<T> {
         }
     }
 
-protected:
     inline void set_guard(detail::guard* g) { 
         HCE_LOW_METHOD_ENTER("set_guard");
         std::lock_guard<LOCK> lk(lk_);
@@ -756,7 +753,7 @@ private:
 
         inline bool on_ready() {
             if(parent_.guard_ && 
-               !parent_.guard_->parent.try_claim(parent_.guard_->parent.ctx)) [[unlikely]] {
+               !parent_.guard_->parent.try_claim(parent_.guard_->parent.ctx)) [[unlikely]] 
             {
                 HCE_TRACE_METHOD_BODY("recv","blocked");
                 parent_.parked_recv_.push_back(this);
@@ -815,7 +812,7 @@ private:
     inline void unblock_() {
         std::lock_guard<LOCK> lk(lk_);
 
-        if(!closed_flag_ && parked_send_.size() && !parent_.buf_.full()) {
+        if(!closed_flag_ && parked_send_.size() && !buf_.full()) {
             if(guard_ && !guard_->parent.try_claim(guard_->parent.ctx)) {
                 return;
             }
@@ -975,7 +972,6 @@ struct unlimited : public interface<T> {
         }
     }
 
-protected:
     inline void set_guard(detail::guard* g) { 
         HCE_LOW_METHOD_ENTER("set_guard");
         std::lock_guard<LOCK> lk(lk_);
@@ -1289,8 +1285,7 @@ struct chan : public channel::interface<T> {
         return context_->try_recv(r);
     }
 
-protected:
-    inline void set_guard(detail::guard* g) { 
+    inline void set_guard(channel::detail::guard* g) { 
         HCE_MIN_METHOD_ENTER("set_guard");
         context_->set_guard(g);
     }
@@ -1350,7 +1345,7 @@ private:
         typedef void(*deleter)(interface*);
 
         virtual ~interface();
-        virtual void set_guard(detail::guard*) = 0; // set the channel guard
+        virtual void set_guard(channel::detail::guard*) = 0; // set the channel guard
         virtual void launch() = 0; // launch forwarding operation
         virtual void close() = 0;  // close the channel and end forwarding
         virtual void* child() = 0; // get the child context
@@ -1378,8 +1373,8 @@ private:
 
     struct guard_mgr {
         std::atomic<bool> claimed{false};
-        std::atomic<bool> finished{false};
-        detail::guard guard;
+        std::atomic<bool> finished{true};
+        channel::detail::guard guard;
         std::size_t current_idx = 0;
 
         // unblock all guarded children
@@ -1411,7 +1406,7 @@ public:
 
     private:
         template <typename T>
-        static interface* make_interface(T& t, CHAN&& ch, callback&& cb) {
+        static interface* make_interface(T& t, hce::chan<T>&& ch, callback&& cb) {
             interface* i = hce::allocate<impl<T>>(1);
             ::new (static_cast<void*>(i)) impl<T>(t, std::move(ch));
             i->call = std::move(cb);
@@ -1419,7 +1414,7 @@ public:
         }
         
         template <typename T>
-        static inline deleter(interface i) {
+        static inline void deleter(interface* i) {
             if(i) {
                 i->~interface();
                 hce::deallocate(i); 
@@ -1433,13 +1428,13 @@ public:
     /**
      @brief launch a multiplex of elements on construction
      */
-    template <typename Es...>
+    template <typename... Es>
     multiplex(Es&&... es) :
         guard_mgr_(channel::detail::guard{
             channel::detail::guard::parent_t{ 
                 this, 
                 [](void* v) -> bool { 
-                    return ((multiplex::guard*)v)->try_claim();
+                    return ((multiplex::guard_mgr*)v)->try_claim();
                 }
             },
             channel::detail::guard::child_t{}
@@ -1461,13 +1456,13 @@ public:
 
      Can be called more than once to multiplex additional channels.
      */
-    template <typename Es...>
+    template <typename... Es>
     void launch(Es&&... es) {
         if(!received_ || received_.closed()) {
             received_ = hce::chan<size_t>::make();
         }
 
-        elements_.reserve(vec.size() + sizeof...(es)); 
+        elements_.reserve(elements_.size() + sizeof...(es)); 
         launch_(std::forward<Es>(es)...);
     }
 
@@ -1507,7 +1502,7 @@ private:
             ch(std::forward<CHAN>(c))
         { }
 
-        inline void set_guard(detail::guard* g) { ch.set_guard(g); }
+        inline void set_guard(channel::detail::guard* g) { ch.set_guard(g); }
         inline void launch() { awt = hce::schedule(forwarder(this)); }
         inline void close() { ch.close(); }
         inline void* child() { return ch.context().get(); }; 
@@ -1520,33 +1515,33 @@ private:
             // recv blocks until:
             // A) a send succeeds in acquiring the guard lock 
             // B) the parent finishes processing the callback and releases the claim
-            while(co_await self->ch.recv(value)) {
+            while(co_await self->ch.recv(self->value)) {
                 // we have the guard claimed, notify the selector 
-                co_await parent->received_.send(result);
+                co_await self->parent->received_.send(result);
             } 
 
             // notify we died
             result.done = true;
-            co_await parent->received_.send(result);
+            co_await self->parent->received_.send(result);
         }
 
         T& value;
-        hce::chan<t> ch;
+        hce::chan<T> ch;
         hce::awt<void> awt;
     };
 
-    hce::co<void> selector_(hce::multiplex*);
+    hce::co<bool> selector_(hce::multiplex*);
 
     void launch_(); 
 
     template <typename... Es>
     void launch_(element e, Es&&... es) {
         elements_.push_back(std::move(e));
-        auto& cur = elements_.back();
-        cur.parent = this;
-        cur.idx = elements.size() - 1;
+        auto& intf = *(elements_.back().e.interface);
+        intf.parent = this;
+        intf.idx = elements_.size() - 1;
         // increment the children vector in sync with the elements_ vector
-        cur.e.interface->set_guard(guard_mgr_.guard);
+        intf.set_guard(&(guard_mgr_.guard));
         launch_(std::forward<Es>(es)...);
     }
 
