@@ -123,20 +123,22 @@ std::vector<std::size_t> multiplex::randomized_indexes_(size_t sz) {
 
 hce::co<bool> multiplex::selector_(multiplex* parent) {
     auto& p = *parent;
-    size_t idx = 0;
+    result_t result;
 
-    if(co_await p.received_(idx)) {
+    if(co_await p.received_(result)) {
+        auto& intf = *(p.elements_[result.idx].e.interface);
 
-        // execute the callback for the associated element
-        p.elements_[idx].call();
+        if(result.done) {
+            if(intf.awt.valid()) {
+                // join the finished coroutine
+                co_await std::move(intf.awt);
 
-        // join the finished coroutine
-        if(co_await std::move(p.elements_[idx].awt)) {
-            // relaunch the finished forwarder if we can still do work
-            p.elements[idx].launch();
+                // the operation ended, release control of the channel 
+                p.unmanage_(idx);
+            }
         } else {
-            // the operation failed so we need to release control of the channel 
-            p.unmanage_(idx);
+            // execute the callback for the associated element
+            intf.call();
         }
 
         // release the claim now that callback handling is complete
@@ -144,7 +146,6 @@ hce::co<bool> multiplex::selector_(multiplex* parent) {
 
         // unblock the children and allow them to re-try claiming
         p.guard_mgr_.unblock();
-
         co_return true;
     } else {
         co_return false;

@@ -1304,7 +1304,11 @@ private:
 
 
 /**
- @brief an object capable of negotiating the synchronized receipt of one or more hce::chan channels 
+ @brief an object capable of negotiating the synchronized receives over one or more hce::chan channels 
+
+ Callbacks registered in this object are not coroutines. It is expected the user 
+ lets their callbacks finish and then any further coroutine or channel behavior 
+ be executed when `co_await` returns from the `multiplex::select()` operation.
 
  Example usage in a coroutine:
  ```
@@ -1314,24 +1318,26 @@ private:
      std::string s;
      hce::multiplex mux(
         {
-            i, 
+            i, // user must preserve the lifetime of variables receiving data
             int_ch, 
-            [&] { 
-               std::cout << "received int: " << i << std::endl;
-               --remaining;
+            [&]{ 
+                // treat these as standard non-coroutine function calls
+                std::cout << "received int: " << i << std::endl;
+                --remaining;
             }
         },
         {
             s,
             str_ch,
-            [&] {
-               std::cout << "received std::string: " << s << std::endl;
-               --remaining;
+            [&]{
+                std::cout << "received std::string: " << s << std::endl;
+                --remaining;
             }
         });
      
      while(remaining) {
         co_await mux.select();
+        // do any other coroutine behavior here...
      }
 
      co_await mux.finish();
@@ -1403,7 +1409,9 @@ public:
      */
     struct element {
         /**
-         @param t the value to assign over the channel
+         The user must guarantee the argument value T stays in existence.
+
+         @param t the value to assign over the channel. 
          @param ch channel to received from
          @param cb callback to execute when t is received
          */
@@ -1475,7 +1483,11 @@ public:
     }
 
     /**
-     @brief await until some callback gets called or multiplexing is finish()ed
+     @brief await until some callback gets called or multiplexing is finish()ed 
+
+     No callbacks will execute once this method has returned, until it is called 
+     again.
+
      @return await the result to get whether the multiplex succeeded
      */
     hce::awt<bool> select();
@@ -1484,6 +1496,7 @@ public:
      @brief end multiplexing 
 
      This unregisters this object from associated element channels.
+
      @return await the result to finish multiplexing operations
      */
     hce::awt<void> finish();
@@ -1491,6 +1504,11 @@ public:
 private:
     // provided randomized indexes_ for use with the element vector
     std::vector<std::size_t> randomized_indexes_();
+
+    struct result_t {
+        size_t idx = 0;
+        bool done = false;
+    };
     
     // element implementation
     template <typename T>
@@ -1507,20 +1525,23 @@ private:
         inline void launch() { awt = hce::schedule(forwarder(this)); }
         inline void close() { ch.close(); }
         inline void* child() { return ch.context().get(); }; 
-        inline hce::awt<bool> recv() { return ch.recv(value); }
-        inline hce::awt<bool> forward() { return parent->received_.send(idx); }
 
         // A single shot coroutine to receive over the multiplexed channel
-        static inline hce::co<bool> forwarder(impl<T>* self) {
+        static inline hce::co<void> forwarder(impl<T>* self) {
+            result_t result;
+            result.idx = self->idx;
+
             // recv blocks until:
             // A) a send succeeds in acquiring the guard lock 
-            // B) the parent finishes processing the callback and releases the lock 
-            if(co_await self->recv()) {
-                // we have the guard lock, notify the selector 
-                co_return co_await self->forward();
-            } else {
-                co_return false;
-            }
+            // B) the parent finishes processing the callback and releases the claim
+            while(co_await self->ch.recv(value)) {
+                // we have the guard claimed, notify the selector 
+                co_await parent->received_.send(result);
+            } 
+
+            // notify we died
+            result.done = true;
+            co_await parent->received_.send(result);
         }
 
         T& value;
@@ -1548,7 +1569,7 @@ private:
     guard_mgr guard_mgr_;
     // the indexes of this should match that of guard_mgr::guard::children
     std::vector<element> elements_; 
-    hce::chan<size_t> received_;
+    hce::chan<result_t> received_;
 };
 
 }
