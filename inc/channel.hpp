@@ -283,7 +283,7 @@ struct base_recv_interface :
 /// unbuffered interface implementation
 template <typename T, typename LOCK=hce::spinlock, typename ALLOCATOR=hce::pool_allocator<T>>
 struct unbuffered : public interface<T> {
-    typedef unbuffered<T,LOCK,ALLOCATOR> self_type;_
+    typedef unbuffered<T,LOCK,ALLOCATOR> self_type;
     typedef T value_type;
 
     unbuffered() {
@@ -392,10 +392,10 @@ struct unbuffered : public interface<T> {
         if(closed_flag_) [[unlikely]] { 
             return { result::closed }; 
         } else if(!parked_send_.size() ||
-                  (parent_.guard_ && 
-                   !parent_.guard_.try_claim(parent_.guard_.ctx))) [[unlikely]] {
+                  (guard_ && 
+                   !guard_->parent.try_claim(guard_->parent.ctx))) [[unlikely]] {
             return { result::failure }; 
-        } else if() [[likely]] {
+        } else [[likely]] {
             parked_send_.front()->resume((void*)&r);
 
             // return an awaitable which immediately returns true
@@ -476,7 +476,7 @@ private:
                 return true;
             } else if(!parent_.parked_send_.size() ||
                       (parent_.guard_ && 
-                       !parent_.guard_.try_claim(parent_.guard_.ctx))) [[unlikely]] {
+                       !parent_.guard_->parent.try_claim(parent_.guard_->parent.ctx))) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("recv","block for transfer");
                 parent_.parked_recv_.push_back(this);
                 return false;
@@ -513,8 +513,8 @@ private:
     inline void unblock_() {
         std::lock_guard<LOCK> lk(lk_);
 
-        if(!parent_.closed_flag_ && parked_send_.size() && parked_recv_.size()) {
-            if(parent_.guard_ && !parent_.guard_.try_claim(parent_.guard_.ctx)) {
+        if(!closed_flag_ && parked_send_.size() && parked_recv_.size()) {
+            if(guard_ && !guard_->parent.try_claim(guard_->parent.ctx)) {
                 return;
             }
 
@@ -534,7 +534,7 @@ private:
 /// buffered interface implementation
 template <typename T, typename LOCK=hce::spinlock, typename ALLOCATOR=hce::pool_allocator<T>>
 struct buffered : public interface<T> {
-    typedef buffered<T,LOCK,ALLOCATOR> self_type;_
+    typedef buffered<T,LOCK,ALLOCATOR> self_type;
     typedef T value_type;
 
     buffered(int sz) : 
@@ -663,8 +663,8 @@ struct buffered : public interface<T> {
                 return { result::failure }; 
             }
         } else [[likely]] {
-            if(parent_.guard_ && 
-               !parent_.guard_.try_claim(parent_.guard_.ctx)) [[unlikely]] {
+            if(guard_ && 
+               !guard_->parent.try_claim(guard_->parent.ctx)) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("try_recv","failed");
                 return { result::failure }; 
             } else [[likely]] {
@@ -756,7 +756,7 @@ private:
 
         inline bool on_ready() {
             if(parent_.guard_ && 
-               !parent_.guard_.try_claim(parent_.guard_.ctx)) [[unlikely]] 
+               !parent_.guard_->parent.try_claim(parent_.guard_->parent.ctx)) [[unlikely]] {
             {
                 HCE_TRACE_METHOD_BODY("recv","blocked");
                 parent_.parked_recv_.push_back(this);
@@ -815,8 +815,8 @@ private:
     inline void unblock_() {
         std::lock_guard<LOCK> lk(lk_);
 
-        if(!parent_.closed_flag_ && parked_send_.size() && !parent_.buf_.full()) {
-            if(parent_.guard_ && !parent_.guard_.try_claim(parent_.guard_.ctx)) {
+        if(!closed_flag_ && parked_send_.size() && !parent_.buf_.full()) {
+            if(guard_ && !guard_->parent.try_claim(guard_->parent.ctx)) {
                 return;
             }
 
@@ -839,7 +839,7 @@ private:
  */
 template <typename T, typename LOCK=hce::spinlock, typename ALLOCATOR=hce::pool_allocator<T>>
 struct unlimited : public interface<T> {
-    typedef unlimited<T,LOCK,ALLOCATOR> self_type;_
+    typedef unlimited<T,LOCK,ALLOCATOR> self_type;
     typedef T value_type;
 
     unlimited() { 
@@ -960,8 +960,8 @@ struct unlimited : public interface<T> {
                 return { result::failure }; 
             }
         } else [[likely]] {
-            if(parent_.guard_ && 
-               !parent_.guard_.try_claim(parent_.guard_.ctx)) [[unlikely]] {
+            if(guard_ && 
+               !guard_->parent.try_claim(guard_->parent.ctx)) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("try_recv","failed");
                 return { result::failure }; 
             } else {
@@ -1053,7 +1053,7 @@ private:
                     return false;
                 }
             } else if(parent_.guard_ && 
-                      !parent_.guard_.try_claim(parent_.guard_.ctx)) [[unlikely]] {
+                      !parent_.guard_->parent.try_claim(parent_.guard_->parent.ctx)) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("recv","blocked");
                 parent_.parked_recv_.push_back(this);
                 return false;
@@ -1095,8 +1095,8 @@ private:
     inline void unblock_() {
         std::lock_guard<LOCK> lk(lk_);
 
-        if(!parent_.closed_flag_ && parked_recv_.size()) {
-            if(parent_.guard_ && !parent_.guard_.try_claim(parent_.guard_.ctx)) {
+        if(!closed_flag_ && parked_recv_.size()) {
+            if(guard_ && !guard_->parent.try_claim(guard_->parent.ctx)) {
                 return;
             }
 
