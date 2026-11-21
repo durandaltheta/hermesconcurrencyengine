@@ -25,7 +25,6 @@ namespace hce {
 struct multiplex;
 
 namespace channel {
-namespace detail {
 
 // Used to specially control blocking behavior of the channel interface. 
 struct guard {
@@ -57,8 +56,6 @@ struct guard {
     const parent_t parent;
     std::vector<child_t> children;
 };
-
-} // detail
 
 /// result of a channel try operation
 enum result {
@@ -115,7 +112,7 @@ struct interface : public printable {
     virtual hce::yield<channel::result> try_recv(T& t) = 0;
 
     /// register a guard object
-    virtual void set_guard(detail::guard*) = 0;
+    virtual void set_guard(guard*) = 0;
 
     friend struct multiplex;
 };
@@ -402,7 +399,7 @@ struct unbuffered : public interface<T> {
         }
     }
 
-    inline void set_guard(detail::guard* g) { 
+    inline void set_guard(guard* g) { 
         HCE_LOW_METHOD_ENTER("set_guard");
         std::lock_guard<LOCK> lk(lk_);
         
@@ -526,7 +523,7 @@ private:
     bool closed_flag_ = false;
     hce::list<awt<bool>::interface*,ALLOCATOR> parked_send_;
     hce::list<awt<bool>::interface*,ALLOCATOR> parked_recv_;
-    detail::guard* guard_ = nullptr;
+    guard* guard_ = nullptr;
 };
 
 /// buffered interface implementation
@@ -681,7 +678,7 @@ struct buffered : public interface<T> {
         }
     }
 
-    inline void set_guard(detail::guard* g) { 
+    inline void set_guard(guard* g) { 
         HCE_LOW_METHOD_ENTER("set_guard");
         std::lock_guard<LOCK> lk(lk_);
         
@@ -828,7 +825,7 @@ private:
     hce::circular_buffer<T> buf_;
     hce::list<awt<bool>::interface*,ALLOCATOR> parked_send_;
     hce::list<awt<bool>::interface*,ALLOCATOR> parked_recv_;
-    detail::guard* guard_ = nullptr;
+    guard* guard_ = nullptr;
 };
 
 /**
@@ -972,7 +969,7 @@ struct unlimited : public interface<T> {
         }
     }
 
-    inline void set_guard(detail::guard* g) { 
+    inline void set_guard(guard* g) { 
         HCE_LOW_METHOD_ENTER("set_guard");
         std::lock_guard<LOCK> lk(lk_);
         
@@ -1106,7 +1103,7 @@ private:
     bool closed_flag_ = false;
     hce::list<T,ALLOCATOR> queue_;
     hce::list<awt<bool>::interface*,ALLOCATOR> parked_recv_;
-    detail::guard* guard_ = nullptr;
+    guard* guard_ = nullptr;
 };
 
 } // channel
@@ -1285,7 +1282,7 @@ struct chan : public channel::interface<T> {
         return context_->try_recv(r);
     }
 
-    inline void set_guard(channel::detail::guard* g) { 
+    inline void set_guard(channel::guard* g) { 
         HCE_MIN_METHOD_ENTER("set_guard");
         context_->set_guard(g);
     }
@@ -1345,7 +1342,7 @@ private:
         typedef void(*deleter)(interface*);
 
         virtual ~interface();
-        virtual void set_guard(channel::detail::guard*) = 0; // set the channel guard
+        virtual void set_guard(channel::guard*) = 0; // set the channel guard
         virtual void launch() = 0; // launch forwarding operation
         virtual void close() = 0;  // close the channel and end forwarding
         virtual void* child() = 0; // get the child context
@@ -1372,10 +1369,12 @@ private:
     };
 
     struct guard_mgr {
+        channel::guard guard;
         std::atomic<bool> claimed{false};
         std::atomic<bool> finished{true};
-        channel::detail::guard guard;
         std::size_t current_idx = 0;
+
+        guard_mgr(channel::guard&& g);
 
         // unblock all guarded children
         void unblock();
@@ -1430,15 +1429,16 @@ public:
      */
     template <typename... Es>
     multiplex(Es&&... es) :
-        guard_mgr_(channel::detail::guard{
-            channel::detail::guard::parent_t{ 
-                this, 
-                [](void* v) -> bool { 
-                    return ((multiplex::guard_mgr*)v)->try_claim();
-                }
-            },
-            channel::detail::guard::child_t{}
-        })
+        guard_mgr_(
+            channel::guard{
+                channel::guard::parent_t{ 
+                    this, 
+                    [](void* v) -> bool { 
+                        return ((multiplex::guard_mgr*)v)->try_claim();
+                    }
+                },
+                channel::guard::child_t{}
+            })
     {
         launch(std::forward<Es>(es)...);
     }
@@ -1502,7 +1502,7 @@ private:
             ch(std::forward<CHAN>(c))
         { }
 
-        inline void set_guard(channel::detail::guard* g) { ch.set_guard(g); }
+        inline void set_guard(channel::guard* g) { ch.set_guard(g); }
         inline void launch() { awt = hce::schedule(forwarder(this)); }
         inline void close() { ch.close(); }
         inline void* child() { return ch.context().get(); }; 

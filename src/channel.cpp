@@ -68,6 +68,11 @@ multiplex::erased& multiplex::erased::operator=(multiplex::erased&& rhs) {
     return *this;
 }
 
+multiplex::guard_mgr::guard_mgr(channel::guard&& g) :
+    guard(std::move(g))
+{
+}
+
 void multiplex::guard_mgr::unblock() {
     round_robin rr(current_idx);
 
