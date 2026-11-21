@@ -1054,7 +1054,7 @@ private:
                 }
             } else if(parent_.guard_ && 
                       !parent_.guard_.try_claim(parent_.guard_.ctx)) [[unlikely]] {
-                HCE_TRACE_METHOD_BODY("send","blocked");
+                HCE_TRACE_METHOD_BODY("recv","blocked");
                 parent_.parked_recv_.push_back(this);
                 return false;
             } else [[likely]] {

@@ -70,9 +70,6 @@ erased& erased::operator=(erased&& rhs) {
 void multiplex::guard_mgr::unblock() {
     round_robin rr(current_idx);
 
-    // update the starting index for next time
-    current_idx = rr.peek(children.size());
-
     for (std::size_t n = 0; n < children.size(); ++n) {
         std::size_t idx = rr.next(children.size());
         auto& child = children[idx];
@@ -81,6 +78,9 @@ void multiplex::guard_mgr::unblock() {
             child.unblock(child.ctx);
         }
     }
+
+    // update the starting index for next time after completing the loop
+    current_idx = rr.next(children.size());
 }
 
 bool multiplex::guard_mgr::try_claim() {
@@ -164,7 +164,7 @@ hce::co<bool> multiplex::selector_(multiplex* parent) {
                 co_await std::move(intf.awt);
 
                 // the operation ended, release control of the channel 
-                p.unmanage_(idx);
+                p.unmanage_(result.idx);
             }
         } else {
             // execute the callback for the associated element
