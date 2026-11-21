@@ -512,7 +512,7 @@ private:
     inline void unblock_() {
         std::lock_guard<LOCK> lk(lk_);
 
-        if(!parent_.closed_flag_ && parked_send_.size()) {
+        if(!parent_.closed_flag_ && parked_send_.size() && parked_recv_.size()) {
             if(parent_.guard_ && !parent_.guard_.try_claim(parent_.guard_.ctx)) {
                 return;
             }
@@ -804,7 +804,7 @@ private:
     inline void unblock_() {
         std::lock_guard<LOCK> lk(lk_);
 
-        if(!parent_.closed_flag_ && parked_send_.size()) {
+        if(!parent_.closed_flag_ && parked_send_.size() && !parent_.buf_.full()) {
             if(parent_.guard_ && !parent_.guard_.try_claim(parent_.guard_.ctx)) {
                 return;
             }
@@ -1327,20 +1327,23 @@ struct multiplex : public printable {
     using callback = std::function<void()>;
 
 private:
+    // element interface
     struct interface {
         typedef void(*deleter)(interface*);
 
         virtual ~interface();
         virtual void set_guard(detail::guard*) = 0; // set the channel guard
         virtual void launch() = 0; // launch forwarding operation
-        virtual void close() = 0; // close the channel and end forwarding
+        virtual void close() = 0;  // close the channel and end forwarding
+        virtual void* child() = 0; // get the child context
        
-        multiplex* parent = nullptr; // owning multiplex
+        multiplex* parent = nullptr; // owning multiplex 
         size_t idx;                  // index of this element
-        hce::awt<void> co;           // launched coroutine awaitable
+        hce::awt<void> awt;           // launched coroutine awaitable
         callback call;               // registered callback
     };
 
+    // type erased interface with packaged deleter
     struct erased {
         erased() = delete;
         erased(const erased&) = delete;
@@ -1396,7 +1399,7 @@ public:
 
     private:
         template <typename T>
-        interface* make_interface(T& t, CHAN&& ch, callback&& cb) {
+        static interface* make_interface(T& t, CHAN&& ch, callback&& cb) {
             interface* i = hce::allocate<impl<T>>(1);
             ::new (static_cast<void*>(i)) impl<T>(t, std::move(ch));
             i->call = std::move(cb);
@@ -1442,30 +1445,39 @@ public:
     /**
      @brief launch a multiplex of elements  
 
-     Start element's operations to select between channels
+     Start element's operations to select between channels.
+
+     Can be called more than once to multiplex additional channels.
      */
     template <typename Es...>
     void launch(Es&&... es) {
+        if(!received_ || received_.closed()) {
+            received_ = hce::chan<size_t>::make();
+        }
+
         elements_.reserve(vec.size() + sizeof...(es)); 
         launch_(std::forward<Es>(es)...);
     }
 
     /**
-     @brief await until some callback gets called
+     @brief await until some callback gets called or multiplexing is finish()ed
+     @return await the result to get whether the multiplex succeeded
      */
-    hce::awt<void> select();
+    hce::awt<bool> select();
 
     /**
      @brief end multiplexing 
 
      This unregisters this object from associated element channels.
+     @return await the result to finish multiplexing operations
      */
     hce::awt<void> finish();
 
 private:
-    // provided randomized indexes for use with the element vector
-    std::vector<std::size_t> randomized_indexes();
+    // provided randomized indexes_ for use with the element vector
+    std::vector<std::size_t> randomized_indexes_();
     
+    // element implementation
     template <typename T>
     struct impl : interface {
         virtual ~impl() { }
@@ -1476,20 +1488,23 @@ private:
             ch(std::forward<CHAN>(c))
         { }
 
+        inline void set_guard(detail::guard* g) { ch.set_guard(g); }
         inline void launch() { awt = hce::schedule(forwarder(this)); }
         inline void close() { ch.close(); }
-        inline void set_guard(detail::guard* g) { ch.set_guard(g); }
+        inline void* child() { return ch.context().get(); }; 
         inline hce::awt<bool> recv() { return ch.recv(value); }
         inline hce::awt<bool> forward() { return parent->received_.send(idx); }
 
         // A single shot coroutine to receive over the multiplexed channel
-        static inline hce::co<void> forwarder(impl<T>* self) {
+        static inline hce::co<bool> forwarder(impl<T>* self) {
             // recv blocks until:
             // A) a send succeeds in acquiring the guard lock 
             // B) the parent finishes processing the callback and releases the lock 
             if(co_await self->recv()) {
                 // we have the guard lock, notify the selector 
-                co_await self->forward();
+                co_return co_await self->forward();
+            } else {
+                co_return false;
             }
         }
 
@@ -1498,7 +1513,7 @@ private:
         hce::awt<void> awt;
     };
 
-    hce::co<void> selector(hce::multiplex*);
+    hce::co<void> selector_(hce::multiplex*);
 
     void launch_(); 
 
@@ -1508,13 +1523,17 @@ private:
         auto& cur = elements_.back();
         cur.parent = this;
         cur.idx = elements.size() - 1;
-        cur.e.set_guard(guard_mgr_.guard);
+        // increment the children vector in sync with the elements_ vector
+        cur.e.interface->set_guard(guard_mgr_.guard);
         launch_(std::forward<Es>(es)...);
     }
 
+    void unmanage_(size_t idx);
+
     guard_mgr guard_mgr_;
-    std::vector<element> elements_;
-    hce::channel<size_t> received_;
+    // the indexes of this should match that of guard_mgr::guard::children
+    std::vector<element> elements_; 
+    hce::chan<size_t> received_;
 };
 
 }
