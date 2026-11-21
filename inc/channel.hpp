@@ -4,6 +4,12 @@
 // c++
 #include <typeinfo>
 #include <mutex>
+#include <functional>
+#include <utility>
+#include <vector>
+#include <algorithm>
+#include <numeric>
+#include <random>
 
 // local
 #include "utility.hpp"
@@ -17,7 +23,44 @@
 #include "scheduler.hpp"
 
 namespace hce {
+
+struct multiplex;
+
 namespace channel {
+namespace detail {
+
+// Used to specially control blocking behavior of the channel interface. 
+struct guard {
+    // all values here are set by a parent object
+    struct parent_t {
+        void* ctx = nullptr; // a context pointer (will already be set)
+
+        /*
+         Called by the interface *every* time a send occurs. Returns true if the 
+         send can proceed, and false if the channel must block.
+
+         Accepts the ctx context pointer.
+         */
+        bool (*allow_send)(void*) = nullptr;
+    };
+
+
+    // all values must be assigned by the interface during set_guard()
+    struct child_t {
+        void* ctx = nullptr; // pointer to the implementation
+
+        /*
+         Called by the parent when the channel must become unblocked. Passes in 
+         self as the argument.
+         */
+        void (*unblock)(void*) = nullptr;
+    };
+
+    const parent_t parent;
+    std::vector<child_t> children;
+};
+
+} // detail
 
 /// result of a channel try operation
 enum result {
@@ -72,6 +115,12 @@ struct interface : public printable {
 
     /// attempt receive a value
     virtual hce::yield<channel::result> try_recv(T& t) = 0;
+
+protected:
+    /// register a guard object
+    virtual void set_guard(detail::guard*) = 0;
+
+    friend struct multiplex;
 };
 
 namespace detail {
@@ -236,6 +285,7 @@ struct base_recv_interface :
 /// unbuffered interface implementation
 template <typename T, typename LOCK=hce::spinlock, typename ALLOCATOR=hce::pool_allocator<T>>
 struct unbuffered : public interface<T> {
+    typedef unbuffered<T,LOCK,ALLOCATOR> self_type;_
     typedef T value_type;
 
     unbuffered() {
@@ -373,17 +423,19 @@ private:
             if(parent_.closed_flag_) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("send","closed");
                 return true;
-            } else if(parent_.parked_recv_.size()) [[likely]] {
+            } else if(!parent_.parked_recv_.size() ||
+                      (parent_.guard_ && 
+                       !parent_.guard_.allow_send(parent_.guard_.ctx))) [[unlikely]] {
+                HCE_TRACE_METHOD_BODY("send","blocked");
+                parent_.parked_send_.push_back(this);
+                return false;
+            } else [[likely]] {
                 HCE_TRACE_METHOD_BODY("send","done");
                 parent_.parked_recv_.front()->resume((void*)&(this->tx));
                 parent_.parked_recv_.pop();
                 this->success = true;
                 return true;
-            } else [[unlikely]] {
-                HCE_TRACE_METHOD_BODY("send","blocked");
-                parent_.parked_send_.push_back(this);
-                return false;
-            }
+            } 
         }
 
     private:
@@ -441,15 +493,43 @@ private:
         } else [[unlikely]] { return { result::failure }; }
     }
 
+    inline void unblock_() {
+        std::lock_guard<LOCK> lk(lk_);
+
+        if(parked_send_.size() && 
+           parent_.guard_ && 
+           parent_.guard_.allow_send(parent_.guard_.ctx)) 
+        {
+            auto awt = parked_send_.front();
+            parked_send_.pop();
+            awt->resume(awt->destination);
+        }
+    }
+
+    inline void set_guard(detail::guard* g) { 
+        std::lock_guard<LOCK> lk(lk_);
+        
+        guard_ = g; 
+
+        if(guard_) {
+            guard_->children.emplace_back(
+                this,
+                [](void* v) { ((self_type*)v)->unblock_(); }
+            );
+        }
+    }
+
     mutable LOCK lk_;
     bool closed_flag_ = false;
     hce::list<awt<bool>::interface*,ALLOCATOR> parked_send_;
     hce::list<awt<bool>::interface*,ALLOCATOR> parked_recv_;
+    detail::guard* guard_ = nullptr;
 };
 
 /// buffered interface implementation
 template <typename T, typename LOCK=hce::spinlock, typename ALLOCATOR=hce::pool_allocator<T>>
 struct buffered : public interface<T> {
+    typedef buffered<T,LOCK,ALLOCATOR> self_type;_
     typedef T value_type;
 
     buffered(int sz) : 
@@ -612,7 +692,9 @@ private:
             if(parent_.closed_flag_) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("send","closed");
                 return false;
-            } else if(parent_.buf_.full()) [[unlikely]] {
+            } else if(parent_.buf_.full() ||
+                      (parent_.guard_ && 
+                       !parent_.guard_.allow_send(parent_.guard_.ctx))) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("send","blocked");
                 parent_.parked_send_.push_back(this);
                 return false;
@@ -700,16 +782,49 @@ private:
         }
     }
 
+    inline void unblock_() {
+        std::lock_guard<LOCK> lk(lk_);
+
+        if(parked_send_.size() && 
+           parent_.guard_ && 
+           parent_.guard_.allow_send(parent_.guard_.ctx)) 
+        {
+            auto awt = parked_send_.front();
+            parked_send_.pop();
+            awt->resume((void*)&buf_);
+        }
+    }
+
+    inline void set_guard(detail::guard* g) { 
+        std::lock_guard<LOCK> lk(lk_);
+        
+        guard_ = g; 
+
+        if(guard_) {
+            guard_->children.emplace_back(
+                this,
+                [](void* v) { ((self_type*)v)->unblock_(); }
+            );
+        }
+    }
+
     mutable LOCK lk_;
     bool closed_flag_ = false;
     hce::circular_buffer<T> buf_;
     hce::list<awt<bool>::interface*,ALLOCATOR> parked_send_;
     hce::list<awt<bool>::interface*,ALLOCATOR> parked_recv_;
+    detail::guard* guard_ = nullptr;
 };
 
-/// unlimited interface implementation
+/**
+ @brief unlimited interface implementation, with has no max fixed size buffer 
+
+ Send operations always succeed while not closed except when they are guarded 
+ (ie, by an hce::multiplex coordinating multiple channels).
+ */
 template <typename T, typename LOCK=hce::spinlock, typename ALLOCATOR=hce::pool_allocator<T>>
 struct unlimited : public interface<T> {
+    typedef unlimited<T,LOCK,ALLOCATOR> self_type;_
     typedef T value_type;
 
     unlimited() { 
@@ -859,6 +974,11 @@ private:
             if(parent_.closed_flag_) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("send","closed");
                 return true;
+            } else if(parent_.guard_ && 
+                      !parent_.guard_.allow_send(parent_.guard_.ctx)) [[unlikely]] {
+                HCE_TRACE_METHOD_BODY("send","blocked");
+                parent_.parked_send_.push_back(this);
+                return false;
             } else [[likely]] {
                 HCE_TRACE_METHOD_BODY("send","done");
                 this->tx.send(&(parent_.queue_));
@@ -936,15 +1056,43 @@ private:
         } 
     }
 
+    inline void unblock_() {
+        std::lock_guard<LOCK> lk(lk_);
+
+        if(parked_send_.size() && 
+           parent_.guard_ && 
+           parent_.guard_.allow_send(parent_.guard_.ctx)) 
+        {
+            auto awt = parked_send_.front();
+            parked_send_.pop();
+            awt->resume((void*)&queue_);
+        }
+    }
+
+    inline void set_guard(detail::guard* g) { 
+        std::lock_guard<LOCK> lk(lk_);
+        
+        guard_ = g; 
+
+        if(guard_) {
+            guard_->children.emplace_back(
+                this,
+                [](void* v) { ((self_type*)v)->unblock_(); }
+            );
+        }
+    }
+
     mutable LOCK lk_;
     bool closed_flag_ = false;
     hce::list<T,ALLOCATOR> queue_;
 
-    // send() never blocks, so only has parked recv queue
+    // send() only blocks when guarded 
+    hce::list<awt<bool>::interface*,ALLOCATOR> parked_send_;
     hce::list<awt<bool>::interface*,ALLOCATOR> parked_recv_;
+    detail::guard* guard_ = nullptr;
 };
 
-}
+} // channel
 
 /** 
  @brief communication object which can represent any object which implements channel::interface<T>
@@ -1121,7 +1269,223 @@ struct chan : public channel::interface<T> {
     }
 
 private:
+    inline void set_guard(detail::guard* g) { 
+        context_->set_guard(g);
+    }
+
     std::shared_ptr<channel::interface<T>> context_;
+};
+
+/**
+ @brief an object capable of negotiating the synchronized receipt of one or more hce::chan channels
+
+ Example usage in a coroutine:
+ ```
+ hce::co<void> coro(hce::chan<int> int_ch, hce::chan<std::string> str_ch) {
+     int remaining = 2;
+     int i;
+     std::string s;
+     hce::multiplex mux(
+        {
+            i, 
+            int_ch, 
+            [&] { 
+               std::cout << "received int: " << i << std::endl;
+               --remaining;
+            }
+        },
+        {
+            s,
+            str_ch,
+            [&] {
+               std::cout << "received std::string: " << s << std::endl;
+               --remaining;
+            }
+        });
+     
+     while(remaining) {
+        co_await mux.select();
+     }
+
+     co_await mux.finish();
+ }
+ ```
+ */
+struct multiplex : public printable {
+    using callback = std::function<void()>;
+
+private:
+    struct interface {
+        typedef void(*deleter)(interface*);
+
+        virtual ~interface();
+        virtual void set_guard(detail::guard*) = 0; // set the channel guard
+        virtual void launch() = 0; // launch forwarding operation
+        virtual void close() = 0; // close the channel and end forwarding
+       
+        multiplex* parent = nullptr; // owning multiplex
+        size_t idx;                  // index of this element
+        hce::awt<void> co;           // launched coroutine awaitable
+        callback call;               // registered callback
+    };
+
+    struct erased {
+        erased() = delete;
+        erased(const erased&) = delete;
+        erased(multiplex::interface* i, multiplex::interface::deleter d);
+        erased(erased&&);
+        ~erased();
+
+        erased& operator=(const erased&) = delete;
+        erased& operator=(erased&&);
+
+        multiplex::interface*         interface = nullptr;
+        multiplex::interface::deleter deleter = nullptr;
+    };
+
+    struct guard_mgr {
+        bool allow_send();
+        bool finished = false;
+        detail::guard guard;
+        std::mutex mtx;
+    };
+
+public:
+    /**
+     @brief an object which connects a channel to a callback
+     */
+    struct element {
+        /**
+         @param t the value to assign over the channel
+         @param ch channel to received from
+         @param cb callback to execute when t is received
+         */
+        template <typename T>
+        element(T& t, hce::chan<T> ch, callback cb) :
+            e(make_interface(t, std::move(ch), std::move(cb)), &deleter<T>)
+        { }
+
+    private:
+        template <typename T>
+        interface* make_interface(T& t, CHAN&& ch, callback&& cb) {
+            interface* i = hce::allocate<impl<T>>(1);
+            ::new (static_cast<void*>(i)) impl<T>(t, std::move(ch));
+            i->call = std::move(cb);
+            return i;
+        }
+        
+        template <typename T>
+        static inline deleter(interface i) {
+            if(i) {
+                i->~interface();
+                hce::deallocate(i); 
+            }
+        }
+
+        erased e;
+        friend struct multiplex;
+    };
+
+    /**
+     @brief launch a multiplex of elements on construction
+     */
+    template <typename Es...>
+    multiplex(Es&&... es) :
+        guard_mgr_(channel::detail::guard{
+            channel::detail::guard::parent_t{ 
+                this, 
+                [](void* v) -> bool { 
+                    return ((multiplex::guard*)v)->allow_send();
+                }
+            },
+            channel::detail::guard::child_t{}
+        })
+    {
+        launch(std::forward<Es>(es)...);
+    }
+
+    /// WARNING: finish() must be called or this will throw a fatal
+    ~multiplex();
+
+    static std::string info_name();
+    std::string name() const;
+
+    /**
+     @brief launch a multiplex of elements  
+
+     Start element's operations to select between channels
+     */
+    template <typename Es...>
+    void launch(Es&&... es) {
+        elements_.reserve(vec.size() + sizeof...(es)); 
+        launch_(std::forward<Es>(es)...);
+    }
+
+    /**
+     @brief await until some callback gets called
+     */
+    hce::awt<void> select();
+
+    /**
+     @brief end multiplexing 
+
+     This unregisters this object from associated element channels.
+     */
+    hce::awt<void> finish();
+
+private:
+    // provided randomized indexes for use with the element vector
+    std::vector<std::size_t> randomized_indexes();
+    
+    template <typename T>
+    struct impl : interface {
+        virtual ~impl() { }
+
+        template <typename CHAN>
+        impl(T& t, CHAN&& c) :
+            value(t),
+            ch(std::forward<CHAN>(c))
+        { }
+
+        inline void launch() { awt = hce::schedule(forwarder(this)); }
+        inline void close() { ch.close(); }
+        inline void set_guard(detail::guard* g) { ch.set_guard(g); }
+        inline hce::awt<bool> recv() { return ch.recv(value); }
+        inline hce::awt<bool> forward() { return parent->received_.send(idx); }
+
+        // A single shot coroutine to receive over the multiplexed channel
+        static inline hce::co<void> forwarder(impl<T>* self) {
+            // recv blocks until:
+            // A) a send succeeds in acquiring the guard lock 
+            // B) the parent finishes processing the callback and releases the lock 
+            if(co_await self->recv()) {
+                // we have the guard lock, notify the selector 
+                co_await self->forward();
+            }
+        }
+
+        T& value;
+        hce::chan<t> ch;
+        hce::awt<void> awt;
+    };
+
+    hce::co<void> selector(hce::multiplex*);
+
+    void launch_(); 
+
+    template <typename... Es>
+    void launch_(element e, Es&&... es) {
+        elements_.push_back(std::move(e));
+        auto& cur = elements_.back();
+        cur.parent = this;
+        cur.idx = elements.size() - 1;
+        cur.e.set_guard(guard_mgr_.guard);
+        launch_(std::forward<Es>(es)...);
+    }
+
+    guard_mgr guard_mgr_;
+    std::vector<element> elements_;
+    hce::channel<size_t> received_;
 };
 
 }
