@@ -4,7 +4,40 @@
 #include <utility>
 
 #include "channel.hpp"
-#include "synchronization.hpp"
+
+namespace { // anonymous
+
+/*
+ Deterministic round-robin index generator
+
+ Begin at an arbitrary start index and walk the range [0, max) repeatedly.
+ */
+struct round_robin {
+    explicit round_robin(std::size_t start = 0) noexcept
+        : current_(start) {}
+
+    // return the current index, then advance
+    inline std::size_t next(std::size_t max) noexcept {
+        std::size_t ret = current_ % max;
+        current_ = ret + 1;
+        return ret;
+    }
+
+    // reset the next index that will be returned
+    inline void reset(std::size_t start) noexcept {
+        current_ = start;
+    }
+
+    // peek without advancing
+    inline std::size_t peek(std::size_t max) const noexcept {
+        return current_ % max;
+    }
+
+private:
+    std::size_t current_;
+};
+
+} // anonymous
 
 namespace hce {
 
@@ -34,29 +67,38 @@ erased& erased::operator=(erased&& rhs) {
     std::swap(deleter, rhs.deleter);
 }
 
-bool multiplex::guard_mgr::allow_send() {
-    if(mtx.try_lock()) {
-        if(finished) {
-            mtx.unlock();
-            return false;
-        } else {
-            return true;
-        }
-    } else {
-        return false;
-    }
-}
-
 void multiplex::guard_mgr::unblock() {
-    // unblock in a random order 
-    for(const auto idx : randomized_indexes_(guard.children.size())) {
-        auto& child = guard.children[idx];
+    round_robin rr(current_idx);
 
-        // only unblock if we're still managing this
-        if(child.ctx != nullptr) {
+    // update the starting index for next time
+    current_idx = rr.peek(children.size());
+
+    for (std::size_t n = 0; n < children.size(); ++n) {
+        std::size_t idx = rr.next(children.size());
+        auto& child = children[idx];
+
+        if(child.ctx) {
             child.unblock(child.ctx);
         }
     }
+}
+
+bool multiplex::guard_mgr::try_claim() {
+    // pure try, does not hold anything across the call
+    if(finished.load(std::memory_order_acquire)) {
+        return false;
+    }
+
+    bool expected = false;
+
+    return claimed.compare_exchange_strong(
+        expected, true,
+        std::memory_order_acq_rel,
+        std::memory_order_acquire);
+}
+
+void multiplex::guard_mgr::release() {
+    claimed.store(false, std::memory_order_release);
 }
 
 multiplex::~multiplex() {
@@ -109,18 +151,6 @@ hce::co<bool> multiplex::select() {
     return hce::schedule(multiplex::selector, this);
 }
 
-
-std::vector<std::size_t> multiplex::randomized_indexes_(size_t sz) {
-    std::vector<std::size_t> indices(sz);
-    std::iota(indices.begin(), indices.end(), 0);   // 0, 1, 2, …, n-1
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::shuffle(indices.begin(), indices.end(), gen);
-
-    return indices;
-}
-
 hce::co<bool> multiplex::selector_(multiplex* parent) {
     auto& p = *parent;
     result_t result;
@@ -153,9 +183,8 @@ hce::co<bool> multiplex::selector_(multiplex* parent) {
 }
 
 void multiplex::launch_() {
-    // launch in a random order 
-    for(const auto idx : randomized_indexes_(elements.size())) {
-        elements[idx].launch();
+    for(const auto& e : elements_) {
+        e.e.interface->launch();
     }
 }
     

@@ -7,9 +7,6 @@
 #include <functional>
 #include <utility>
 #include <vector>
-#include <algorithm>
-#include <numeric>
-#include <random>
 #include <atomic>
 
 // local
@@ -1383,24 +1380,16 @@ private:
         std::atomic<bool> claimed{false};
         std::atomic<bool> finished{false};
         detail::guard guard;
+        std::size_t current_idx = 0;
 
-        // pure try, does not hold anything across the call
-        bool try_claim() {
-            if(finished.load(std::memory_order_acquire)) {
-                return false;
-            }
+        // unblock all guarded children
+        void unblock();
 
-            bool expected = false;
+        // attempt to claim the guard
+        bool try_claim();
 
-            return claimed.compare_exchange_strong(
-                expected, true,
-                std::memory_order_acq_rel,
-                std::memory_order_acquire);
-        }
-
-        void release() {
-            claimed.store(false, std::memory_order_release);
-        }
+        // release theguard
+        void release();
     };
 
 public:
@@ -1502,9 +1491,6 @@ public:
     hce::awt<void> finish();
 
 private:
-    // provided randomized indexes_ for use with the element vector
-    std::vector<std::size_t> randomized_indexes_();
-
     struct result_t {
         size_t idx = 0;
         bool done = false;
