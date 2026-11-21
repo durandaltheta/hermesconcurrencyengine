@@ -1459,7 +1459,7 @@ public:
     template <typename... Es>
     void launch(Es&&... es) {
         if(!received_ || received_.closed()) {
-            received_ = hce::chan<size_t>::make();
+            received_ = hce::chan<result_t>::make();
         }
 
         elements_.reserve(elements_.size() + sizeof...(es)); 
