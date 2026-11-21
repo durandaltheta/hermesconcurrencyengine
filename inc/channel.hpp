@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <numeric>
 #include <random>
+#include <atomic>
 
 // local
 #include "utility.hpp"
@@ -41,7 +42,7 @@ struct guard {
 
          Accepts the ctx context pointer.
          */
-        bool (*allow_send)(void*) = nullptr;
+        bool (*try_claim)(void*) = nullptr;
     };
 
 
@@ -401,6 +402,21 @@ struct unbuffered : public interface<T> {
         } else [[unlikely]] { return { result::failure }; }
     }
 
+protected:
+    inline void set_guard(detail::guard* g) { 
+        HCE_LOW_METHOD_ENTER("set_guard");
+        std::lock_guard<LOCK> lk(lk_);
+        
+        guard_ = g; 
+
+        if(guard_) {
+            guard_->children.emplace_back(
+                this,
+                [](void* v) { ((self_type*)v)->unblock_(); }
+            );
+        }
+    }
+
 private:
     typedef unbuffered<T,LOCK,ALLOCATOR> PARENT;
 
@@ -425,7 +441,7 @@ private:
                 return true;
             } else if(!parent_.parked_recv_.size() ||
                       (parent_.guard_ && 
-                       !parent_.guard_.allow_send(parent_.guard_.ctx))) [[unlikely]] {
+                       !parent_.guard_.try_claim(parent_.guard_.ctx))) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("send","blocked");
                 parent_.parked_send_.push_back(this);
                 return false;
@@ -496,26 +512,14 @@ private:
     inline void unblock_() {
         std::lock_guard<LOCK> lk(lk_);
 
-        if(parked_send_.size() && 
-           parent_.guard_ && 
-           parent_.guard_.allow_send(parent_.guard_.ctx)) 
-        {
+        if(!parent_.closed_flag_ && parked_send_.size()) {
+            if(parent_.guard_ && !parent_.guard_.try_claim(parent_.guard_.ctx)) {
+                return;
+            }
+
             auto awt = parked_send_.front();
             parked_send_.pop();
             awt->resume(awt->destination);
-        }
-    }
-
-    inline void set_guard(detail::guard* g) { 
-        std::lock_guard<LOCK> lk(lk_);
-        
-        guard_ = g; 
-
-        if(guard_) {
-            guard_->children.emplace_back(
-                this,
-                [](void* v) { ((self_type*)v)->unblock_(); }
-            );
         }
     }
 
@@ -672,6 +676,21 @@ struct buffered : public interface<T> {
         }
     }
 
+protected:
+    inline void set_guard(detail::guard* g) { 
+        HCE_LOW_METHOD_ENTER("set_guard");
+        std::lock_guard<LOCK> lk(lk_);
+        
+        guard_ = g; 
+
+        if(guard_) {
+            guard_->children.emplace_back(
+                this,
+                [](void* v) { ((self_type*)v)->unblock_(); }
+            );
+        }
+    }
+
 private:
     typedef buffered<T,LOCK,ALLOCATOR> PARENT;
 
@@ -694,7 +713,7 @@ private:
                 return false;
             } else if(parent_.buf_.full() ||
                       (parent_.guard_ && 
-                       !parent_.guard_.allow_send(parent_.guard_.ctx))) [[unlikely]] {
+                       !parent_.guard_.try_claim(parent_.guard_.ctx))) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("send","blocked");
                 parent_.parked_send_.push_back(this);
                 return false;
@@ -785,26 +804,14 @@ private:
     inline void unblock_() {
         std::lock_guard<LOCK> lk(lk_);
 
-        if(parked_send_.size() && 
-           parent_.guard_ && 
-           parent_.guard_.allow_send(parent_.guard_.ctx)) 
-        {
+        if(!parent_.closed_flag_ && parked_send_.size()) {
+            if(parent_.guard_ && !parent_.guard_.try_claim(parent_.guard_.ctx)) {
+                return;
+            }
+
             auto awt = parked_send_.front();
             parked_send_.pop();
             awt->resume((void*)&buf_);
-        }
-    }
-
-    inline void set_guard(detail::guard* g) { 
-        std::lock_guard<LOCK> lk(lk_);
-        
-        guard_ = g; 
-
-        if(guard_) {
-            guard_->children.emplace_back(
-                this,
-                [](void* v) { ((self_type*)v)->unblock_(); }
-            );
         }
     }
 
@@ -954,6 +961,21 @@ struct unlimited : public interface<T> {
         }
     }
 
+protected:
+    inline void set_guard(detail::guard* g) { 
+        HCE_LOW_METHOD_ENTER("set_guard");
+        std::lock_guard<LOCK> lk(lk_);
+        
+        guard_ = g; 
+
+        if(guard_) {
+            guard_->children.emplace_back(
+                this,
+                [](void* v) { ((self_type*)v)->unblock_(); }
+            );
+        }
+    }
+
 private:
     typedef unlimited<T,LOCK,ALLOCATOR> PARENT;
 
@@ -975,7 +997,7 @@ private:
                 HCE_TRACE_METHOD_BODY("send","closed");
                 return true;
             } else if(parent_.guard_ && 
-                      !parent_.guard_.allow_send(parent_.guard_.ctx)) [[unlikely]] {
+                      !parent_.guard_.try_claim(parent_.guard_.ctx)) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("send","blocked");
                 parent_.parked_send_.push_back(this);
                 return false;
@@ -1059,26 +1081,14 @@ private:
     inline void unblock_() {
         std::lock_guard<LOCK> lk(lk_);
 
-        if(parked_send_.size() && 
-           parent_.guard_ && 
-           parent_.guard_.allow_send(parent_.guard_.ctx)) 
-        {
+        if(!parent_.closed_flag_ && parked_send_.size()) {
+            if(parent_.guard_ && !parent_.guard_.try_claim(parent_.guard_.ctx)) {
+                return;
+            }
+
             auto awt = parked_send_.front();
             parked_send_.pop();
             awt->resume((void*)&queue_);
-        }
-    }
-
-    inline void set_guard(detail::guard* g) { 
-        std::lock_guard<LOCK> lk(lk_);
-        
-        guard_ = g; 
-
-        if(guard_) {
-            guard_->children.emplace_back(
-                this,
-                [](void* v) { ((self_type*)v)->unblock_(); }
-            );
         }
     }
 
@@ -1268,11 +1278,13 @@ struct chan : public channel::interface<T> {
         return context_->try_recv(r);
     }
 
-private:
+protected:
     inline void set_guard(detail::guard* g) { 
+        HCE_MIN_METHOD_ENTER("set_guard");
         context_->set_guard(g);
     }
 
+private:
     std::shared_ptr<channel::interface<T>> context_;
 };
 
@@ -1344,10 +1356,27 @@ private:
     };
 
     struct guard_mgr {
-        bool allow_send();
-        bool finished = false;
+        std::atomic<bool> claimed{false};
+        std::atomic<bool> finished{false};
         detail::guard guard;
-        std::mutex mtx;
+
+        // pure try, does not hold anything across the call
+        bool try_claim() {
+            if(finished.load(std::memory_order_acquire)) {
+                return false;
+            }
+
+            bool expected = false;
+
+            return claimed.compare_exchange_strong(
+                expected, true,
+                std::memory_order_acq_rel,
+                std::memory_order_acquire);
+        }
+
+        void release() {
+            claimed.store(false, std::memory_order_release);
+        }
     };
 
 public:
@@ -1395,7 +1424,7 @@ public:
             channel::detail::guard::parent_t{ 
                 this, 
                 [](void* v) -> bool { 
-                    return ((multiplex::guard*)v)->allow_send();
+                    return ((multiplex::guard*)v)->try_claim();
                 }
             },
             channel::detail::guard::child_t{}

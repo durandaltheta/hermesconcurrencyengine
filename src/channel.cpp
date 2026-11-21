@@ -74,30 +74,29 @@ std::string multiplex::name() const {
 hce::awt<void> multiplex::finish() {
     struct local {
         static hce::co<void> op(multiplex* self) {
-            auto& mtx = self->guard_mgr_.mtx;
-
             // mark the guard operations as finished
-            co_await hce::mutex::lock(mtx);
-            self->guard_mgr_.finished = true;
-            mtx.unlock();
+            self->guard_mgr_.finished.store(true, std::memory_order_release);
    
             // close the received channel
             self->received_.close();
 
             // remove the guard from the channels and end forwarding operations
-            for(auto e : self->elements) {
+            for(auto e : self->elements_) {
                 co_await e.e.interface->set_guard(nullptr);
             }
 
-            // unblock all channels
+            // unblock all channels and remove our knowledge of them. When the 
+            // channels unblock they won't have a registered guard anymore.
             self->guard_mgr_.unblock(); 
+            self->guard_mgr_.release();
+            self->guard_mgr_.guard.children.clear();
            
             // join all running coroutines
-            for(auto e : self->elements) {
+            for(auto e : self->elements_) {
                 co_await std::move(e.awt);
             }
 
-            self->elements.clear();
+            self->elements_.clear();
         }
     };
 
@@ -131,7 +130,7 @@ hce::co<void> multiplex::selector(multiplex* parent) {
 
         // If we received then the guard acquired the lock on some
         // send operation. Unblock and notify children.
-        mtx.unlock();
+        parent->guard_mgr_.release();
 
         // relaunch the finished forwarder 
         parent->elements[idx].launch();
