@@ -394,12 +394,16 @@ struct unbuffered : public interface<T> {
 
         if(closed_flag_) [[unlikely]] { 
             return { result::closed }; 
-        } else if(parked_send_.size()) [[likely]] {
+        } else if(!parked_send_.size() ||
+                  (parent_.guard_ && 
+                   !parent_.guard_.try_claim(parent_.guard_.ctx))) [[unlikely]] {
+            return { result::failure }; 
+        } else if() [[likely]] {
             parked_send_.front()->resume((void*)&r);
 
             // return an awaitable which immediately returns true
             return { result::success }; 
-        } else [[unlikely]] { return { result::failure }; }
+        }
     }
 
 protected:
@@ -439,19 +443,17 @@ private:
             if(parent_.closed_flag_) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("send","closed");
                 return true;
-            } else if(!parent_.parked_recv_.size() ||
-                      (parent_.guard_ && 
-                       !parent_.guard_.try_claim(parent_.guard_.ctx))) [[unlikely]] {
-                HCE_TRACE_METHOD_BODY("send","blocked");
-                parent_.parked_send_.push_back(this);
-                return false;
-            } else [[likely]] {
+            } else if(parent_.parked_recv_.size()) [[likely]] {
                 HCE_TRACE_METHOD_BODY("send","done");
                 parent_.parked_recv_.front()->resume((void*)&(this->tx));
                 parent_.parked_recv_.pop();
                 this->success = true;
                 return true;
-            } 
+            } else [[unlikely]] {
+                HCE_TRACE_METHOD_BODY("send","blocked");
+                parent_.parked_send_.push_back(this);
+                return false;
+            }
         }
 
     private:
@@ -475,17 +477,19 @@ private:
             if(parent_.closed_flag_) [[unlikely]] { 
                 HCE_TRACE_METHOD_BODY("recv","closed");
                 return true;
-            } else if(parent_.parked_send_.size()) [[likely]] {
+            } else if(!parent_.parked_send_.size() ||
+                      (parent_.guard_ && 
+                       !parent_.guard_.try_claim(parent_.guard_.ctx))) [[unlikely]] {
+                HCE_TRACE_METHOD_BODY("recv","block for transfer");
+                parent_.parked_recv_.push_back(this);
+                return false;
+            } else [[likely]] {
                 HCE_TRACE_METHOD_BODY("recv","resume");
                 parent_.parked_send_.front()->resume(this->destination);
                 parent_.parked_send_.pop();
                 this->success = true;
                 return true;
-            } else [[unlikely]] {
-                HCE_TRACE_METHOD_BODY("recv","block for transfer");
-                parent_.parked_recv_.push_back(this);
-                return false;
-            }
+            } 
         }
 
     private:
@@ -517,8 +521,8 @@ private:
                 return;
             }
 
-            auto awt = parked_send_.front();
-            parked_send_.pop();
+            auto awt = parked_recv_.front();
+            parked_recv_.pop();
             awt->resume(awt->destination);
         }
     }
@@ -662,17 +666,23 @@ struct buffered : public interface<T> {
                 return { result::failure }; 
             }
         } else [[likely]] {
-            HCE_TRACE_METHOD_BODY("try_recv","done");
-            r = std::move(buf_.front());
-            buf_.pop();
+            if(parent_.guard_ && 
+               !parent_.guard_.try_claim(parent_.guard_.ctx)) [[unlikely]] {
+                HCE_TRACE_METHOD_BODY("try_recv","failed");
+                return { result::failure }; 
+            } else [[likely]] {
+                HCE_TRACE_METHOD_BODY("try_recv","done");
+                r = std::move(buf_.front());
+                buf_.pop();
 
-            if(parked_send_.size()) [[unlikely]] {
-                parked_send_.front()->resume((void*)&buf_);
-                parked_send_.pop();
+                if(parked_send_.size()) [[unlikely]] {
+                    parked_send_.front()->resume((void*)&buf_);
+                    parked_send_.pop();
+                }
+
+                // return an awaitable which immediately returns true
+                return { result::success }; 
             }
-
-            // return an awaitable which immediately returns true
-            return { result::success }; 
         }
     }
 
@@ -711,9 +721,7 @@ private:
             if(parent_.closed_flag_) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("send","closed");
                 return false;
-            } else if(parent_.buf_.full() ||
-                      (parent_.guard_ && 
-                       !parent_.guard_.try_claim(parent_.guard_.ctx))) [[unlikely]] {
+            } else if(parent_.buf_.full()) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("send","blocked");
                 parent_.parked_send_.push_back(this);
                 return false;
@@ -750,7 +758,13 @@ private:
         inline std::string name() const { return recv_interface::info_name(); }
 
         inline bool on_ready() {
-            if(parent_.buf_.empty()) [[unlikely]] {
+            if(parent_.guard_ && 
+               !parent_.guard_.try_claim(parent_.guard_.ctx)) [[unlikely]] 
+            {
+                HCE_TRACE_METHOD_BODY("recv","blocked");
+                parent_.parked_recv_.push_back(this);
+                return false;
+            } else if(parent_.buf_.empty()) [[unlikely]] {
                 if(parent_.closed_flag_ ) [[unlikely]] {
                     HCE_TRACE_METHOD_BODY("recv","closed");
                     return true;
@@ -809,8 +823,8 @@ private:
                 return;
             }
 
-            auto awt = parked_send_.front();
-            parked_send_.pop();
+            auto awt = parked_recv_.front();
+            parked_recv_.pop();
             awt->resume((void*)&buf_);
         }
     }
@@ -825,9 +839,6 @@ private:
 
 /**
  @brief unlimited interface implementation, with has no max fixed size buffer 
-
- Send operations always succeed while not closed except when they are guarded 
- (ie, by an hce::multiplex coordinating multiple channels).
  */
 template <typename T, typename LOCK=hce::spinlock, typename ALLOCATOR=hce::pool_allocator<T>>
 struct unlimited : public interface<T> {
@@ -952,12 +963,18 @@ struct unlimited : public interface<T> {
                 return { result::failure }; 
             }
         } else [[likely]] {
-            HCE_TRACE_METHOD_BODY("try_recv","done");
-            r = std::move(queue_.front());
-            queue_.pop();
+            if(parent_.guard_ && 
+               !parent_.guard_.try_claim(parent_.guard_.ctx)) [[unlikely]] {
+                HCE_TRACE_METHOD_BODY("try_recv","failed");
+                return { result::failure }; 
+            } else {
+                HCE_TRACE_METHOD_BODY("try_recv","done");
+                r = std::move(queue_.front());
+                queue_.pop();
 
-            // return an awaitable which immediately returns true
-            return { result::success }; 
+                // return an awaitable which immediately returns true
+                return { result::success }; 
+            }
         }
     }
 
@@ -996,11 +1013,6 @@ private:
             if(parent_.closed_flag_) [[unlikely]] {
                 HCE_TRACE_METHOD_BODY("send","closed");
                 return true;
-            } else if(parent_.guard_ && 
-                      !parent_.guard_.try_claim(parent_.guard_.ctx)) [[unlikely]] {
-                HCE_TRACE_METHOD_BODY("send","blocked");
-                parent_.parked_send_.push_back(this);
-                return false;
             } else [[likely]] {
                 HCE_TRACE_METHOD_BODY("send","done");
                 this->tx.send(&(parent_.queue_));
@@ -1043,6 +1055,11 @@ private:
                     parent_.parked_recv_.push_back(this);
                     return false;
                 }
+            } else if(parent_.guard_ && 
+                      !parent_.guard_.try_claim(parent_.guard_.ctx)) [[unlikely]] {
+                HCE_TRACE_METHOD_BODY("send","blocked");
+                parent_.parked_recv_.push_back(this);
+                return false;
             } else [[likely]] {
                 HCE_TRACE_METHOD_BODY("recv_","done");
                 detail::transfer tx(&detail::list_recv<T,hce::list<T,ALLOCATOR>>,&(parent_.queue_));
@@ -1081,13 +1098,13 @@ private:
     inline void unblock_() {
         std::lock_guard<LOCK> lk(lk_);
 
-        if(!parent_.closed_flag_ && parked_send_.size()) {
+        if(!parent_.closed_flag_ && parked_recv_.size()) {
             if(parent_.guard_ && !parent_.guard_.try_claim(parent_.guard_.ctx)) {
                 return;
             }
 
-            auto awt = parked_send_.front();
-            parked_send_.pop();
+            auto awt = parked_recv_.front();
+            parked_recv_.pop();
             awt->resume((void*)&queue_);
         }
     }
@@ -1095,9 +1112,6 @@ private:
     mutable LOCK lk_;
     bool closed_flag_ = false;
     hce::list<T,ALLOCATOR> queue_;
-
-    // send() only blocks when guarded 
-    hce::list<awt<bool>::interface*,ALLOCATOR> parked_send_;
     hce::list<awt<bool>::interface*,ALLOCATOR> parked_recv_;
     detail::guard* guard_ = nullptr;
 };
@@ -1288,8 +1302,9 @@ private:
     std::shared_ptr<channel::interface<T>> context_;
 };
 
+
 /**
- @brief an object capable of negotiating the synchronized receipt of one or more hce::chan channels
+ @brief an object capable of negotiating the synchronized receipt of one or more hce::chan channels 
 
  Example usage in a coroutine:
  ```
