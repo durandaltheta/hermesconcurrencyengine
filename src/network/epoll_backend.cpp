@@ -10,8 +10,8 @@
 #include <sys/eventfd.h>
 #include <sys/socket.h>
 
-#include "network/interface.hpp"
-#include "network/epoll_backend.hpp"
+#include "hce/network/interface.hpp"
+#include "hce/network/epoll_backend.hpp"
 
 namespace hce {
 namespace detail {

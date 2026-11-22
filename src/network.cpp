@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis
 
-#include "network.hpp"
+#include "hce/network.hpp"
 
 #include <arpa/inet.h>
 #include <netdb.h>

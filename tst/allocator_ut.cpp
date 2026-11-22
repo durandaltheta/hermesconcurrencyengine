@@ -3,7 +3,7 @@
 #include <string>
 #include <list>
 
-#include "alloc.hpp"
+#include "hce/alloc.hpp"
 
 #include <gtest/gtest.h>
 #include "test_helpers.hpp"

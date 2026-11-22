@@ -1,4 +1,4 @@
-#include "synchronization.hpp"
+#include "hce/synchronization.hpp"
 
 hce::detail::sync::done::done() :
     hce::scheduler::reschedule<

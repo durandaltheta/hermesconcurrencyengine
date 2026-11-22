@@ -5,10 +5,9 @@
 #include "loguru.hpp"
 #include "atomic.hpp"
 #include "list.hpp"
-#include "coroutine.hpp"
-#include "scheduler.hpp"
-#include "threadpool.hpp"
-#include "channel.hpp"
+#include "hce/core.hpp"
+#include "hce/channel.hpp"
+#include "hce/threadpool.hpp"
 
 #include <gtest/gtest.h>  
 #include "test_helpers.hpp"

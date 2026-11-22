@@ -1,7 +1,6 @@
 //SPDX-License-Identifier: Apache-2.0
 //Author: Blayne Dennis 
-#ifndef __HCE_COROUTINE_ENGINE_TEST_BLOCKING_HELPERS__
-#define __HCE_COROUTINE_ENGINE_TEST_BLOCKING_HELPERS__
+#pragma once 
 
 #include <deque>
 #include <string>
@@ -11,9 +10,9 @@
 #include <algorithm>
 
 #include "loguru.hpp"
-#include "atomic.hpp"
-#include "scheduler.hpp"
-#include "blocking.hpp"
+#include "hce/atomic.hpp"
+#include "hce/scheduler.hpp"
+#include "hce/blocking.hpp"
 
 #include <gtest/gtest.h> 
 #include "test_helpers.hpp"
@@ -190,5 +189,3 @@ hce::co<T> co_block_for_queue_simple_T(test::queue<T>& q) {
 
 }
 }
-
-#endif

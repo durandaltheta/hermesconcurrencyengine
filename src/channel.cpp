@@ -3,7 +3,7 @@
 // c++
 #include <utility>
 
-#include "channel.hpp"
+#include "hce/channel.hpp"
 
 namespace { // anonymous
 
@@ -92,7 +92,7 @@ void multiplex::guard_mgr::unblock() {
     current_idx = rr.next(guard.children.size());
 }
 
-bool multiplex::guard_mgr::try_claim() {
+bool multiplex::guard_mgr::try_claim_recv() {
     // pure try, does not hold anything across the call
     if(finished.load(std::memory_order_acquire)) {
         return false;

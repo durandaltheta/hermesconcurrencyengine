@@ -1,12 +1,16 @@
 //SPDX-License-Identifier: Apache-2.0
 //Author: Blayne Dennis 
-#ifndef __HCE_COROUTINE_ENGINE_TEST_MODULE_HELPERS__
-#define __HCE_COROUTINE_ENGINE_TEST_MODULE_HELPERS__
+#pragma once 
 
 #include <mutex>
 #include <sstream>
-#include "hce.hpp"
 #include "test_helpers.hpp"
+#include "hce/core.hpp"
+#include "hce/channel.hpp"
+#include "hce/timer.hpp"
+#include "hce/blocking.hpp"
+#include "hce/network.hpp"
+#include "hce/threadpool.hpp"
 
 namespace test {
 namespace module {
@@ -756,5 +760,3 @@ struct interface {
 
 }
 }
-
-#endif

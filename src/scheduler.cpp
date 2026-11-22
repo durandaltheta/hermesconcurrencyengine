@@ -3,10 +3,10 @@
 #include <memory>
 #include <unordered_set>
 
-#include "utility.hpp"
-#include "thread.hpp"
-#include "scheduler.hpp"
-#include "thread_key_map.hpp"
+#include "hce/utility.hpp"
+#include "hce/thread.hpp"
+#include "hce/scheduler.hpp"
+#include "hce/thread_key_map.hpp"
 
 hce::scheduler*& hce::detail::scheduler::tl_this_scheduler() {
     thread_local hce::thread::local::ptr<hce::thread::key::scheduler> p;

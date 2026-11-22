@@ -4,11 +4,10 @@
 #include <functional>
 
 #include "loguru.hpp"
-#include "atomic.hpp"
-#include "logging.hpp"
-#include "coroutine.hpp"
-#include "scheduler.hpp"
-#include "channel.hpp"
+#include "hce/atomic.hpp"
+#include "hce/core.hpp"
+#include "hce/logging.hpp"
+#include "hce/channel.hpp"
 
 #include <gtest/gtest.h>  
 #include "test_helpers.hpp"

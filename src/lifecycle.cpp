@@ -1,5 +1,15 @@
-#include "utility.hpp"
-#include "lifecycle.hpp"
+#include <sstream>
+
+#include "hce/utility.hpp"
+#include "hce/owner.hpp"
+#include "hce/lifecycle.hpp"
+#include "hce/memory.hpp"
+#include "hce/chrono.hpp"
+#include "hce/scheduler.hpp"
+#include "hce/threadpool.hpp"
+#include "hce/blocking.hpp"
+#include "hce/timer.hpp"
+#include "hce/network.hpp"
 
 #ifndef HCELOGLEVEL
 /*
@@ -150,20 +160,40 @@ hce::lifecycle::config::timer::timer() :
 #endif 
     }()),
     busy_wait_threshold(
-        std::chrono::microseconds(
-            HCETIMERBUSYWAITMICROSECONDTHRESHOLD)),
+            HCETIMERBUSYWAITMICROSECONDTHRESHOLD),
     early_wakeup_threshold(
-        std::chrono::microseconds(
-            HCETIMEREARLYWAKEUPMICROSECONDTHRESHOLD)),
+            HCETIMEREARLYWAKEUPMICROSECONDTHRESHOLD),
     early_wakeup_long_threshold(
-        std::chrono::microseconds(
-            HCETIMEREARLYWAKEUPMICROSECONDLONGTHRESHOLD)),
-    algorithm(&(hce::timer::default_timeout_algorithm))
+            HCETIMEREARLYWAKEUPMICROSECONDLONGTHRESHOLD)
 { }
 
 hce::lifecycle::config::network::network() :
     thread_count(1)
 { }
+
+struct erased_impl : hce::lifecycle::erased {
+    erased_impl(std::unique_ptr<hce::thread::local>&& l) : local_(std::move(l)) { 
+    }
+
+    ~erased_impl() { }
+
+    // the various services, in order of dependencies
+    std::unique_ptr<hce::thread::local> local_;
+    std::unique_ptr<hce::owner<hce::scheduler::lifecycle::manager>> scheduler_lifecycle_manager_;
+    std::unique_ptr<hce::owner<hce::scheduler::global>> scheduler_global_;
+    std::unique_ptr<hce::owner<hce::threadpool>> threadpool_;
+    std::unique_ptr<hce::owner<hce::blocking>> blocking_;
+    std::unique_ptr<hce::owner<hce::timer>> timer_;
+    std::unique_ptr<hce::owner<hce::network>> network_;
+};
+
+hce::lifecycle::erased::~erased(){ }
+
+void hce::lifecycle::erased::deleter::operator()(hce::lifecycle::erased* e) const {
+    if(e) {
+        delete (erased_impl*)e;
+    }
+}
 
 std::unique_ptr<hce::lifecycle> hce::lifecycle::initialize(hce::lifecycle::config c) {
     return std::unique_ptr<hce::lifecycle>(
@@ -186,7 +216,16 @@ const hce::lifecycle::config& hce::lifecycle::get_config() { return config_; }
 // initialize hce::thread::local before lifecycle so logging can function
 hce::lifecycle::lifecycle(const config& c, std::unique_ptr<hce::thread::local>&& l) : 
     config_(c),
-    local_(std::move(l))
+    erased_((erased*)new erased_impl(std::move(l)))
 { 
+    // allocate all the owner<> instances
+    auto& ei = *((erased_impl*)(erased_.get()));
+    ei.scheduler_lifecycle_manager_.reset(new hce::owner<hce::scheduler::lifecycle::manager>);
+    ei.scheduler_global_.reset(new hce::owner<hce::scheduler::global>);
+    ei.threadpool_.reset(new hce::owner<hce::threadpool>);
+    ei.blocking_.reset(new hce::owner<hce::blocking>);
+    ei.timer_.reset(new hce::owner<hce::timer>);
+    ei.network_.reset(new hce::owner<hce::network>);
+
     HCE_INFO_CONSTRUCTOR(); 
 }

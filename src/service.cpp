@@ -1,11 +1,12 @@
-#include "utility.hpp"
-#include "thread.hpp"
-#include "scheduler.hpp"
-#include "threadpool.hpp"
-#include "blocking.hpp"
-#include "timer.hpp"
-#include "lifecycle.hpp"
-#include "service.hpp"
+#include "hce/utility.hpp"
+#include "hce/thread.hpp"
+#include "hce/scheduler.hpp"
+#include "hce/threadpool.hpp"
+#include "hce/blocking.hpp"
+#include "hce/timer.hpp"
+#include "hce/network.hpp"
+#include "hce/lifecycle.hpp"
+#include "hce/service.hpp"
 
 HCE_EXPORT hce::thread::local* local_implementation_ = nullptr;
 HCE_EXPORT hce::scheduler::lifecycle::manager* scheduler_lifecycle_manager_implementation_ = nullptr;

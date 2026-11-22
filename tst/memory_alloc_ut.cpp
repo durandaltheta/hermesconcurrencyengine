@@ -2,8 +2,8 @@
 //Author: Blayne Dennis 
 #include <string>
 
-#include "memory.hpp"
-#include "alloc.hpp"
+#include "hce/memory.hpp"
+#include "hce/alloc.hpp"
 
 #include <gtest/gtest.h>
 #include "test_helpers.hpp"

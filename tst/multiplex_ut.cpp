@@ -8,10 +8,9 @@
 #include <string>
 #include <chrono>
 
-#include "channel.hpp"
-#include "scheduler.hpp"
-#include "coroutine.hpp"
-#include "logging.hpp"
+#include "hce/core.hpp"
+#include "hce/logging.hpp"
+#include "hce/channel.hpp"
 
 #include <gtest/gtest.h>
 #include "test_helpers.hpp"

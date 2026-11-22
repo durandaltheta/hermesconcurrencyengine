@@ -1,8 +1,8 @@
 //SPDX-License-Identifier: Apache-2.0
 //Author: Blayne Dennis 
 #include "loguru.hpp"
-#include "atomic.hpp"
-#include "coroutine.hpp"
+#include "hce/atomic.hpp"
+#include "hce/coroutine.hpp"
 
 #include <string>
 #include <sstream>

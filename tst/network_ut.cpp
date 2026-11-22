@@ -13,10 +13,8 @@
 
 #include <gtest/gtest.h>
 
-#include "network.hpp"
-#include "scheduler.hpp"
-#include "coroutine.hpp"
-#include "service.hpp"
+#include "hce/core.hpp"
+#include "hce/network.hpp"
 #include "test_helpers.hpp"
 #include "codec/base64.hpp"
 

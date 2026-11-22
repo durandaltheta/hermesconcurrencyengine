@@ -32,38 +32,41 @@ endfunction()
 
 set(HCE_HEADER_FILES 
     ${LOGURU_DIR}/loguru.hpp
-    ${HCE_INCLUDE_DIR}/base.hpp
-    ${HCE_INCLUDE_DIR}/utility.hpp
-    ${HCE_INCLUDE_DIR}/expected.hpp
-    ${HCE_INCLUDE_DIR}/cleanup.hpp
-    ${HCE_INCLUDE_DIR}/logging.hpp
-    ${HCE_INCLUDE_DIR}/service.hpp
-    ${HCE_INCLUDE_DIR}/memory.hpp
-    ${HCE_INCLUDE_DIR}/alloc.hpp
-    ${HCE_INCLUDE_DIR}/thread.hpp
-    ${HCE_INCLUDE_DIR}/atomic.hpp
-    ${HCE_INCLUDE_DIR}/id.hpp
-    ${HCE_INCLUDE_DIR}/chrono.hpp
-    ${HCE_INCLUDE_DIR}/circular_buffer.hpp
-    ${HCE_INCLUDE_DIR}/list.hpp
-    ${HCE_INCLUDE_DIR}/timer.hpp 
-    ${HCE_INCLUDE_DIR}/transmit.hpp 
-    ${HCE_INCLUDE_DIR}/codec/base64.hpp
-    ${HCE_INCLUDE_DIR}/network/interface.hpp
-    ${HCE_INCLUDE_DIR}/network/epoll_backend.hpp
-    ${HCE_INCLUDE_DIR}/network/socket.hpp
-    ${HCE_INCLUDE_DIR}/network.hpp
-    ${HCE_INCLUDE_DIR}/synchronized_list.hpp
-    ${HCE_INCLUDE_DIR}/coroutine.hpp
-    ${HCE_INCLUDE_DIR}/scheduler.hpp
-    ${HCE_INCLUDE_DIR}/blocking.hpp
-    ${HCE_INCLUDE_DIR}/channel.hpp
-    ${HCE_INCLUDE_DIR}/threadpool.hpp
-    ${HCE_INCLUDE_DIR}/thread_key_map.hpp
-    ${HCE_INCLUDE_DIR}/lifecycle.hpp
-    ${HCE_INCLUDE_DIR}/environment.hpp
-    ${HCE_INCLUDE_DIR}/module.hpp
-    ${HCE_INCLUDE_DIR}/hce.hpp
+    ${HCE_INCLUDE_DIR}/hce/base.hpp
+    ${HCE_INCLUDE_DIR}/hce/utility.hpp
+    ${HCE_INCLUDE_DIR}/hce/expected.hpp
+    ${HCE_INCLUDE_DIR}/hce/cleanup.hpp
+    ${HCE_INCLUDE_DIR}/hce/logging.hpp
+    ${HCE_INCLUDE_DIR}/hce/memory.hpp
+    ${HCE_INCLUDE_DIR}/hce/alloc.hpp
+    ${HCE_INCLUDE_DIR}/hce/service.hpp
+    ${HCE_INCLUDE_DIR}/hce/owner.hpp
+    ${HCE_INCLUDE_DIR}/hce/thread.hpp
+    ${HCE_INCLUDE_DIR}/hce/atomic.hpp
+    ${HCE_INCLUDE_DIR}/hce/id.hpp
+    ${HCE_INCLUDE_DIR}/hce/chrono.hpp
+    ${HCE_INCLUDE_DIR}/hce/circular_buffer.hpp
+    ${HCE_INCLUDE_DIR}/hce/list.hpp
+    ${HCE_INCLUDE_DIR}/hce/timer/config.hpp 
+    ${HCE_INCLUDE_DIR}/hce/timer.hpp 
+    ${HCE_INCLUDE_DIR}/hce/transmit.hpp 
+    ${HCE_INCLUDE_DIR}/hce/codec/base64.hpp
+    ${HCE_INCLUDE_DIR}/hce/network/interface.hpp
+    ${HCE_INCLUDE_DIR}/hce/network/epoll_backend.hpp
+    ${HCE_INCLUDE_DIR}/hce/network/socket.hpp
+    ${HCE_INCLUDE_DIR}/hce/network.hpp
+    ${HCE_INCLUDE_DIR}/hce/synchronized_list.hpp
+    ${HCE_INCLUDE_DIR}/hce/coroutine.hpp
+    ${HCE_INCLUDE_DIR}/hce/scheduler/config.hpp
+    ${HCE_INCLUDE_DIR}/hce/scheduler.hpp
+    ${HCE_INCLUDE_DIR}/hce/blocking.hpp
+    ${HCE_INCLUDE_DIR}/hce/channel.hpp
+    ${HCE_INCLUDE_DIR}/hce/threadpool/config.hpp
+    ${HCE_INCLUDE_DIR}/hce/threadpool.hpp
+    ${HCE_INCLUDE_DIR}/hce/thread_key_map.hpp
+    ${HCE_INCLUDE_DIR}/hce/lifecycle.hpp
+    ${HCE_INCLUDE_DIR}/hce/environment.hpp
+    ${HCE_INCLUDE_DIR}/hce/module.hpp
 )
 
 set(HCE_SOURCE_FILES

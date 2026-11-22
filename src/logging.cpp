@@ -1,8 +1,8 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#include "logging.hpp"
-#include "thread.hpp"
-#include "thread_key_map.hpp"
+#include "hce/logging.hpp"
+#include "hce/thread.hpp"
+#include "hce/thread_key_map.hpp"
 
 int& hce::logger::tl_loglevel() {
     struct init {

@@ -1,6 +1,7 @@
 #include <iostream>
 #include <filesystem>
-#include "hce.hpp"
+#include <hce/core.hpp>
+#include <hce/module.hpp>
 
 #if defined(_WIN32)
 #include <windows.h>

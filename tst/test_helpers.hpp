@@ -1,13 +1,12 @@
 //SPDX-License-Identifier: Apache-2.0
 //Author: Blayne Dennis 
-#ifndef __HCE_COROUTINE_ENGINE_TEST_HELPERS__
-#define __HCE_COROUTINE_ENGINE_TEST_HELPERS__
+#pragma once 
 
 #include <deque>
 #include <mutex>
 #include <condition_variable>
 
-#include "atomic.hpp"
+#include "hce/atomic.hpp"
 
 namespace test {
 
@@ -175,5 +174,3 @@ private:
 };
 
 }
-
-#endif

@@ -18,17 +18,18 @@
 #include <stdexcept>
 
 #include "loguru.hpp"
-#include "utility.hpp"
-#include "chrono.hpp"
-#include "thread.hpp"
-#include "memory.hpp"
-#include "scheduler.hpp"
-#include "timer.hpp"
-#include "blocking.hpp"
-#include "channel.hpp"
-#include "threadpool.hpp"
-#include "thread_key_map.hpp"
-#include "lifecycle.hpp"
+#include "hce/utility.hpp"
+#include "hce/chrono.hpp"
+#include "hce/thread.hpp"
+#include "hce/memory.hpp"
+#include "hce/scheduler/config.hpp"
+#include "hce/threadpool/config.hpp"
+#include "hce/blocking/config.hpp"
+#include "hce/timer/config.hpp"
+#include "hce/timer.hpp"
+#include "hce/network/config.hpp"
+#include "hce/thread_key_map.hpp"
+#include "hce/lifecycle.hpp"
 
 size_t hce::config::pool_allocator::default_block_limit() {
     return hce::service<hce::lifecycle>::get().get_config().alloc.pool_allocator_default_block_limit;
@@ -59,21 +60,27 @@ int hce::config::timer::thread_priority() {
 }
 
 hce::chrono::duration hce::config::timer::busy_wait_threshold() {
-    return hce::service<hce::lifecycle>::get().get_config().tmr.busy_wait_threshold;
+    return 
+        std::chrono::microseconds(
+            hce::service<hce::lifecycle>::get().get_config().tmr.busy_wait_threshold);
 }
 
 hce::chrono::duration hce::config::timer::early_wakeup_threshold() {
-    return hce::service<hce::lifecycle>::get().get_config().tmr.early_wakeup_threshold;
+    return 
+        std::chrono::microseconds(
+            hce::service<hce::lifecycle>::get().get_config().tmr.early_wakeup_threshold);
 }
 
 hce::chrono::duration hce::config::timer::early_wakeup_long_threshold() {
-    return hce::service<hce::lifecycle>::get().get_config().tmr.early_wakeup_long_threshold;
+    return 
+        std::chrono::microseconds(
+            hce::service<hce::lifecycle>::get().get_config().tmr.early_wakeup_long_threshold);
+}
+
+hce::config::timer::algorithm_function_ptr hce::config::timer::timeout_algorithm() {
+    return &(hce::timer::default_timeout_algorithm);
 }
 
 size_t hce::config::network::thread_count() {
     return hce::service<hce::lifecycle>::get().get_config().net.thread_count;
-}
-
-hce::config::timer::algorithm_function_ptr hce::config::timer::timeout_algorithm() {
-    return hce::service<hce::lifecycle>::get().get_config().tmr.algorithm;
 }

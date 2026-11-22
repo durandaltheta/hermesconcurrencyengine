@@ -12,7 +12,7 @@ A simple example where a coroutine is constructed, scheduled, and communicated w
 [example_001 source](ex/src/example_001.cpp)
 ```cpp
 #include <iostream>
-#include <hce.hpp>
+#include <hce/core.hpp>
 
 hce::co<void> my_coroutine(hce::chan<int> ch) {
     int i;
@@ -164,7 +164,7 @@ hce::co<int> outer_frame() {
 ### Further Examples and Explanations
 ```cpp
 #include <string> 
-#include <hce.hpp>
+#include <hce/coroutine.hpp>
 
 hce::co<void> void_return_coroutine() {
     co_return;
@@ -193,9 +193,11 @@ Here are some of the most important high level operations (all of which rely on 
 // Schedule a coroutine and return an awaitable which can be awaited to return the coroutine return value
 hce::awt<T> hce::schedule(co);
 
+// Available in "hce/timer.hpp"
 // Return an awaitable which will block a coroutine for a period of time
 hce::awt<void> hce::sleep(hce::chrono::duration);
 
+// Available in "hce/blocking.hpp"
 // Invoke a Callable (function/functor/lambda) on a dedicated thread and return an awaitable to join with the result
 hce::awt<T> hce::block(Callable, args...);
 ```
@@ -203,7 +205,7 @@ hce::awt<T> hce::block(Callable, args...);
 A simple example program:
 ```cpp
 #include <iostream>
-#include <hce.hpp> 
+#include <hce/core.hpp>
 
 // c++20 coroutines valid for this framework return `hce::co<COROUTINE_RETURN_TYPE>`
 hce::co<int> my_coroutine(int arg) {
@@ -255,7 +257,7 @@ int main() {
 Concurrent scheduling (scheduling on the same thread) provides very fast communication speeds between coroutines. It is preferable to utilize concurrent scheduling unless your program's bottleneck is CPU throughput.
 
 ### Parallel
-This framework employes a threadpool of `hce::scheduler`s in the `hce::threadpool` service object, allow the ability to schedule coroutines optionally in parallel. 
+This framework employes a threadpool of `hce::scheduler`s in the `hce::threadpool` service object, allow the ability to schedule coroutines optionally in parallel. This object is available in `hce/threadpool.hpp`.
 
 Parallel scheduling allows for potentially more usage of CPU resources, but has impared communication speed between coroutines scheduled on different threads.
 
@@ -263,6 +265,9 @@ NOTE: The default count of threads in the `hce::threadpool` is 1, disabling para
 
 `hce::co<T>`s can be scheduled for on some `hce::scheduler` managed by the `hce::threadpool` with `hce::threadpool::schedule()`:
 ```cpp
+#include "hce/core.hpp"
+#include "hce/threadpool.hpp"
+
 hce::co<int> my_coroutine2() { 
     /* ... */
 }
@@ -294,7 +299,7 @@ This library allows communication between coroutines, threads, and any combinati
 A simple example program:
 ```cpp
 #include <iostream>
-#include <hce.hpp> 
+#include <hce/core.hpp>
 
 hce::co<void> my_coroutine(hce::chan<int> in_ch, hce::chan<int> out_ch) {
     int i;
@@ -353,7 +358,8 @@ A simple example program:
 ```cpp
 #include <iostream>
 #include <chrono>
-#include <hce.hpp> 
+#include <hce/core.hpp>
+#include <hce/blocking.hpp>
 
 int my_blocking_function(int arg) {
     // sleep for 5 seconds blocking the calling thread
@@ -438,7 +444,7 @@ hce::co<result> attempt_non_blocking(const unsigned int maximum_retry) {
 
 ## Synchronization
 
-Standard library synchronization primitives (`std::mutex`, `std::unique_lock`, `std::condition_variable`, etc.) can block the calling thread. Direct use of them inside an `hce::co<T>` would stall the scheduler. The functions in `synchronization.hpp` make them coroutine-safe by offloading blocking work to `hce::block` worker threads while providing a fast path when a lock can be acquired immediately.
+Standard library synchronization primitives (`std::mutex`, `std::unique_lock`, `std::condition_variable`, etc.) can block the calling thread. Direct use of them inside an `hce::co<T>` would stall the scheduler. The functions in `hce/synchronization.hpp` make them coroutine-safe by offloading blocking work to `hce::block` worker threads while providing a fast path when a lock can be acquired immediately.
 
 All functions return an `hce::awt<...>` that can be `co_await`ed.
 
@@ -481,6 +487,8 @@ hce::awt<bool> try_lock_until(UNIQUE_LOCKABLE& ul, const TIMEPOINT& tp) {
 `construct` is the normal way to obtain a locked `std::unique_lock` (ex: `std::unique_lock<std::mutex>`) from a coroutine (it performs the lock then adopts ownership). The other overloads mirror the corresponding `std::unique_lock` members, again using the try-then-block pattern (or always blocking for the timed variants).
 
 ```cpp
+#include "hce/synchronization.hpp"
+
 std::mutex mtx;
 hce::co<void> example() {
     std::unique_lock<std::mutex> ul;
@@ -500,7 +508,9 @@ hce::awt<void> hce::condition_variable::wait(CONDITION_VARIABLE& cv, LOCK& lk);
 
 All waits are offloaded to a blocking worker. The lock object (normally a `std::unique_lock`) is unlocked and re-locked by the condition variable exactly as it would be in ordinary threaded code.
 
-```cpp
+```cpp 
+#include "hce/synchronization.hpp"
+
 std::mutex mtx;
 std::condition_variable cv;
 bool ready = false;
@@ -517,7 +527,7 @@ These wrappers exist so existing code that already uses the standard primitives 
 Use the synchronization helpers when you must interoperate with code that already expects a mutex or condition variable.
 
 ## Timers
-Coroutines can use the following API to start/check/cancel timers:
+Coroutines can use the following API in `hce/timer.hpp` to start/check/cancel timers:
 ```cpp
 /**
  @brief optionally ensure the timer service thread is running 
@@ -582,11 +592,13 @@ hce::awt<void> hce::sleep(const hce::chrono::duration& dur);
 
 ## Network
 
-The framework includes an asynchronous TCP/UDP networking service built on an epoll-based backend. It lets coroutines open client connections, accept server connections, and perform non-blocking send/receive without blocking the scheduler or requiring manual `hce::block()` / `hce::yield()` glue.
+The framework includes an asynchronous TCP/UDP networking service in `hce/network.hpp` built on an epoll-based backend. It lets coroutines open client connections, accept server connections, and perform non-blocking send/receive without blocking the scheduler or requiring manual `hce::block()` / `hce::yield()` glue.
 
 The service is registered automatically with the `lifecycle`. Access it with:
 
-```cpp
+```cpp 
+#include "hce/network.hpp"
+
 auto& net = hce::service<hce::network>::get();
 ```
 
@@ -607,6 +619,8 @@ struct hce::network::address {
 `connect` returns an awaitable that yields a movable `connection` (or an error):
 
 ```cpp
+#include "hce/network.hpp"
+
 hce::co<void> client() {
     auto& net = hce::service<hce::network>::get();
 
@@ -646,6 +660,8 @@ hce::co<void> client() {
 `listen` is synchronous and returns an `acceptor` (or an error). `accept` is an awaitable that yields a ready, non-blocking `connection` already assigned to an IO thread:
 
 ```cpp
+#include "hce/network.hpp"
+
 hce::co<void> server() {
     auto& net = hce::service<hce::network>::get();
 
@@ -696,13 +712,16 @@ All network awaitables suspend the calling coroutine and resume it from the IO b
 
 Raw `send`/`recv` give you bytes. Most real applications need *messages* — discrete, framed units of data (a request, a response, a record, a framed binary blob, etc.).
 
-The networking service provides a small, optional **protocol** abstraction for this purpose. A protocol is a type that knows how to read one complete message from a connection and write one complete message to a connection. It sits on top of the byte-oriented `connection` API and is free to call `recv`/`recv_all`/`send`/`send_all` (or any other connection methods) as needed.
+The networking service provides a small, optional **protocol** abstraction in `hce/transmit.hpp` for this purpose. A protocol is a type that knows how to read one complete message from a connection and write one complete message to a connection. It sits on top of the byte-oriented `connection` API and is free to call `recv`/`recv_all`/`send`/`send_all` (or any other connection methods) as needed.
 
 `hce::transmit::protocol` is part of `transmit.hpp`, included by default in `network.hpp`.
 
 ### The `protocol` interface
 
 ```cpp
+#include "hce/transmit.hpp"
+#include "hce/network.hpp"
+
 template<typename RECV_T, typename SEND_T = RECV_T>
 struct hce::transmit::protocol {
     virtual ~protocol() {}
@@ -726,6 +745,9 @@ Protocols are ordinary C++ types. You can use the supplied helpers or write your
 A common and simple framing scheme is a fixed-size length prefix followed by that many payload bytes. The library includes a ready-to-use implementation for binary blobs:
 
 ```cpp
+#include "hce/transmit.hpp"
+#include "hce/network.hpp"
+
 struct hce::network::protocol::length_prefixed::byte
     : public hce::network::protocol<std::vector<std::byte>>
 {
@@ -753,6 +775,10 @@ struct hce::network::protocol::length_prefixed::byte
 #### Example: length-prefixed echo
 
 ```cpp
+#include "hce/core.hpp"
+#include "hce/transmit.hpp"
+#include "hce/network.hpp"
+
 hce::co<void> handle_client(hce::network::connection conn) {
     hce::network::protocol::length_prefixed::byte proto;
 
@@ -776,6 +802,10 @@ hce::co<void> handle_client(hce::network::connection conn) {
 On the client side the same protocol type is used to send and receive complete messages:
 
 ```cpp
+#include "hce/core.hpp"
+#include "hce/transmit.hpp"
+#include "hce/network.hpp"
+
 hce::co<void> client() {
     auto& net = hce::service<hce::network>::get();
     auto conn_exp = co_await net.connect({.host = "127.0.0.1", .port = 8080});
@@ -808,6 +838,10 @@ Any type that implements the two methods above is a valid protocol. Common patte
 A minimal line-based example (illustrative, there's already a `hce::network::protocol::length_prefixed::base64`):
 
 ```cpp
+#include "hce/core.hpp"
+#include "hce/transmit.hpp"
+#include "hce/network.hpp"
+
 struct line_protocol : hce::network::protocol<std::string> {
     hce::co<hce::expected<std::string, std::error_code>>
     recv(hce::network::connection& conn) override {
@@ -883,6 +917,10 @@ The `in` and `out` channels in `state` report why each direction stopped. An emp
 #### Example: pumping a length-prefixed connection into channels
 
 ```cpp
+#include "hce/core.hpp"
+#include "hce/transmit.hpp"
+#include "hce/network.hpp"
+
 hce::co<void> handle_client(hce::network::connection conn) {
     auto inbound  = hce::chan<std::vector<std::byte>>::make();
     auto outbound = hce::chan<std::vector<std::byte>>::make();
@@ -911,6 +949,10 @@ This pattern keeps protocol framing and connection lifetime management separate 
 #### Example: length-prefixed base64 echo 
 The base64 protocol frames strings by first base64-encoding them, then applying a length prefix to the encoded form. The length on the wire is the size of the base64 data, not the original string.
 ```cpp 
+#include "hce/core.hpp"
+#include "hce/transmit.hpp"
+#include "hce/network.hpp"
+
 hce::co<void> handle_client(hce::network::connection conn) {
     hce::network::protocol::length_prefixed::base64<> proto;
 
@@ -935,6 +977,10 @@ hce::co<void> handle_client(hce::network::connection conn) {
 
 Client side:
 ```cpp
+#include "hce/core.hpp"
+#include "hce/transmit.hpp"
+#include "hce/network.hpp"
+
 hce::co<void> client() {
     auto& net = hce::service<hce::network>::get();
     auto conn_exp = co_await net.connect({.host = "127.0.0.1", .port = 8080});
@@ -998,7 +1044,7 @@ co_await std::move(state.awt);
 Protocols are optional. You can stay at the byte level forever if that matches your protocol (e.g. raw UDP datagrams, or a custom binary format you prefer to parse yourself). When you want message-oriented communication, implement (or reuse) a `protocol<T>` and, if desired, let `pump` move the messages for you.
 
 ## Modules
-This project supports the concept of dynamically loaded plugins running coroutines via the module system. Here is the module API:
+This project supports the concept of dynamically loaded plugins running coroutines via the module system. Here is the module API in `hce/module.hpp`:
 ```cpp
 namespace hce {
 
@@ -1056,7 +1102,7 @@ struct module {
 Implementation is fairly simple. You will need a host which is compiled against the `hce` library that initializes the framework and imports the module. An example host that communicates to the module:
 ```cpp
 #include <string>
-#include <hce/hce.hpp>
+#include <hce/core.hpp>
 
 hce::co<void> op(hce::chan<std::string> ch) {
     co_await ch.send(std::string("hello world"));
@@ -1084,7 +1130,8 @@ Write a dynamically linked library and compile it against the same `hce` library
 ```cpp
 #include <iostream>
 #include <string>
-#include <hce/hce.hpp>
+#include <hce/core.hpp>
+#include <hce/module.hpp>
 
 struct example_module : public hce::module {
     virtual ~example_module(){} 

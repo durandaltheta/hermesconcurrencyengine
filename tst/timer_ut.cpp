@@ -8,9 +8,9 @@
 #include <sstream>
 
 #include "loguru.hpp"
-#include "atomic.hpp"
-#include "chrono.hpp"
-#include "timer.hpp"
+#include "hce/atomic.hpp"
+#include "hce/chrono.hpp"
+#include "hce/timer.hpp"
 
 #include <gtest/gtest.h> 
 #include "test_helpers.hpp"

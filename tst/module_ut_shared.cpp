@@ -1,11 +1,6 @@
 //SPDX-License-Identifier: Apache-2.0
 //Author: Blayne Dennis 
 #include <cassert>
-#include "hce.hpp"
-#include "test_helpers.hpp"
-#include "test_module_helpers.hpp"
-
-#include "network.hpp"                 
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -13,6 +8,10 @@
 #include <span>
 #include <vector>
 #include <string>
+
+#include "hce/core.hpp"
+#include "test_helpers.hpp"
+#include "test_module_helpers.hpp"
 
 struct module_impl : public hce::module {
     virtual ~module_impl(){} 
