@@ -41,6 +41,9 @@ private:
 
 namespace hce {
 
+multiplex::interface::~interface() {
+}
+
 multiplex::erased::erased(multiplex::interface* i, multiplex::interface::deleter d) :
     interface(i),
     deleter(d)

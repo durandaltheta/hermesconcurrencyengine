@@ -1436,8 +1436,7 @@ public:
                     [](void* v) -> bool { 
                         return ((multiplex::guard_mgr*)v)->try_claim();
                     }
-                },
-                channel::guard::child_t{}
+                }
             })
     {
         launch(std::forward<Es>(es)...);
