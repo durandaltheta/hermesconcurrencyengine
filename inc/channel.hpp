@@ -1289,7 +1289,7 @@ struct chan : public channel::interface<T> {
 
 private:
     std::shared_ptr<channel::interface<T>> context_;
-};
+}; // hce::chan<T>
 
 
 /**
@@ -1550,6 +1550,6 @@ private:
     // the indexes of this should match that of guard_mgr::guard::children
     std::vector<element> elements_; 
     hce::chan<result_t> received_;
-};
+}; // multiplex
 
 }

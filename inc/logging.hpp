@@ -8,7 +8,6 @@
 #include <ostream>
 #include <coroutine>
 #include <cstdlib>
-#include <chrono>
 #include <memory>
 #include <any>
 #include <mutex>
@@ -16,7 +15,6 @@
 
 #include "loguru.hpp"
 #include "utility.hpp"
-#include "chrono.hpp"
 
 /**
  User source code compile time macro determining compiled log code. Keeping this 
@@ -590,11 +588,6 @@ struct info<std::ratio<Num,Denom>,void> {
     }
 };
 
-template <>
-struct info<std::chrono::steady_clock,void> {
-    static inline std::string name(){ return "std::chrono::steady_clock"; }
-};
-
 /**
  @brief acquire a runtime accessible name string of a type T
 
@@ -716,71 +709,6 @@ struct info<std::weak_ptr<T>,void> {
     static inline std::string name(){ return templatize<T>("std::weak_ptr"); }
 };
 
-template <typename Rep, typename Period>
-struct info<std::chrono::duration<Rep,Period>,void> {
-    static inline std::string name(){ 
-        return templatize<Rep,Period>("std::chrono::duration");
-    }
-};
-
-template <typename Clock, typename Duration>
-struct info<std::chrono::time_point<Clock,Duration>,void> {
-    static inline std::string name(){ 
-        return templatize<Clock,Duration>("std::chrono::time_point"); 
-    }
-};
-
-}
-
-// time-to-string conversions
-namespace chrono {
-namespace detail {
-
-template <typename Rep, typename Period>
-inline void ingest_duration_ticks(
-        std::stringstream& ss,
-        const std::chrono::duration<Rep, Period>& d)
-{
-    ss << d.count() << " ";
-
-    if (std::ratio_equal<Period, std::nano>::value) {
-        ss << "ns";
-    } else if (std::ratio_equal<Period, std::micro>::value) {
-        ss << "µs";
-    } else if (std::ratio_equal<Period, std::milli>::value) {
-        ss << "ms";
-    } else if (std::ratio_equal<Period, std::ratio<1>>::value) {
-        ss << "s";
-    } else if (std::ratio_equal<Period, std::ratio<60>>::value) {
-        ss << "min";
-    } else if (std::ratio_equal<Period, std::ratio<3600>>::value) {
-        ss << "h";
-    } else {
-        ss << "unknown_period";
-    }
-}
-
-}
-
-template <typename Rep, typename Period>
-inline std::string to_string(const std::chrono::duration<Rep, Period>& d) {
-    std::stringstream ss;
-    ss << hce::type::name<const std::chrono::duration<Rep, Period>&>() << "[";
-    detail::ingest_duration_ticks(ss, d);
-    ss << "]";
-    return ss.str();
-}
-
-template <typename Clock, typename Duration>
-inline std::string to_string(const std::chrono::time_point<Clock, Duration>& t) 
-{
-    std::stringstream ss;
-    ss << hce::type::name<const std::chrono::time_point<Clock, Duration>&>() << "[";
-    detail::ingest_duration_ticks(ss, t.time_since_epoch());
-    ss << "]";
-    return ss.str();
-}
-
 }
 
 /*
@@ -891,6 +819,49 @@ int default_log_level();
 }
 }
 
+namespace detail {
+namespace logger {
+
+// ingest a single item
+template <typename A>
+static inline void ingest_item_(std::stringstream& ss, A&& a) {
+    ss << std::forward<A>(a);
+}
+
+// final ingest
+static inline void ingest_rest_of_args_(std::stringstream& ss) { }
+
+// in argument lists, begin inserting "," between arguments
+template <typename A, typename... As>
+static inline void ingest_rest_of_args_(std::stringstream& ss, A&& a, As&&... as) {
+    ss << ", "; 
+    ingest_item_(ss,std::forward<A>(a));
+    ingest_rest_of_args_(ss, std::forward<As>(as)...);
+}
+
+// final ingest
+static inline void ingest_parameters_(std::stringstream& ss) { }
+
+// for ingesting a list of function or method arguments
+template <typename A, typename... As>
+static inline void ingest_parameters_(std::stringstream& ss, A&& a, As&&... as) {
+    ingest_item_(ss,std::forward<A>(a));
+    ingest_rest_of_args_(ss, std::forward<As>(as)...);
+}
+
+// final ingest
+static inline void ingest_(std::stringstream& ss) { }
+
+// for ingesting arbitrary data into a logline
+template <typename A, typename... As>
+static inline void ingest_(std::stringstream& ss, A&& a, As&&... as) {
+    ingest_item_(ss,std::forward<A>(a));
+    ingest_(ss, std::forward<As>(as)...);
+}
+
+} // logger 
+} // detail
+
 /**
  @brief namespace object for underlying logging functions
 
@@ -925,7 +896,7 @@ struct logger {
                                    As&&... as) {
         if(verbosity <= logger::thread_log_level()) {
             std::stringstream ss;
-            logger::ingest_parameters_(ss, std::forward<As>(as)...);
+            detail::logger::ingest_parameters_(ss, std::forward<As>(as)...);
             std::string self(*p);
             std::string ingested(ss.str());
             std::string name_str(type::basename(p->name()));
@@ -966,7 +937,7 @@ struct logger {
                                     As&&... as) {
         if(verbosity <= logger::thread_log_level()) {
             std::stringstream ss;
-            logger::ingest_parameters_(ss, std::forward<As>(as)...);
+            detail::logger::ingest_parameters_(ss, std::forward<As>(as)...);
             std::string self(*p);
             std::string ingested(ss.str());
 
@@ -989,7 +960,7 @@ struct logger {
                                    As&&... as) {
         if(verbosity <= logger::thread_log_level()) {
             std::stringstream ss;
-            logger::ingest_(ss, std::forward<As>(as)...);
+            detail::logger::ingest_(ss, std::forward<As>(as)...);
             std::string self(*p);
             std::string ingested(ss.str());
 
@@ -1011,7 +982,7 @@ struct logger {
                                       As&&... as) {
         if(verbosity <= logger::thread_log_level()) {
             std::stringstream ss;
-            logger::ingest_parameters_(ss, std::forward<As>(as)...);
+            detail::logger::ingest_parameters_(ss, std::forward<As>(as)...);
             std::string ingested(ss.str());
 
             loguru::log(verbosity, 
@@ -1031,7 +1002,7 @@ struct logger {
                                      As&&... as) {
         if(verbosity <= logger::thread_log_level()) {
             std::stringstream ss;
-            logger::ingest_(ss, std::forward<As>(as)...);
+            detail::logger::ingest_(ss, std::forward<As>(as)...);
             std::string ingested(ss.str());
 
             loguru::log(verbosity, 
@@ -1048,93 +1019,6 @@ private:
 
     // thread_local loglevel
     static int& tl_loglevel();
-
-    // ingest a single item
-    template <typename A>
-    static inline void ingest_item_(std::stringstream& ss, A&& a) {
-        ss << std::forward<A>(a);
-    }
-
-    // template specializations for duration
-    template <class Rep, class Period>
-    static inline void ingest_item_(
-            std::stringstream& ss, 
-            const std::chrono::duration<Rep,Period>& d) 
-    {
-        ss << hce::chrono::to_string(d);
-    }
-
-    template <class Rep, class Period>
-    static inline void ingest_item_(
-            std::stringstream& ss, 
-            std::chrono::duration<Rep,Period>& d) 
-    {
-        ss << hce::chrono::to_string(d);
-    }
-
-    template <class Rep, class Period>
-    static inline void ingest_item_(
-            std::stringstream& ss, 
-            std::chrono::duration<Rep,Period>&& d) 
-    {
-        ss << hce::chrono::to_string(d);
-    }
-
-    // template specializations for time_point
-    template <class Clock, class Duration>
-    static inline void ingest_item_(
-            std::stringstream& ss, 
-            const std::chrono::time_point<Clock, Duration>& tp) 
-    {
-        ss << hce::chrono::to_string(tp);
-    }
-
-    template <class Clock, class Duration>
-    static inline void ingest_item_(
-            std::stringstream& ss, 
-            std::chrono::time_point<Clock, Duration>& tp) 
-    {
-        ss << hce::chrono::to_string(tp);
-    }
-
-    template <class Clock, class Duration>
-    static inline void ingest_item_(
-            std::stringstream& ss, 
-            std::chrono::time_point<Clock, Duration>&& tp) 
-    {
-        ss << hce::chrono::to_string(tp);
-    }
-
-    // final ingest
-    static inline void ingest_rest_of_args_(std::stringstream& ss) { }
-
-    // in argument lists, begin inserting "," between arguments
-    template <typename A, typename... As>
-    static inline void ingest_rest_of_args_(std::stringstream& ss, A&& a, As&&... as) {
-        ss << ", "; 
-        ingest_item_(ss,std::forward<A>(a));
-        ingest_rest_of_args_(ss, std::forward<As>(as)...);
-    }
-   
-    // final ingest
-    static inline void ingest_parameters_(std::stringstream& ss) { }
-
-    // for ingesting a list of function or method arguments
-    template <typename A, typename... As>
-    static inline void ingest_parameters_(std::stringstream& ss, A&& a, As&&... as) {
-        ingest_item_(ss,std::forward<A>(a));
-        ingest_rest_of_args_(ss, std::forward<As>(as)...);
-    }
-    
-    // final ingest
-    static inline void ingest_(std::stringstream& ss) { }
-
-    // for ingesting arbitrary data into a logline
-    template <typename A, typename... As>
-    static inline void ingest_(std::stringstream& ss, A&& a, As&&... as) {
-        ingest_item_(ss,std::forward<A>(a));
-        ingest_(ss, std::forward<As>(as)...);
-    }
 };
 
 }

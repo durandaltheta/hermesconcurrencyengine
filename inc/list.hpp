@@ -32,21 +32,57 @@ namespace hce {
  - lazy allocated value construction
 
  Design Limitations:
- - can only read and pop from head (singly linked)
- - no iterator support
- - no support for arbitrary insertion or erasure
+ - singly linked (not a block of contiguous memory)
  - no support for sorting capabilities
+ - arbitrary erasure is O(n) (singly linked); intended for non-hot paths
+   such as multiplex cleanup
 
  This is preferred by this project over `std::deque<T>` because that object 
  doesn't have fast concatenation which directly impacts the processing loop of 
  hce::scheduler.
 
- The allocator for this object is an `hce::pool_allocator`, limiting the 
+ The default allocator for this object is an `hce::pool_allocator`, limiting the 
  synchronization cost of frequent allocations/deallocations. 
  */
 template <typename T, typename Allocator = hce::pool_allocator<T>>
 struct list : public printable {
     using value_type = T;
+
+    // forward iterator (node* under the hood)
+    struct iterator {
+        using iterator_category = std::forward_iterator_tag;
+        using value_type = T;
+        using difference_type = std::ptrdiff_t;
+        using pointer = T*;
+        using reference = T&;
+
+        iterator() = default;
+
+        reference operator*() const { return n_->value; }
+        pointer operator->() const { return &n_->value; }
+
+        iterator& operator++() {
+            n_ = n_->next;
+            return *this;
+        }
+
+        iterator operator++(int) {
+            auto tmp = *this;
+            ++*this;
+            return tmp;
+        }
+
+        bool operator==(const iterator& o) const { return n_ == o.n_; }
+        bool operator!=(const iterator& o) const { return n_ != o.n_; }
+
+    private:
+        node* n_ = nullptr;
+        friend class list;
+        explicit iterator(node* n) : n_(n) {}
+    };
+
+    // values are typically pointers; no deep const needed
+    using const_iterator = iterator; 
 
     list() { HCE_MIN_CONSTRUCTOR(); }
 
@@ -239,6 +275,97 @@ struct list : public printable {
                 // do NOT swap allocator
             }
         } // else nothing to do
+    }
+
+    iterator begin() { return iterator(head_); }
+    iterator end() { return iterator(nullptr); }
+    const_iterator begin() const { return iterator(head_); }
+    const_iterator end() const { return iterator(nullptr); }
+    const_iterator cbegin() const { return begin(); }
+    const_iterator cend() const { return end(); }
+
+    /**
+     @brief erase the element at pos (O(n) for singly-linked)
+     @return iterator to the following element (or end)
+     */
+    iterator erase(iterator pos) {
+        HCE_MIN_METHOD_ENTER("erase");
+        if(!pos.n_) { return pos; }
+
+        node* prev = nullptr;
+        node* cur = head_;
+
+        while(cur && cur != pos.n_) {
+            prev = cur;
+            cur = cur->next;
+        }
+
+        if(!cur) { return end(); }
+
+        node* next = cur->next;
+        if(prev) { prev->next = next; }
+        else head_ = next;
+        if(cur == tail_) { tail_ = prev; }
+
+        cur->~node();
+        allocator_.deallocate(cur, 1);
+        --size_;
+
+        return iterator(next);
+    }
+
+    /**
+     @brief remove all elements for which pred returns true (single O(n) pass)
+     @return number of elements removed
+     */
+    template <typename Pred>
+    size_t remove_if(Pred pred) {
+        HCE_MIN_METHOD_ENTER("remove_if");
+        size_t removed = 0;
+        node* prev = nullptr;
+        node* cur = head_;
+
+        while(cur) {
+            if(pred(cur->value)) {
+                node* next = cur->next;
+                if(prev) { prev->next = next; }
+                else head_ = next;
+                if(cur == tail_) { tail_ = prev; }
+
+                cur->~node();
+                allocator_.deallocate(cur, 1);
+                --size_;
+                ++removed;
+                cur = next;
+            } else {
+                prev = cur;
+                cur = cur->next;
+            }
+        }
+
+        return removed;
+    }
+
+    /**
+     @brief erase the first element equal to value
+     @return true if an element was erased
+     */
+    bool erase(const T& value) {
+        HCE_MIN_METHOD_ENTER("erase(value)");
+        return remove_if([&](const T& v) { return v == value; }) > 0;
+    }
+
+    /**
+     @brief find the first element for which pred returns true
+     @return iterator to the element, or end()
+     */
+    template <typename Pred>
+    iterator find_if(Pred pred) {
+        for (auto it = begin(); it != end(); ++it) {
+            if(pred(*it)) { return it; }
+        }
+        
+        return end();
     }
 
 private:
