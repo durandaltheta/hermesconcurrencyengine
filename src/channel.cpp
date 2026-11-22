@@ -137,7 +137,7 @@ hce::awt<void> multiplex::finish() {
             self->received_.close();
 
             // remove the guard from the channels and end forwarding operations
-            for(size_t idx; idx < self->elements_.size(); ++idx) {
+            for(size_t idx=0; idx < self->elements_.size(); ++idx) {
                 self->unmanage_(idx);
                 auto& intf = *(self->elements_[idx].e.interface);
 
