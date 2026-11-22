@@ -26,7 +26,7 @@ namespace hce {
 
  Allows coroutines to form network connections, send, and receive.
  */
-struct network : public hce::service<network>, public hce::printable {
+struct network : service<network>, printable {
     struct address {
         enum struct type_e {
             tcp,

@@ -3,6 +3,7 @@
 
 #include "hce/network.hpp"
 
+#include <sstream>
 #include <arpa/inet.h>
 #include <netdb.h>
 
