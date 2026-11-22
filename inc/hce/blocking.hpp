@@ -10,7 +10,8 @@
 #include "hce/utility.hpp"
 #include "hce/service.hpp"
 #include "hce/alloc.hpp"
-#include "hce/logging.hpp"
+#include "hce/printable.hpp"
+#include "hce/type.hpp"
 #include "hce/atomic.hpp"
 #include "hce/circular_buffer.hpp"
 #include "hce/synchronized_list.hpp"
@@ -258,8 +259,6 @@ struct blocking : public hce::service<blocking>, public hce::printable {
         typedef hce::function_return_type<Callable,As...> RETURN_TYPE;
         using isv = typename std::is_void<RETURN_TYPE>;
 
-        HCE_LOW_METHOD_ENTER("block", hce::callable_to_string(cb));
-
         return block_(
             std::integral_constant<bool,isv::value>(),
             std::forward<Callable>(cb),
@@ -282,12 +281,9 @@ private:
                 hce::detail::blocking::sync_partial<T>>(
                     std::forward<As>(as)...)
         { 
-            HCE_MED_CONSTRUCTOR();
         }
 
-        virtual ~sync() { 
-            HCE_MED_DESTRUCTOR();
-        }
+        virtual ~sync() { }
         
         static inline std::string info_name() { 
             return type::templatize<T>("hce::blocking::sync"); 
@@ -305,13 +301,9 @@ private:
             scheduler::reschedule<hce::detail::blocking::async_partial<T>>(),
             // on construction get a worker
             wkr_(hce::service<blocking>::get().checkout_worker_())
-        { 
-            HCE_MED_CONSTRUCTOR();
-        }
+        { }
 
         virtual ~async() {
-            HCE_MED_DESTRUCTOR();
-
             // return the worker to its scheduler
             if(wkr_) [[likely]] { 
                 hce::service<blocking>::get().checkin_worker_(std::move(wkr_));
@@ -374,8 +366,6 @@ private:
             // construct an asynchronous awaitable implementation
             auto ai = new blocking::async<T>();
             auto& wkr = ai->worker();
-            HCE_MIN_METHOD_BODY("block","executing on ",wkr);
-           
             hce::thunk* th = hce::allocate<hce::thunk>(1);  // raw memory
             auto task = new hce::detail::blocking::task(
                     nullptr,
@@ -397,8 +387,6 @@ private:
             // return an awaitable to await the result of the blocking call
             return hce::awt<T>(ai);
         } else {
-            HCE_MIN_METHOD_BODY("block","executing on current thread");
-            
             // we own the thread already, call cb immediately and return the 
             // result
             return hce::awt<T>(new blocking::sync<T>(
@@ -413,8 +401,6 @@ private:
         if(hce::coroutine::in()) {
             auto ai = new blocking::async<void>();
             auto& wkr = ai->worker(); 
-            HCE_MIN_METHOD_BODY("block","executing on ",wkr);
-
             hce::thunk* th = hce::allocate<hce::thunk>(1);  // raw memory
             auto task = new hce::detail::blocking::task(
                     nullptr,
@@ -432,7 +418,6 @@ private:
             wkr.schedule(hce::detail::blocking::utask(task));
             return hce::awt<void>(ai);
         } else {
-            HCE_MIN_METHOD_BODY("block","executing on current thread");
             cb(std::forward<As>(as)...);
             return hce::awt<void>(new blocking::sync<void>);
         }
@@ -463,7 +448,6 @@ private:
 template <typename Callable, typename... Args>
 inline hce::awt<hce::function_return_type<Callable,Args...>> 
 block(Callable&& cb, Args&&... args) {
-    HCE_MED_FUNCTION_ENTER("hce::block");
     return hce::service<blocking>::get().block(
         std::forward<Callable>(cb),
         std::forward<Args>(args)...);

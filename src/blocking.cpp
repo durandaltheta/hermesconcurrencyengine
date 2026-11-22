@@ -1,4 +1,5 @@
 #include "hce/blocking.hpp"
+#include "hce/logging.hpp"
 
 void hce::detail::blocking::task::call(hce::detail::blocking::task* task) {
     (*(task->operation))();

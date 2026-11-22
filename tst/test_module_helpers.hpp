@@ -6,11 +6,13 @@
 #include <sstream>
 #include "test_helpers.hpp"
 #include "hce/core.hpp"
+#include "hce/logging.hpp"
 #include "hce/channel.hpp"
 #include "hce/timer.hpp"
 #include "hce/blocking.hpp"
 #include "hce/network.hpp"
 #include "hce/threadpool.hpp"
+#include "hce/module.hpp"
 
 namespace test {
 namespace module {

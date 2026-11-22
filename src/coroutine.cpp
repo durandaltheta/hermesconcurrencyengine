@@ -4,8 +4,8 @@
 #include <sstream>
 #include <thread>
 
-#include "loguru.hpp"
 #include "hce/atomic.hpp"
+#include "hce/logging.hpp"
 #include "hce/thread.hpp"
 #include "hce/coroutine.hpp"
 #include "hce/thread_key_map.hpp"

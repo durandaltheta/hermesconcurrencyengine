@@ -8,7 +8,7 @@
  */
 #include <chrono>
 
-#include "hce/logging.hpp"
+#include "hce/type.hpp"
 
 namespace hce {
 namespace chrono {

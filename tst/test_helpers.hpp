@@ -19,19 +19,15 @@ template <typename T>
 struct queue {
     template <typename TSHADOW>
     void push(TSHADOW&& t) {
-        HCE_TRACE_LOG("test::queue<T>::push()+");
-
         {
             std::lock_guard<hce::spinlock> lk(slk);
             vals.push_back(std::forward<TSHADOW>(t));
         }
 
         cv.notify_one();
-        HCE_TRACE_LOG("test::queue<T>::push()-");
     }
 
     T pop() {
-        HCE_TRACE_LOG("test::queue<T>::pop()+");
         std::unique_lock<hce::spinlock> lk(slk);
         while(!vals.size()) {
             cv.wait(lk);
@@ -39,14 +35,11 @@ struct queue {
 
         T res = std::move(vals.front());
         vals.pop_front();
-        HCE_TRACE_LOG("test::queue<T>::pop()-");
         return res;
     }
 
     size_t size() {
-        HCE_TRACE_LOG("test::queue<T>::size()+");
         std::lock_guard<hce::spinlock> lk(slk);
-        HCE_TRACE_LOG("test::queue<T>::size()-");
         return vals.size();
     }
 
@@ -59,20 +52,15 @@ private:
 template <>
 struct queue<void> {
     void push() {
-        HCE_TRACE_LOG("test::queue<T>::push()+");
-
         {
             std::lock_guard<hce::spinlock> lk(slk);
             vals.push_back(0);
         }
 
         cv.notify_one();
-        HCE_TRACE_LOG("test::queue<T>::push()-");
     }
 
     void pop() {
-        HCE_TRACE_LOG("test::queue<T>::pop()+");
-
         std::unique_lock<hce::spinlock> lk(slk);
 
         while(!vals.size()) {
@@ -80,14 +68,11 @@ struct queue<void> {
         }
 
         vals.pop_front();
-        HCE_TRACE_LOG("test::queue<T>::pop()-");
         return;
     }
 
     size_t size() {
-        HCE_TRACE_LOG("test::queue<T>::size()+");
         std::lock_guard<hce::spinlock> lk(slk);
-        HCE_TRACE_LOG("test::queue<T>::size()-");
         return vals.size();
     }
 

@@ -8,7 +8,7 @@
 #include <system_error>
 
 #include "hce/core.hpp"
-#include "hce/logging.hpp"
+#include "hce/printable.hpp"
 #include "hce/expected.hpp"
 #include "hce/channel.hpp"
 

@@ -3,7 +3,6 @@
 //Author: Blayne Dennis 
 
 #include "hce/base.hpp"
-#include "hce/logging.hpp"
 
 namespace hce {
 

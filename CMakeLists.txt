@@ -36,7 +36,10 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/hce/utility.hpp
     ${HCE_INCLUDE_DIR}/hce/expected.hpp
     ${HCE_INCLUDE_DIR}/hce/cleanup.hpp
+    ${HCE_INCLUDE_DIR}/hce/printable.hpp
+    ${HCE_INCLUDE_DIR}/hce/type.hpp
     ${HCE_INCLUDE_DIR}/hce/logging.hpp
+    ${HCE_INCLUDE_DIR}/hce/fatal.hpp
     ${HCE_INCLUDE_DIR}/hce/memory.hpp
     ${HCE_INCLUDE_DIR}/hce/alloc.hpp
     ${HCE_INCLUDE_DIR}/hce/service.hpp
@@ -73,6 +76,8 @@ set(HCE_SOURCE_FILES
     ${LOGURU_DIR}/loguru.cpp
     ${HCE_SOURCE_DIR}/logging.cpp
     ${HCE_SOURCE_DIR}/cleanup.cpp
+    ${HCE_SOURCE_DIR}/printable.cpp
+    ${HCE_SOURCE_DIR}/fatal.cpp
     ${HCE_SOURCE_DIR}/coroutine.cpp
     ${HCE_SOURCE_DIR}/scheduler.cpp
     ${HCE_SOURCE_DIR}/channel.cpp

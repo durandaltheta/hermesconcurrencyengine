@@ -13,7 +13,7 @@
 #include "hce/owner.hpp"
 #include "hce/utility.hpp"
 #include "hce/alloc.hpp"
-#include "hce/logging.hpp"
+#include "hce/printable.hpp"
 #include "hce/thread.hpp"
 #include "hce/atomic.hpp"
 #include "hce/id.hpp"
@@ -129,7 +129,6 @@ struct timer : public hce::service<timer>, public hce::printable {
     static inline hce::awt<bool> start(hce::sid& sid, const TIMEOUT& timeout) {
         sid.make();
         auto awt = hce::service<timer>::get().start_(sid, timeout);
-        HCE_MED_FUNCTION_ENTER("hce::start", sid, timeout);
         return awt;
     }
 
@@ -236,7 +235,6 @@ private:
  */
 template <typename TIMEOUT>
 inline hce::awt<void> sleep(const TIMEOUT& timeout) {
-    HCE_MED_FUNCTION_ENTER("hce::sleep", timeout);
     hce::sid sid;
 
     // start the timer and convert from awt<bool> to awt<void>

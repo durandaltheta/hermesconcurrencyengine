@@ -7,7 +7,7 @@
 #include <string>
 #include <sstream>
 
-#include "hce/logging.hpp"
+#include "hce/printable.hpp"
 #include "hce/alloc.hpp"
 
 namespace hce {
@@ -74,11 +74,11 @@ struct id : public printable {
  This object is not copiable, only movable
  */
 struct uid : public id {
-    uid() { HCE_TRACE_CONSTRUCTOR(); }
+    uid() { }
     uid(const uid&) = delete;
     uid(uid&&) = default;
 
-    virtual ~uid() { HCE_TRACE_DESTRUCTOR(); }
+    virtual ~uid() { }
 
     uid& operator=(const uid&) = delete;
     uid& operator=(uid&&) = default;
@@ -87,12 +87,10 @@ struct uid : public id {
     inline std::string name() const { return uid::info_name(); }
 
     inline void make() {
-        HCE_TRACE_METHOD_ENTER("make");
         byte_ = hce::make_unique<std::byte>();
     }
 
     inline void reset() {
-        HCE_TRACE_METHOD_ENTER("reset");
         byte_.reset();
     }
 
@@ -108,11 +106,11 @@ private:
  This object can be copied or moved.
  */
 struct sid : public id {
-    sid() { HCE_TRACE_CONSTRUCTOR(); }
+    sid() { }
     sid(const sid&) = default;
     sid(sid&&) = default;
 
-    virtual ~sid() { HCE_TRACE_DESTRUCTOR(); }
+    virtual ~sid() { }
 
     sid& operator=(const sid&) = default;
     sid& operator=(sid&&) = default;
@@ -121,12 +119,10 @@ struct sid : public id {
     inline std::string name() const { return sid::info_name(); }
 
     inline void make() {
-        HCE_TRACE_METHOD_ENTER("make");
         byte_ = hce::make_shared<std::byte>();
     }
 
     inline void reset() {
-        HCE_TRACE_METHOD_ENTER("reset");
         byte_.reset();
     }
 

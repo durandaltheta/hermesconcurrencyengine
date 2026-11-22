@@ -11,7 +11,8 @@
 
 // local
 #include "hce/utility.hpp"
-#include "hce/logging.hpp"
+#include "hce/printable.hpp"
+#include "hce/type.hpp"
 #include "hce/memory.hpp"
 #include "hce/atomic.hpp"
 #include "hce/alloc.hpp"
@@ -75,7 +76,6 @@ struct chan : public channel::interface<T> {
 
     /// return whether channel has an allocated context
     inline explicit operator bool() const {
-        HCE_TRACE_METHOD_ENTER("operator bool");
         return (bool)(context_); 
     }
 
@@ -109,8 +109,6 @@ struct chan : public channel::interface<T> {
               typename ALLOCATOR=hce::pool_allocator<T>,
               typename... As>
     inline chan<T>& construct(int sz=0, As&&... as) {
-        HCE_MIN_METHOD_ENTER("construct",sz,as...);
-
         if(sz == 0) {
             context_ = std::shared_ptr<channel::interface<T>>(
                 static_cast<channel::interface<T>*>(
@@ -136,71 +134,56 @@ struct chan : public channel::interface<T> {
               typename ALLOCATOR=hce::pool_allocator<T>, 
               typename... As>
     inline static chan<T> make(As&&... as) {
-        HCE_MIN_FUNCTION_ENTER(
-            chan<T>::info_name() +
-            type::templatize<LOCK,ALLOCATOR>("::make"), as...);
         chan<T> ch;
         ch.construct<LOCK,ALLOCATOR>(std::forward<As>(as)...);
         return ch;
     }
        
     inline const std::type_info& type_info() const {
-        HCE_TRACE_METHOD_ENTER("type_info");
         return context_->type_info(); 
     }
 
     inline int size() const {
-        HCE_TRACE_METHOD_ENTER("capacity");
         return context_->size(); 
     }
 
     inline int used() const {
-        HCE_TRACE_METHOD_ENTER("size");
         return context_->used(); 
     }
 
     inline bool closed() const {
-        HCE_TRACE_METHOD_ENTER("closed");
         return context_->closed(); 
     }
 
     inline void close() {
-        HCE_MIN_METHOD_ENTER("close");
         return context_->close(); 
     }
 
     inline hce::awt<bool> send(T&& s) {
-        HCE_MIN_METHOD_ENTER("send");
         return context_->send(std::move(s)); 
     }
 
     inline hce::awt<bool> send(const T& s) {
-        HCE_MIN_METHOD_ENTER("send");
         return context_->send(s); 
     }
 
     inline hce::awt<bool> recv(T& r) {
-        HCE_MIN_METHOD_ENTER("recv");
         return context_->recv(r); 
     }
 
     inline hce::yield<channel::result> try_send(const T& s) {
-        HCE_MIN_METHOD_ENTER("try_send");
         return context_->try_send(s);
     }
 
     inline hce::yield<channel::result> try_send(T&& s) {
-        HCE_MIN_METHOD_ENTER("try_send");
         return context_->try_send(std::move(s));
     }
 
     inline hce::yield<channel::result> try_recv(T& r) {
-        HCE_MIN_METHOD_ENTER("try_recv");
         return context_->try_recv(r);
     }
 
     inline void set_guard(channel::guard* g) { 
-        HCE_MIN_METHOD_ENTER("set_guard");
         context_->set_guard(g);
     }
 

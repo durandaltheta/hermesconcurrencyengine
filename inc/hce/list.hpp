@@ -7,7 +7,8 @@
 #include <tuple>
 
 #include "hce/utility.hpp"
-#include "hce/logging.hpp"
+#include "hce/printable.hpp"
+#include "hce/type.hpp"
 #include "hce/alloc.hpp"
 
 namespace hce {
@@ -102,25 +103,21 @@ struct list : public printable {
     // values are typically pointers; no deep const needed
     using const_iterator = iterator; 
 
-    list() { HCE_MIN_CONSTRUCTOR(); }
+    list() { }
 
     list(const Allocator& allocator) : 
         allocator_(allocator) { 
-        HCE_MIN_CONSTRUCTOR(allocator); 
     }
 
     list(const list<T>& rhs) {
-        HCE_MIN_CONSTRUCTOR(rhs);
         copy_(rhs); 
     }
 
     list(list<T>&& rhs) {
-        HCE_MIN_CONSTRUCTOR(rhs);
         move_(std::move(rhs));
     }
 
     virtual ~list() { 
-        HCE_MIN_DESTRUCTOR();
         node* cur = head_;
 
         // destruct and deallocate all nodes
@@ -145,13 +142,11 @@ struct list : public printable {
     }
 
     inline list<T>& operator=(const list<T>& rhs) { 
-        HCE_MIN_METHOD_ENTER("operator=", rhs);
         copy_(rhs); 
         return *this;
     }
 
     inline list<T>& operator=(list<T>&& rhs) {
-        HCE_MIN_METHOD_ENTER("operator=", rhs);
         move_(std::move(rhs));
         return *this;
     }
@@ -160,7 +155,6 @@ struct list : public printable {
      @return the current length of the list
      */
     inline size_t size() const { 
-        HCE_TRACE_METHOD_ENTER("size");
         return size_; 
     }
 
@@ -168,7 +162,6 @@ struct list : public printable {
      @return true if empty, else false
      */
     inline bool empty() const { 
-        HCE_TRACE_METHOD_ENTER("empty");
         return !size_; 
     }
 
@@ -176,7 +169,6 @@ struct list : public printable {
      @return a reference to the front of the list
      */
     inline T& front() { 
-        HCE_TRACE_METHOD_ENTER("front");
         return head_->value; 
     }
 
@@ -185,7 +177,6 @@ struct list : public printable {
      */
     template <typename... As>
     inline void emplace_back(As&&... as) {
-        HCE_MIN_METHOD_ENTER("emplace_back");
         node* next = allocator_.allocate(1);
 
         // placement new construction
@@ -207,7 +198,6 @@ struct list : public printable {
      */
     template <typename... As>
     inline void emplace_front(As&&... as) {
-        HCE_MIN_METHOD_ENTER("emplace_front");
         node* next = allocator_.allocate(1);
 
         // placement new construction
@@ -228,7 +218,6 @@ struct list : public printable {
      @brief lvalue push an element on the back of the list 
      */
     inline void push_back(const T& t) { 
-        HCE_MIN_METHOD_ENTER("push_back");
         emplace_back(t); 
     }
     
@@ -236,7 +225,6 @@ struct list : public printable {
      @brief rvalue push an element on the back of the list 
      */
     inline void push_back(T&& t) { 
-        HCE_MIN_METHOD_ENTER("push_back");
         emplace_back(std::move(t)); 
     }
     
@@ -244,7 +232,6 @@ struct list : public printable {
      @brief lvalue push an element on the front of the list 
      */
     inline void push_front(const T& t) { 
-        HCE_MIN_METHOD_ENTER("push_front");
         emplace_front(t); 
     }
     
@@ -252,7 +239,6 @@ struct list : public printable {
      @brief rvalue push an element on the front of the list 
      */
     inline void push_front(T&& t) { 
-        HCE_MIN_METHOD_ENTER("push_front");
         emplace_front(std::move(t)); 
     }
 
@@ -260,7 +246,6 @@ struct list : public printable {
      @brief pop off the front of the list
      */
     inline void pop() {
-        HCE_MIN_METHOD_ENTER("pop");
         node* old = head_;
         head_ = head_->next;
         old->~node();
@@ -277,7 +262,6 @@ struct list : public printable {
      @param rhs list to concatenate
      */
     inline void concatenate(list<T>& rhs) {
-        HCE_MIN_METHOD_ENTER("concatenate");
         if(rhs.size_) {
             if(size_) { // our head_ & tail_ are initialized
                 tail_->next = rhs.head_;
@@ -307,7 +291,6 @@ struct list : public printable {
      @return iterator to the following element (or end)
      */
     iterator erase(iterator pos) {
-        HCE_MIN_METHOD_ENTER("erase");
         if(!pos.n_) { return pos; }
 
         node* prev = nullptr;
@@ -338,7 +321,6 @@ struct list : public printable {
      */
     template <typename Pred>
     size_t remove_if(Pred pred) {
-        HCE_MIN_METHOD_ENTER("remove_if");
         size_t removed = 0;
         node* prev = nullptr;
         node* cur = head_;
@@ -369,7 +351,6 @@ struct list : public printable {
      @return true if an element was erased
      */
     bool erase(const T& value) {
-        HCE_MIN_METHOD_ENTER("erase(value)");
         return remove_if([&](const T& v) { return v == value; }) > 0;
     }
 

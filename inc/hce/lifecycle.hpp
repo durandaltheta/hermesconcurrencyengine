@@ -6,8 +6,7 @@
 #include <memory>
 #include <string>
 
-#include "loguru.hpp"
-#include "hce/logging.hpp"
+#include "hce/printable.hpp"
 #include "hce/scheduler/config.hpp"
 #include "hce/threadpool/config.hpp"
 

@@ -10,7 +10,7 @@
 #include "hce/base.hpp"
 #include "hce/owner.hpp"
 #include "hce/service.hpp"
-#include "hce/logging.hpp"
+#include "hce/printable.hpp"
 #include "hce/scheduler.hpp"
 #include "hce/threadpool/config.hpp"
 
@@ -84,7 +84,6 @@ struct threadpool : public hce::service<threadpool>, public hce::printable {
      */
     template <typename... As>
     static inline auto schedule(As&&... as) {
-        HCE_HIGH_FUNCTION_ENTER("hce::threadpool::schedule");
         return hce::service<threadpool>::get().algorithm().schedule(std::forward<As>(as)...);
     }
 

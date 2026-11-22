@@ -3,6 +3,7 @@
 #include <dlfcn.h>
 
 #include "hce/module.hpp"
+#include "hce/logging.hpp"
 #include "hce/environment.hpp"
 
 using hce_close_handle_f = void (*)(void*);

@@ -17,7 +17,8 @@
 // local 
 #include "hce/base.hpp"
 #include "hce/owner.hpp"
-#include "hce/logging.hpp"
+#include "hce/printable.hpp"
+#include "hce/type.hpp"
 #include "hce/utility.hpp"
 #include "hce/service.hpp"
 #include "hce/atomic.hpp"
@@ -80,8 +81,6 @@ struct joiner :
         ready_(false),
         address_(co.address())
     { 
-        HCE_TRACE_CONSTRUCTOR(co);
-
         // install a cleanup handler to resume the returned awaitable when 
         // the coroutine goes out of scope 
         hce::get_promise(co).install(&joiner<T>::cleanup, this);
@@ -98,7 +97,6 @@ struct joiner :
     inline bool on_ready() { return ready_; }
 
     inline void on_resume(void* m) { 
-        HCE_TRACE_METHOD_ENTER("on_resume",m);
         ready_ = true;
 
         if(m) [[likely]] { 
@@ -126,7 +124,6 @@ private:
      around the necessary data to the awaitable (joiner<T>) and resumes it.
      */
     static inline void cleanup(hce::cleanup::data& data) { 
-        HCE_TRACE_FUNCTION_ENTER(hce::detail::scheduler::joiner<T>::info_name() + "::cleanup", data.install, data.self);
         // acquire a reference to the joiner<T>
         auto& joiner = *(static_cast<hce::detail::scheduler::joiner<T>*>(data.install));
 
@@ -137,12 +134,9 @@ private:
         auto handle = std::coroutine_handle<hce::co_promise_type<T>>::from_promise(promise);
 
         if(handle.done()) [[likely]] {
-            //HCE_MIN_FUNCTION_BODY("joiner<T>::cleanup()","done@",handle);
-            HCE_TRACE_FUNCTION_BODY(hce::detail::scheduler::joiner<T>::info_name() + "::cleanup","done@",handle);
             // resume the blocked awaitable and pass the allocated result pointer
             joiner.resume(&(promise.result));
         } else [[unlikely]] {
-            HCE_ERROR_FUNCTION_BODY(hce::detail::scheduler::joiner<T>::info_name() + "::cleanup","NOT done@",handle);
             // resume with no result, presumably triggering error
             joiner.resume(nullptr);
         } 
@@ -171,8 +165,6 @@ struct joiner<void> :
         ready_(false),
         address_(co.address())
     { 
-        HCE_TRACE_CONSTRUCTOR(co);
-
         hce::get_promise(co).install(&joiner<void>::cleanup, this);
     }
 
@@ -189,7 +181,6 @@ struct joiner<void> :
 
 private:
     static inline void cleanup(hce::cleanup::data& data) { 
-        HCE_TRACE_FUNCTION_ENTER("joiner<void>::cleanup()", data.install, data.self);
         static_cast<hce::detail::scheduler::joiner<void>*>(data.install)->resume(nullptr);
     }
 
@@ -294,7 +285,6 @@ struct scheduler : public printable {
 
         /// pass a resumed coroutine to its destination
         inline void to_destination(std::coroutine_handle<> h) {
-            HCE_LOW_METHOD_ENTER("to_destination",h);
             destination_->schedule_(std::move(h));
         }
 
@@ -345,10 +335,9 @@ struct scheduler : public printable {
         joiner(hce::co<T>& co) :
             hce::scheduler::reschedule<hce::detail::scheduler::joiner<T>>(co)
         { 
-            HCE_MIN_CONSTRUCTOR(co);
         }
 
-        virtual ~joiner() { HCE_MIN_DESTRUCTOR(); }
+        virtual ~joiner() { }
 
         static inline std::string info_name() { 
             return type::templatize<T>("hce::scheduler::joiner"); 
@@ -587,7 +576,6 @@ struct scheduler : public printable {
      */
     template <typename T>
     inline hce::awt<T> schedule(hce::co<T> co) {
-        HCE_HIGH_METHOD_ENTER("schedule",co);
         hce::awt<T> awt;
 
         if(co) [[likely]] {
@@ -725,7 +713,6 @@ private:
  */
 template <typename... As>
 inline auto schedule(As&&... as) {
-    HCE_HIGH_FUNCTION_ENTER("hce::schedule");
     return scheduler::get().schedule(std::forward<As>(as)...);
 }
 

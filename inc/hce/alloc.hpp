@@ -16,7 +16,8 @@
 #include <vector>
 
 #include "hce/utility.hpp"
-#include "hce/logging.hpp"
+#include "hce/printable.hpp"
+#include "hce/type.hpp"
 #include "hce/memory.hpp"
 
 namespace hce {
@@ -384,7 +385,6 @@ struct pool_allocator : public printable {
     pool_allocator(const pool_allocator<T>& rhs) :
         block_limit_(rhs.block_limit_)
     { 
-        HCE_MIN_CONSTRUCTOR(std::string("const ") + rhs.to_string() + "&");
     }
 
     /**
@@ -395,19 +395,14 @@ struct pool_allocator : public printable {
      */
     template <typename U, typename = std::enable_if_t<!std::is_same_v<T, U>>>
     pool_allocator(const pool_allocator<U>& rhs) : block_limit_(rhs.limit()) {
-        // Copy the block limit during rebind
-        HCE_MIN_CONSTRUCTOR(std::string("const ") + rhs.to_string() + "&");
     }
 
     pool_allocator(pool_allocator<T>&& rhs) : block_limit_(0) {
-        HCE_MIN_CONSTRUCTOR(rhs.to_string() + "&&");
         block_limit_ = std::move(rhs.block_limit_);
         pool_ = std::move(rhs.pool_);
     }
 
     virtual ~pool_allocator() {
-        HCE_MIN_DESTRUCTOR(); 
-
         // free all memory
         while(pool_.size()) {
             hce::deallocate(pool_.back()); 
@@ -422,13 +417,11 @@ struct pool_allocator : public printable {
     inline std::string name() const { return pool_allocator<T>::info_name(); }
 
     pool_allocator<T>& operator=(const pool_allocator<T>& rhs) {
-        HCE_MIN_METHOD_ENTER("operator=", std::string("const ") + rhs.to_string() + "&");
         block_limit_ = rhs.block_limit_;
         return *this;
     }
 
     pool_allocator<T>& operator=(pool_allocator<T>&& rhs) {
-        HCE_MIN_METHOD_ENTER("operator=", rhs.to_string() + "&&");
         block_limit_ = std::move(rhs.block_limit_);
         pool_ = std::move(rhs.pool_);
         return *this;
@@ -443,7 +436,6 @@ struct pool_allocator : public printable {
    
     /// allocate a block of memory the size of n*T
     inline T* allocate(std::size_t n) {
-        HCE_MIN_METHOD_ENTER("allocate", n);
         T* t;
 
         if(n==1 && pool_.size()) [[likely]] { 

@@ -19,7 +19,7 @@
 
 #include "hce/base.hpp"
 #include "hce/cleanup.hpp"
-#include "hce/logging.hpp"
+#include "hce/printable.hpp"
 #include "hce/atomic.hpp"
 #include "hce/service.hpp"
 

@@ -7,9 +7,7 @@
 
 // local
 #include "hce/utility.hpp"
-#include "hce/logging.hpp"
-#include "hce/atomic.hpp"
-#include "hce/alloc.hpp"
+#include "hce/printable.hpp"
 #include "hce/circular_buffer.hpp"
 #include "hce/scheduler.hpp"
 
@@ -130,8 +128,6 @@ namespace detail {
 template <typename T>
 inline void pointer_send(void* destination, void* source) {
     typedef unqualified<T> U;
-    HCE_TRACE_FUNCTION_ENTER("hce::channel::detail::pointer_send", source, destination);
-    HCE_TRACE_FUNCTION_BODY("hce::channel::detail::pointer_send", type::name<U>(), " = ", type::name<T>());
 
     // compiler knows how to select lvalue or rvalue copy since all necessary 
     // type information is available
@@ -142,8 +138,6 @@ template <typename T>
 inline void circular_buffer_send(void* destination, void* source) {
     typedef unqualified<T> U;
     typedef hce::circular_buffer<U> BUFFER;
-    HCE_TRACE_FUNCTION_ENTER("hce::channel::detail::circular_buffer_send", destination, source);
-    HCE_TRACE_FUNCTION_BODY("hce::channel::detail::circular_buffer_send", type::name<U>(), " = ", type::name<T>());
     // compiler knows how to select lvalue or rvalue copy since all necessary 
     // type information is available
     ((BUFFER*)destination)->emplace(std::forward<T>(*((U*)(source)))); 
@@ -152,8 +146,6 @@ inline void circular_buffer_send(void* destination, void* source) {
 template <typename T>
 inline void circular_buffer_recv(void* destination, void* source) {
     typedef hce::circular_buffer<T> BUFFER;
-    HCE_TRACE_FUNCTION_ENTER("hce::channel::detail::circular_buffer_recv", destination, source);
-    HCE_TRACE_FUNCTION_BODY("hce::channel::detail::circular_buffer_recv", type::name<T>(), " = ", type::name<T&&>());
     // is always a move operation
     *((T*)destination) = std::move(((BUFFER*)source)->front());
     ((BUFFER*)source)->pop();
@@ -162,8 +154,6 @@ inline void circular_buffer_recv(void* destination, void* source) {
 template <typename T, typename LIST>
 inline void list_send(void* destination, void* source) {
     typedef unqualified<T> U;
-    HCE_TRACE_FUNCTION_ENTER("hce::channel::detail::list_send", destination, source);
-    HCE_TRACE_FUNCTION_BODY("hce::channel::detail::list_send", type::name<U>(), " = ", type::name<T>());
     // compiler knows how to select lvalue or rvalue copy since all necessary 
     // type information is available
     ((LIST*)destination)->emplace_back(std::forward<T>(*((U*)(source)))); 
@@ -171,8 +161,6 @@ inline void list_send(void* destination, void* source) {
 
 template <typename T, typename LIST>
 inline void list_recv(void* destination, void* source) {
-    HCE_TRACE_FUNCTION_ENTER("hce::channel::detail::list_recv", destination, source);
-    HCE_TRACE_FUNCTION_BODY("hce::channel::detail::list_recv", type::name<T>(), " = ", type::name<T&&>());
     auto& que = *((LIST*)source);
     // is always a move operation
     *((T*)destination) = std::move(que.front());
@@ -227,8 +215,6 @@ struct base_send_interface :
     { }
 
     inline void on_resume(void* m) {
-        HCE_MIN_METHOD_ENTER("on_resume",m);
-
         if(m) [[likely]] {
             // m is destination
             tx.send(m);
@@ -237,7 +223,6 @@ struct base_send_interface :
     }
 
     inline bool get_result() { 
-        HCE_MIN_METHOD_BODY("get_result",success);
         return success; 
     }
 
@@ -264,8 +249,6 @@ struct base_recv_interface :
     { }
 
     inline void on_resume(void* m) {
-        HCE_TRACE_METHOD_BODY("on_resume",m);
-
         if(m) [[likely]] {
             // m is transfer struct
             ((transfer*)m)->send(destination);
@@ -274,7 +257,6 @@ struct base_recv_interface :
     }
 
     inline bool get_result() { 
-        HCE_MIN_METHOD_BODY("get_result",success);
         return success; 
     }
 

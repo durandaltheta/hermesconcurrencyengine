@@ -11,7 +11,8 @@
 
 // local
 #include "hce/utility.hpp"
-#include "hce/logging.hpp"
+#include "hce/printable.hpp"
+#include "hce/type.hpp"
 #include "hce/atomic.hpp"
 #include "hce/alloc.hpp"
 #include "hce/list.hpp"
@@ -33,7 +34,6 @@ struct buffered : public interface<T> {
         parked_send_(),
         parked_recv_()
     { 
-        HCE_LOW_CONSTRUCTOR();
     }
 
     buffered(int sz, const ALLOCATOR& allocator) : 
@@ -41,13 +41,12 @@ struct buffered : public interface<T> {
         parked_send_(allocator),
         parked_recv_(allocator)
     { 
-        HCE_LOW_CONSTRUCTOR();
     }
 
     buffered(const buffered<T,LOCK,ALLOCATOR>&) = delete;
     buffered(buffered<T,LOCK,ALLOCATOR>&&) = delete;
 
-    inline virtual ~buffered(){ HCE_LOW_DESTRUCTOR(); }
+    inline virtual ~buffered(){ }
 
     buffered<T,LOCK,ALLOCATOR>& operator=(const buffered<T,LOCK,ALLOCATOR>&) = delete;
     buffered<T,LOCK,ALLOCATOR>& operator=(buffered<T,LOCK,ALLOCATOR>&&) = delete;
@@ -61,34 +60,25 @@ struct buffered : public interface<T> {
     }
 
     inline const std::type_info& type_info() const {
-        HCE_TRACE_METHOD_ENTER("type_info");
         return typeid(buffered<T,LOCK,ALLOCATOR>); 
     }
 
     inline int size() const {
-        HCE_MIN_METHOD_ENTER("size");
-
         std::lock_guard<LOCK> lk(lk_);
         return (int)buf_.size();
     }
 
     inline int used() const {
-        HCE_MIN_METHOD_ENTER("used");
-
         std::lock_guard<LOCK> lk(lk_);
         return (int)buf_.used();
     }
 
     inline bool closed() const {
-        HCE_MIN_METHOD_ENTER("closed");
-
         std::lock_guard<LOCK> lk(lk_);
         return closed_flag_;
     }
 
     inline void close() {
-        HCE_LOW_METHOD_ENTER("close");
-
         std::lock_guard<LOCK> lk(lk_);
 
         if(!closed_flag_) [[unlikely]] {
@@ -107,32 +97,24 @@ struct buffered : public interface<T> {
     }
 
     inline awt<bool> send(const T& s) {
-        HCE_LOW_METHOD_ENTER("send",(void*)&s);
-
         return hce::awt<bool>(new send_interface(
             *this, detail::transfer(detail::circular_buffer_send<const T&>,(void*)&s)));
     }
 
     inline awt<bool> send(T&& s) {
-        HCE_LOW_METHOD_ENTER("send",(void*)&s);
-
         return hce::awt<bool>(new send_interface(
             *this, detail::transfer(detail::circular_buffer_send<T&&>,(void*)&s)));
     }
 
     inline awt<bool> recv(T& r) {
-        HCE_LOW_METHOD_ENTER("recv",(void*)&r);
-
         return hce::awt<bool>(new recv_interface(*this, (void*)&r));
     }
 
     inline hce::yield<result> try_send(const T& t) {
-        HCE_LOW_METHOD_ENTER("try_send",(void*)&t);
         return try_send_(t);
     }
 
     inline hce::yield<result> try_send(T&& t) {
-        HCE_LOW_METHOD_ENTER("try_send",(void*)&t);
         return try_send_(std::move(t));
     }
 
@@ -141,25 +123,19 @@ struct buffered : public interface<T> {
      as values are available for retrieval from the internal buffer.
      */
     inline hce::yield<result> try_recv(T& r) {
-        HCE_LOW_METHOD_ENTER("try_recv",(void*)&r);
-
         std::lock_guard<LOCK> lk(lk_);
 
         if(buf_.empty()) [[unlikely]] {
             if(closed_flag_) [[unlikely]] { 
-                HCE_TRACE_METHOD_BODY("try_recv","closed");
                 return { result::closed }; 
             } else [[likely]] { 
-                HCE_TRACE_METHOD_BODY("try_recv","failed");
                 return { result::failure }; 
             }
         } else [[likely]] {
             if(guard_ && 
                !guard_->parent.try_claim_recv(guard_->parent.ctx)) [[unlikely]] {
-                HCE_TRACE_METHOD_BODY("try_recv","failed");
                 return { result::failure }; 
             } else [[likely]] {
-                HCE_TRACE_METHOD_BODY("try_recv","done");
                 r = std::move(buf_.front());
                 buf_.pop();
 
@@ -175,7 +151,6 @@ struct buffered : public interface<T> {
     }
 
     inline void set_guard(guard* g) { 
-        HCE_LOW_METHOD_ENTER("set_guard");
         std::lock_guard<LOCK> lk(lk_);
         
         guard_ = g; 
@@ -206,14 +181,11 @@ private:
 
         inline bool on_ready() {
             if(parent_.closed_flag_) [[unlikely]] {
-                HCE_TRACE_METHOD_BODY("send","closed");
                 return false;
             } else if(parent_.buf_.full()) [[unlikely]] {
-                HCE_TRACE_METHOD_BODY("send","blocked");
                 parent_.parked_send_.push_back(this);
                 return false;
             } else [[likely]] {
-                HCE_TRACE_METHOD_BODY("send","done");
                 this->tx.send(&(parent_.buf_));
                 this->success = true;
 
@@ -248,20 +220,16 @@ private:
             if(parent_.guard_ && 
                !parent_.guard_->parent.try_claim_recv(parent_.guard_->parent.ctx)) [[unlikely]] 
             {
-                HCE_TRACE_METHOD_BODY("recv","blocked");
                 parent_.parked_recv_.push_back(this);
                 return false;
             } else if(parent_.buf_.empty()) [[unlikely]] {
                 if(parent_.closed_flag_ ) [[unlikely]] {
-                    HCE_TRACE_METHOD_BODY("recv","closed");
                     return true;
                 } else [[likely]] {
-                    HCE_TRACE_METHOD_BODY("recv","blocked");
                     parent_.parked_recv_.push_back(this);
                     return false;
                 }
             } else [[likely]] {
-                HCE_TRACE_METHOD_BODY("recv","done");
                 detail::transfer tx(detail::circular_buffer_recv<T>,&(parent_.buf_));
                 tx.send(this->destination);
                 this->success = true;
@@ -284,10 +252,8 @@ private:
         std::lock_guard<LOCK> lk(lk_);
 
         if(closed_flag_) [[unlikely]] { 
-            HCE_TRACE_METHOD_BODY("try_send","closed");
             return { result::closed }; 
         } else if(!buf_.full()) [[likely]] {
-            HCE_TRACE_METHOD_BODY("try_send","done");
             buf_.push(std::forward<U>(s));
 
             if(parked_recv_.size()) [[unlikely]] {
@@ -297,7 +263,6 @@ private:
 
             return { result::success }; 
         } else [[unlikely]] { 
-            HCE_TRACE_METHOD_BODY("try_send","failed");
             return { result::failure }; 
         }
     }

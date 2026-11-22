@@ -5,11 +5,10 @@
 // c++
 #include <memory>
 #include <mutex>
+#include <exception>
 #include <condition_variable>
 #include <coroutine>
 #include <thread>
-#include <exception>
-#include <string>
 #include <ostream>
 #include <sstream>
 #include <functional>
@@ -17,7 +16,9 @@
 // local 
 #include "hce/utility.hpp"
 #include "hce/cleanup.hpp"
-#include "hce/logging.hpp"
+#include "hce/printable.hpp"
+#include "hce/type.hpp"
+#include "hce/fatal.hpp"
 #include "hce/memory.hpp"
 #include "hce/alloc.hpp"
 #include "hce/chrono.hpp"
@@ -292,11 +293,8 @@ struct this_thread : public printable {
     // can only block the calling thread
     template <typename LOCK>
     static inline void block(LOCK& lk) {
-        HCE_TRACE_FUNCTION_ENTER("hce::detail::coroutine::this_thread::block",hce::type::name<LOCK>());
         auto tt = this_thread::get();
-        HCE_TRACE_FUNCTION_BODY("hce::detail::coroutine::this_thread::block",tt);
         tt->block_(lk);
-        HCE_TRACE_FUNCTION_BODY("hce::detail::coroutine::this_thread::block",tt,", exit");
     }
     
     // unblock an arbitrary this_thread without lock synchronization
@@ -305,7 +303,6 @@ struct this_thread : public printable {
     // unblock an arbitrary this_thread with lock synchronization
     template <typename LOCK>
     inline void unblock(LOCK& lk) {
-        HCE_TRACE_METHOD_ENTER("unblock",hce::type::name<LOCK>());
         ready = true;
         lk.unlock();
         cv.notify_one();
@@ -384,18 +381,15 @@ struct yield : public detail::yield {
     inline std::string name() const { return yield<T>::info_name(); }
 
     inline T await_resume() { 
-        HCE_LOW_METHOD_ENTER("await_resume");
         return std::move(t); 
     }
 
     inline operator T() {
         if(coroutine::in()) [[unlikely]] { 
-            std::stringstream ss;
-            ss << hce::coroutine::local()
-               << "did not call co_await on "
-               << *this;
-            HCE_FATAL_LOG("%s",ss.str().c_str());
-            std::terminate();
+            hce::fatal(
+                hce::coroutine::local(),
+                "did not call co_await on ",
+                *this);
         }
 
         return await_resume(); 
@@ -422,7 +416,7 @@ struct yield<void> : public detail::yield {
     }
 
     inline std::string name() const { return yield<void>::info_name(); }
-    inline void await_resume() { HCE_LOW_METHOD_ENTER("await_resume"); }
+    inline void await_resume() { }
 };
 
 /**
@@ -624,23 +618,19 @@ struct awaitable : public printable {
         virtual ~lockable() { if(locked_){ unlock(); } }
 
         inline await::policy await_policy() const { 
-            HCE_TRACE_METHOD_BODY("await_policy",await_policy_);
             return await_policy_; 
         }
 
         inline resume::policy resume_policy() const { 
-            HCE_TRACE_METHOD_BODY("resume_policy",resume_policy_);
             return resume_policy_; 
         }
 
         inline void lock() final { 
-            HCE_LOW_METHOD_ENTER("lock");
             lk_->lock(); 
             locked_ = true;
         }
 
         inline void unlock() final { 
-            HCE_LOW_METHOD_ENTER("unlock");
             locked_ = false;
             lk_->unlock(); 
         }
@@ -774,9 +764,7 @@ struct awt : public awaitable {
     // the necessary additional operations required by an instance of awt<T>
     struct interface : public awaitable::interface {
         // Ensure destructor is virtual to properly destruct 
-        virtual ~interface() { 
-            HCE_LOW_DESTRUCTOR();
-        }
+        virtual ~interface() { }
 
         static inline std::string info_name() { 
             return hce::awt<T>::info_name() + "::interface"; 
@@ -818,7 +806,6 @@ struct awt : public awaitable {
      compiler as the result of the `co_await` keyword
      */
     inline T await_resume(){ 
-        HCE_MIN_METHOD_ENTER("await_resume");
         return dynamic_cast<interface&>(this->implementation()).get_result();
     }
 
@@ -826,7 +813,6 @@ struct awt : public awaitable {
      Inline conversion for use in standard threads where `co_await` isn't called.
      */
     inline operator T() {
-        HCE_MIN_METHOD_ENTER(std::string("operator ") + type::name<T>());
         this->wait(); 
         return await_resume();
     }
@@ -860,9 +846,7 @@ struct awt<void> : public awaitable {
     typedef void value_type;
 
     struct interface : public awaitable::interface {
-        virtual ~interface() { 
-            HCE_LOW_DESTRUCTOR();
-        }
+        virtual ~interface() { }
 
         static inline std::string info_name() { 
             return hce::awt<void>::info_name() + "::interface"; 
@@ -897,9 +881,7 @@ struct awt<void> : public awaitable {
         return awt<void>(new IMPLEMENTATION(std::forward<As>(as)...)); 
     }
 
-    inline void await_resume(){ 
-        HCE_MIN_METHOD_ENTER("await_resume");
-    }
+    inline void await_resume(){ }
 };
 
 /* 

@@ -7,7 +7,8 @@
 #include <sstream>
 
 // local
-#include "hce/logging.hpp"
+#include "hce/printable.hpp"
+#include "hce/type.hpp"
 #include "hce/alloc.hpp"
 
 namespace hce {
@@ -60,19 +61,15 @@ struct circular_buffer : public printable {
         size_(sz),
         buffer_(size_ ? hce::allocate<T>(size_) : nullptr)
     { 
-        HCE_MIN_CONSTRUCTOR();
     }
 
     circular_buffer(const circular_buffer<T>& rhs) = delete;
 
     circular_buffer(circular_buffer<T>&& rhs) : size_(0), buffer_(nullptr) {
-        HCE_MIN_CONSTRUCTOR(rhs.to_string() + "&&");
         swap_(std::move(rhs));
     }
 
     virtual ~circular_buffer() { 
-        HCE_MIN_DESTRUCTOR(); 
-
         if(buffer_) [[likely]] {
             // destruct memory
             while(used()) [[likely]] { pop(); }
@@ -85,7 +82,6 @@ struct circular_buffer : public printable {
     circular_buffer<T>& operator=(const circular_buffer<T>& rhs) = delete;
 
     inline circular_buffer<T>& operator=(circular_buffer<T>&& rhs) {
-        HCE_MIN_METHOD_ENTER("operator=", rhs.to_string() + "&&");
         swap_(std::move(rhs));
         return *this;
     }
@@ -104,37 +100,31 @@ struct circular_buffer : public printable {
 
     /// return the maximum size of the buffer 
     inline size_t size() const { 
-        HCE_TRACE_METHOD_ENTER("size");
         return size_; 
     }
 
     /// return the count of used elements of the buffer
     inline size_t used() const { 
-        HCE_TRACE_METHOD_ENTER("used");
         return used_; 
     }
 
     /// return the available slots in the buffer
     inline size_t remaining() const { 
-        HCE_TRACE_METHOD_ENTER("remaining");
         return size_ - used_; 
     }
 
     /// return true if the buffer is empty, else false
     inline bool empty() const { 
-        HCE_TRACE_METHOD_ENTER("empty");
         return 0 == used_; 
     }
     
     /// return true if the buffer is full, else false
     inline bool full() const { 
-        HCE_TRACE_METHOD_ENTER("full");
         return size_ == used_; 
     }
 
     /// return a reference to the element at the front of the buffer
     inline T& front() { 
-        HCE_TRACE_METHOD_ENTER("front");
         return *(at_(front_idx_)); 
     }
 
@@ -144,8 +134,6 @@ struct circular_buffer : public printable {
      */
     template <typename... As>
     inline void emplace(As&&... as) {
-        HCE_TRACE_METHOD_ENTER("emplace");
-
         // placement new construction
         new(at_(back_idx_)) T(std::forward<As>(as)...); 
         back_idx_ = (back_idx_ + 1) % size_;
@@ -154,20 +142,16 @@ struct circular_buffer : public printable {
 
     /// lvalue push an element on the back of the buffer
     inline void push(const T& t) {
-        HCE_TRACE_METHOD_ENTER("push");
         emplace(t);
     }
 
     /// rvalue push an element on the back of the buffer
     inline void push(T&& t) {
-        HCE_TRACE_METHOD_ENTER("push");
         emplace(std::move(t));
     }
 
     /// pop the front element off the buffer
     inline void pop() {
-        HCE_TRACE_METHOD_ENTER("pop");
-
         // destruct the memory
         at_(front_idx_)->~T(); 
         front_idx_ = (front_idx_ + 1) % size_;

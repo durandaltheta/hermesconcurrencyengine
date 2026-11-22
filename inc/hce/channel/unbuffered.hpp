@@ -11,7 +11,8 @@
 
 // local
 #include "hce/utility.hpp"
-#include "hce/logging.hpp"
+#include "hce/printable.hpp"
+#include "hce/type.hpp"
 #include "hce/atomic.hpp"
 #include "hce/alloc.hpp"
 #include "hce/list.hpp"
@@ -27,21 +28,18 @@ struct unbuffered : public interface<T> {
     typedef unbuffered<T,LOCK,ALLOCATOR> self_type;
     typedef T value_type;
 
-    unbuffered() {
-        HCE_LOW_CONSTRUCTOR(); 
-    }
+    unbuffered() { }
 
     unbuffered(const ALLOCATOR& allocator) : 
         parked_send_(allocator),
         parked_recv_(allocator)
     { 
-        HCE_LOW_CONSTRUCTOR(); 
     }
 
     unbuffered(const unbuffered<T,LOCK,ALLOCATOR>&) = delete;
     unbuffered(unbuffered<T,LOCK,ALLOCATOR>&&) = delete;
     
-    inline virtual ~unbuffered(){ HCE_LOW_DESTRUCTOR(); }
+    inline virtual ~unbuffered(){ }
 
     unbuffered<T,LOCK,ALLOCATOR>& operator=(const unbuffered<T,LOCK,ALLOCATOR>&) = delete;
     unbuffered<T,LOCK,ALLOCATOR>& operator=(unbuffered<T,LOCK,ALLOCATOR>&&) = delete;
@@ -55,30 +53,23 @@ struct unbuffered : public interface<T> {
     }
 
     inline const std::type_info& type_info() const {
-        HCE_TRACE_METHOD_ENTER("type_info");
         return typeid(unbuffered<T,LOCK,ALLOCATOR>); 
     }
 
     inline int size() const { 
-        HCE_MIN_METHOD_ENTER("size");
         return 0; 
     }
 
     inline int used() const { 
-        HCE_MIN_METHOD_ENTER("used");
         return 0; 
     }
 
     inline bool closed() const {
-        HCE_MIN_METHOD_ENTER("closed");
-
         std::lock_guard<LOCK> lk(lk_);
         return closed_flag_;
     }
 
     inline void close() {
-        HCE_LOW_METHOD_ENTER("close");
-
         std::lock_guard<LOCK> lk(lk_);
         if(!closed_flag_) [[likely]] {
             closed_flag_ = true;
@@ -96,38 +87,28 @@ struct unbuffered : public interface<T> {
     }
 
     inline awt<bool> send(const T& s) {
-        HCE_LOW_METHOD_ENTER("send",(void*)&s);
-
         return hce::awt<bool>(new send_interface(
             *this, detail::transfer(detail::pointer_send<const T&>,&s)));
     }
 
     inline awt<bool> send(T&& s) {
-        HCE_LOW_METHOD_ENTER("send",(void*)&s);
-
         return hce::awt<bool>(new send_interface(
             *this, detail::transfer(detail::pointer_send<T&&>,&s)));
     }
 
     inline awt<bool> recv(T& r) {
-        HCE_LOW_METHOD_ENTER("recv",(void*)&r);
-
         return hce::awt<bool>(new recv_interface(*this, (void*)&r));
     }
 
     inline hce::yield<result> try_send(const T& s) {
-        HCE_LOW_METHOD_ENTER("try_send",(void*)&s);
         return try_send_(s);
     }
 
     inline hce::yield<result> try_send(T&& s) {
-        HCE_LOW_METHOD_ENTER("try_send",(void*)&s);
         return try_send_(std::move(s));
     }
 
     inline hce::yield<result> try_recv(T& r) {
-        HCE_LOW_METHOD_ENTER("try_recv",(void*)&r);
-
         std::lock_guard<LOCK> lk(lk_);
 
         if(closed_flag_) [[unlikely]] { 
@@ -145,7 +126,6 @@ struct unbuffered : public interface<T> {
     }
 
     inline void set_guard(guard* g) { 
-        HCE_LOW_METHOD_ENTER("set_guard");
         std::lock_guard<LOCK> lk(lk_);
         
         guard_ = g; 
@@ -178,16 +158,13 @@ private:
 
         inline bool on_ready() {
             if(parent_.closed_flag_) [[unlikely]] {
-                HCE_TRACE_METHOD_BODY("send","closed");
                 return true;
             } else if(parent_.parked_recv_.size()) [[likely]] {
-                HCE_TRACE_METHOD_BODY("send","done");
                 parent_.parked_recv_.front()->resume((void*)&(this->tx));
                 parent_.parked_recv_.pop();
                 this->success = true;
                 return true;
             } else [[unlikely]] {
-                HCE_TRACE_METHOD_BODY("send","blocked");
                 parent_.parked_send_.push_back(this);
                 return false;
             }
@@ -212,16 +189,13 @@ private:
 
         inline bool on_ready() {
             if(parent_.closed_flag_) [[unlikely]] { 
-                HCE_TRACE_METHOD_BODY("recv","closed");
                 return true;
             } else if(!parent_.parked_send_.size() ||
                       (parent_.guard_ && 
                        !parent_.guard_->parent.try_claim_recv(parent_.guard_->parent.ctx))) [[unlikely]] {
-                HCE_TRACE_METHOD_BODY("recv","block for transfer");
                 parent_.parked_recv_.push_back(this);
                 return false;
             } else [[likely]] {
-                HCE_TRACE_METHOD_BODY("recv","resume");
                 parent_.parked_send_.front()->resume(this->destination);
                 parent_.parked_send_.pop();
                 this->success = true;
@@ -238,10 +212,8 @@ private:
         std::lock_guard<LOCK> lk(lk_);
 
         if(closed_flag_) [[unlikely]] { 
-            HCE_TRACE_METHOD_BODY("try_send","closed");
             return { result::closed }; 
         } else if(parked_recv_.size()) [[likely]] {
-            HCE_TRACE_METHOD_BODY("try_send","done");
             detail::transfer tx(detail::pointer_send<U>,&s);
             parked_recv_.front()->resume((void*)(&tx));
             parked_recv_.pop();

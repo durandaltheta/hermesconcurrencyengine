@@ -3,7 +3,7 @@
 //Author: Blayne Dennis 
 #include <atomic>
 
-#include "hce/logging.hpp"
+#include "hce/printable.hpp"
 
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 #include <immintrin.h>
@@ -32,18 +32,15 @@ inline void cpu_pause() noexcept {
  */
 struct spinlock : public printable {
     spinlock() {
-        HCE_MIN_CONSTRUCTOR();
         lock_.clear();
     }
 
-    virtual ~spinlock() { HCE_MIN_DESTRUCTOR(); }
+    virtual ~spinlock() { }
 
     static inline std::string info_name() { return "hce::spinlock"; }
     inline std::string name() const { return spinlock::info_name(); }
 
     inline void lock() {
-        HCE_MIN_METHOD_ENTER("lock");
-
         // Fast path: try once
         if (!lock_.test_and_set(std::memory_order_acquire)) [[likely]] {
             return;
@@ -62,12 +59,10 @@ struct spinlock : public printable {
     }
 
     inline bool try_lock() {
-        HCE_MIN_METHOD_ENTER("try_lock");
         return !lock_.test_and_set(std::memory_order_acquire);
     }
 
     inline void unlock() {
-        HCE_MIN_METHOD_ENTER("unlock");
         lock_.clear(std::memory_order_release);
     }
 
@@ -82,20 +77,19 @@ private:
  Not safe for concurrent access from multiple threads.
  */
 struct lockfree : public printable {
-    lockfree() { HCE_MIN_CONSTRUCTOR(); }
-    ~lockfree() { HCE_MIN_DESTRUCTOR(); }
+    lockfree() { }
+    ~lockfree() { }
 
     static inline std::string info_name() { return "hce::lockfree"; }
     inline std::string name() const { return lockfree::info_name(); }
 
-    inline void lock() { HCE_MIN_METHOD_ENTER("lock"); }
+    inline void lock() { }
 
     inline bool try_lock() { 
-        HCE_MIN_METHOD_ENTER("try_lock");
         return true; 
     }
 
-    inline void unlock() { HCE_MIN_METHOD_ENTER("unlock"); }
+    inline void unlock() { }
 };
 
 }

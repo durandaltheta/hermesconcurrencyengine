@@ -6,8 +6,8 @@
 
 #include "hce/base.hpp"
 #include "hce/owner.hpp"
-#include "hce/logging.hpp"
 #include "hce/expected.hpp"
+#include "hce/printable.hpp"
 #include "hce/transmit.hpp"
 #include "hce/codec/base64.hpp"
 #include "hce/network/config.hpp"

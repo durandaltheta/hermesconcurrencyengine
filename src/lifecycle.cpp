@@ -1,6 +1,7 @@
 #include <sstream>
 
 #include "hce/utility.hpp"
+#include "hce/logging.hpp"
 #include "hce/owner.hpp"
 #include "hce/lifecycle.hpp"
 #include "hce/memory.hpp"

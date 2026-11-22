@@ -1,6 +1,6 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#include "synchronization.hpp"
+#include "hce/synchronization.hpp"
 
 #include <mutex>
 #include <condition_variable>

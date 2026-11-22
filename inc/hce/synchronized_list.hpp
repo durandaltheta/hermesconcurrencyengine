@@ -5,7 +5,8 @@
 #include <mutex>
 #include <condition_variable>
 
-#include "hce/logging.hpp"
+#include "hce/printable.hpp"
+#include "hce/type.hpp"
 #include "hce/atomic.hpp"
 #include "hce/list.hpp"
 
@@ -28,21 +29,18 @@ struct synchronized_list : public printable {
         closed_(false), 
         waiting_(false)
     { 
-        HCE_MIN_CONSTRUCTOR(); 
     }
 
     synchronized_list(const Allocator& allocator) : 
         closed_(false), 
         waiting_(false),
         list_(allocator) { 
-        HCE_MIN_CONSTRUCTOR(allocator); 
     }
     
     synchronized_list(const synchronized_list<T>&) = delete;
     synchronized_list(synchronized_list<T>&&) = delete;
 
     virtual ~synchronized_list() { 
-        HCE_MIN_DESTRUCTOR();
     }
 
     static inline std::string info_name() { 

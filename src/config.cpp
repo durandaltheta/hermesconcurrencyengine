@@ -17,7 +17,6 @@
 #include <vector>
 #include <stdexcept>
 
-#include "loguru.hpp"
 #include "hce/utility.hpp"
 #include "hce/chrono.hpp"
 #include "hce/thread.hpp"

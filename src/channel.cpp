@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "hce/channel.hpp"
+#include "hce/fatal.hpp"
 
 namespace { // anonymous
 
@@ -112,10 +113,9 @@ void multiplex::guard_mgr::release() {
 
 multiplex::~multiplex() {
     if(guard_mgr_.finished.load(std::memory_order_acquire) == false) {
-        std::stringstream ss;
-        ss << "did not call hce::multiplex::finish() on "
-           << *this;
-        HCE_FATAL_LOG("%s",ss.str().c_str());
+        hce::fatal(
+           "did not call hce::multiplex::finish() on ",
+           *this);
     }
 }
 

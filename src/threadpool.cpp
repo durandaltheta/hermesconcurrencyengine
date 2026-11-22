@@ -3,6 +3,7 @@
 #include <sstream>
 
 #include "hce/threadpool.hpp"
+#include "hce/logging.hpp"
 #include "hce/lifecycle.hpp"
 
 std::string hce::threadpool::info_name() { 

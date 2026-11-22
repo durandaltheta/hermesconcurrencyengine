@@ -3,7 +3,6 @@
 #include <mutex>
 #include <functional>
 
-#include "loguru.hpp"
 #include "hce/atomic.hpp"
 #include "hce/core.hpp"
 #include "hce/logging.hpp"

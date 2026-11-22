@@ -2,9 +2,8 @@
 //Author: Blayne Dennis 
 #include <thread>
 
-#include "loguru.hpp"
-#include "atomic.hpp"
-#include "list.hpp"
+#include "hce/atomic.hpp"
+#include "hce/list.hpp"
 #include "hce/core.hpp"
 #include "hce/channel.hpp"
 #include "hce/threadpool.hpp"
