@@ -251,50 +251,6 @@ struct scheduler : public printable {
     };
 
     /**
-     @brief allows rescheduling a coroutine on a parent scheduler when an awaitable implementation is resumed. 
-     
-     This inherits `to_destination()` and implements `on_suspend()` API.
-
-     This is only a partial implementation of hce::awaitable::interface, and is 
-     intended to be used as part of the inheritted interface of a complete 
-     implementation.
-     */
-    template <typename INTERFACE>
-    struct reschedule : public INTERFACE {
-        /// framework selects the scheduler to reschedule on
-        template <typename... As>
-        reschedule(As&&... as) : 
-            INTERFACE(std::forward<As>(as)...) 
-        { }
-
-        virtual ~reschedule(){}
-       
-        /// acquire the destination
-        inline void on_suspend() {
-            auto& tl_sch = detail::scheduler::tl_this_scheduler();
-
-            /* 
-             Now that we're suspending we know to try and acquire a 
-             destination. If we're not in a scheduler then we're going to block 
-             on the thread_local condition variable and destination() won't be 
-             called.
-             */
-            if(tl_sch) {
-                this->destination_ = tl_sch;
-            }
-        }
-
-        /// pass a resumed coroutine to its destination
-        inline void to_destination(std::coroutine_handle<> h) {
-            destination_->schedule_(std::move(h));
-        }
-
-    private:
-        // a weak_ptr to the scheduler we will reschedule on
-        hce::scheduler* destination_ = nullptr;
-    };
-
-    /**
      @brief complete awaitable capable of rescheduling the awaiting coroutine on another scheduler
 
      This awaitable is slightly different from most awaitables in this framework 
@@ -327,14 +283,14 @@ struct scheduler : public printable {
      */
     template <typename T>
     struct joiner : 
-        public hce::scheduler::reschedule<hce::detail::scheduler::joiner<T>> 
+        hce::detail::scheduler::joiner<T>
     { 
         /**
          Join the coroutine and resume any suspended coroutine on a selected
          scheduler
          */
         joiner(hce::co<T>& co) :
-            hce::scheduler::reschedule<hce::detail::scheduler::joiner<T>>(co)
+            hce::detail::scheduler::joiner<T>(co)
         { 
         }
 
@@ -705,6 +661,8 @@ private:
 
     // a weak_ptr to the scheduler's shared memory
     std::weak_ptr<scheduler> self_wptr_;
+
+    friend struct hce::awaitable::interface;
 };
 
 /**

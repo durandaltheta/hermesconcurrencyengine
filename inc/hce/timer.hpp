@@ -157,10 +157,9 @@ struct timer : public hce::service<timer>, public hce::printable {
 private:
     // timer service awaitable implementation
     struct awaitable : public 
-        hce::scheduler::reschedule<
-           hce::awaitable::lockable<
-                hce::spinlock,
-                hce::awt<bool>::interface>>
+       hce::awaitable::lockable<
+            hce::spinlock,
+            hce::awt<bool>::interface>
     {
         awaitable();
         virtual ~awaitable();

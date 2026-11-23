@@ -7,6 +7,7 @@
 #include "hce/logging.hpp"
 #include "hce/coroutine.hpp"
 #include "hce/awaitable.hpp"
+#include "hce/scheduler.hpp"
 
 hce::awaitable::interface::interface() { HCE_LOW_CONSTRUCTOR(); }
 
@@ -150,6 +151,24 @@ void hce::awaitable::interface::resume(void* m) {
     }
 }
 
+void hce::awaitable::interface::on_suspend() {
+    auto& tl_sch = detail::scheduler::tl_this_scheduler();
+
+    /* 
+     Now that we're suspending we know to try and acquire a 
+     destination. If we're not in a scheduler then we're going to block 
+     on the thread_local condition variable and destination() won't be 
+     called.
+     */
+    if(tl_sch) {
+        this->destination_ = (void*)tl_sch;
+    }
+}
+
+/// pass a resumed coroutine to its destination
+void hce::awaitable::interface::to_destination(std::coroutine_handle<> h) {
+    ((hce::scheduler*)destination_)->schedule_(std::move(h));
+}
 
 hce::awaitable::awaitable() : impl_(nullptr) {
     HCE_TRACE_CONSTRUCTOR();

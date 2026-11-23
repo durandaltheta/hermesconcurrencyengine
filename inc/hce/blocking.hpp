@@ -272,14 +272,12 @@ private:
     // awaitable implementation for returning an immediately available value
     template <typename T>
     struct sync : public 
-            hce::scheduler::reschedule<
-                hce::detail::blocking::sync_partial<T>>
+            hce::detail::blocking::sync_partial<T>
     {
         template <typename... As>
         sync(As&&... as) : 
-            hce::scheduler::reschedule<
-                hce::detail::blocking::sync_partial<T>>(
-                    std::forward<As>(as)...)
+            hce::detail::blocking::sync_partial<T>(
+                std::forward<As>(as)...)
         { 
         }
 
@@ -295,10 +293,10 @@ private:
     // awaitable implementation for returning an asynchronously available value
     template <typename T>
     struct async : public 
-           scheduler::reschedule<hce::detail::blocking::async_partial<T>>
+           hce::detail::blocking::async_partial<T>
     {
         async() : 
-            scheduler::reschedule<hce::detail::blocking::async_partial<T>>(),
+            hce::detail::blocking::async_partial<T>(),
             // on construction get a worker
             wkr_(hce::service<blocking>::get().checkout_worker_())
         { }
