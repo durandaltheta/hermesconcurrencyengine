@@ -449,45 +449,33 @@ struct case_recv : case_impl {
      hce::select select;
      int i;
      std::string s = "hello";
+     bool done = false
 
-     select.recv(ich, i, [&]{ 
-         std::cout << "received int: " << i << std::endl;
-     });
+     while(!done) {
+         // build our channel requests
+         select.recv(ich, i, [&]{ 
+             std::cout << "received int: " << i << std::endl;
+         });
 
-     select.send(sch, s, [&]{ 
-         std::cout << "sent std::string: " << s << std::endl;
-     });
+         select.send(sch, s, [&]{ 
+             done = true; // we can access outside context
+             std::cout << "sent std::string: " << s << std::endl;
+         });
 
-     if(select.call(co_await select.wait())) {
-        // someone succeeded
-        co_return true;
-     } else {
-        // we were all canceled
-        co_return false;
+         if(select.call(co_await select.wait())) {
+            // someone succeeded 
+            co_return true;
+         } else {
+            // we were all canceled
+            co_return false;
+         }
      }
  }
  ```
  */
 struct select {
-    template <typename T>
-    int send(channel::interface<T>& ch, T&& src) {
-        channel::select::request::type_e type;
-
-        if constexpr (std::is_rvalue_reference_v<decltype(src)>) {
-            type = channel::select::request::type_e::move;
-        } else {
-            type = channel::select::request::type_e::copy;
-        }
-
-        channel::select::request r{ type, &dest, group, idx };
-        return append( 
-            std::make_unique<channel::detail::send_case<T>>(ch, r),
-            std::unique_ptr<callback>()
-        );
-    }
-
     template <typename T, typename CALLBACK>
-    int send(channel::interface<T>& ch, T&& src, CALLBACK&& cb) {
+    select& send(channel::interface<T>& ch, T&& src, CALLBACK&& cb) {
         channel::select::request::type_e type;
 
         if constexpr (std::is_rvalue_reference_v<decltype(src)>) {
@@ -496,6 +484,7 @@ struct select {
             type = channel::select::request::type_e::copy;
         }
 
+        int idx = static_cast<int>(cases.size());
         channel::select::request r{ type, &dest, group, idx };
         return append( 
             std::make_unique<channel::detail::send_case<T>>(ch, r),
@@ -503,19 +492,9 @@ struct select {
         );
     }
 
-    template <typename T>
-    int recv(channel::interface<T>& ch, T& dest) {
-        channel::select::request r{ 
-            channel::select::request::type_e::copy, &dest, group, idx 
-        };
-        return append( 
-            std::make_unique<channel::detail::case_impl<T>>(ch, r),
-            std::unique_ptr<callback>()
-        );
-    }
-
     template <typename T, typename CALLBACK>
-    int recv(channel::interface<T>& ch, T& dest, CALLBACK&& cb) {
+    select& recv(channel::interface<T>& ch, T& dest, CALLBACK&& cb) {
+        int idx = static_cast<int>(cases.size());
         channel::select::request r{ 
             channel::select::request::type_e::copy, &dest, group, idx 
         };
@@ -538,14 +517,21 @@ struct select {
         return hce::awt<int>(new channel::select::impl(std::move(state)));
     }
 
-    /// call the selected callback
+    /**
+     @brief call the selected callback 
+     
+     Callbacks are cleared after every call().
+     */
     inline bool call(int idx) { 
+        bool result = false;
+
         if(idx > -1 && callbacks[idx]) {
             (*(callbacks[idx]))(); 
-            return true;
-        } else {
-            return false;
-        }
+            result = true;
+        } 
+
+        callbacks.clear();
+        return result;
     }
 
 private:
@@ -553,10 +539,9 @@ private:
             std::unique_ptr<case_base>&& ca, 
             std::unique_ptr<callback> cb) 
     {
-        int idx = static_cast<int>(cases.size());
         cases.push_back(std::move(ca));
         callbacks.push_back(std::move(cb));
-        return idx;
+        return *this;
     }
 
     struct callback {
