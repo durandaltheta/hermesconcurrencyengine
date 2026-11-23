@@ -469,7 +469,7 @@ struct select {
     int recv(channel::interface<T>& ch, T& dest, CALLBACK&& cb) {
         return append( 
             std::make_unique<channel::detail::recv_case<T>>(ch, dest, group, idx),
-            callback_imp<CALLBACK>::make(std::forward<CALLBACK>(cb))
+            callback_impl<CALLBACK>::make(std::forward<CALLBACK>(cb))
         );
     }
 
@@ -485,7 +485,7 @@ struct select {
     int send(channel::interface<T>& ch, T& src, CALLBACK&& cb) {
         return append( 
             std::make_unique<channel::detail::send_case<T>>(ch, src, group, idx),
-            callback_imp<CALLBACK>::make(std::forward<CALLBACK>(cb))
+            callback_impl<CALLBACK>::make(std::forward<CALLBACK>(cb))
         );
     }
 
