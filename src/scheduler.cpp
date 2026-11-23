@@ -48,27 +48,6 @@ const char* hce::awaitable_destroyed_without_joining_result::what() const noexce
     return estr.c_str(); 
 }
 
-hce::scheduler::reschedule::~reschedule(){}
-
-void hce::scheduler::reschedule::on_suspend() {
-    auto& tl_sch = detail::scheduler::tl_this_scheduler();
-
-    /* 
-     Now that we're suspending we know to try and acquire a 
-     destination. If we're not in a scheduler then we're going to block 
-     on the thread_local condition variable and destination() won't be 
-     called.
-     */
-    if(tl_sch) {
-        this->destination_ = tl_sch;
-    }
-}
-
-/// pass a resumed coroutine to its destination
-void hce::scheduler::reschedule::to_destination(std::coroutine_handle<> h) {
-    destination_->schedule_(std::move(h));
-}
-
 
 hce::scheduler::migrater::migrater(hce::scheduler& destination) : 
     destination_(&destination) 

@@ -259,14 +259,35 @@ struct scheduler : public printable {
      intended to be used as part of the inheritted interface of a complete 
      implementation.
      */
-    struct reschedule {
-        virtual ~reschedule();
+    template <typename INTERFACE>
+    struct reschedule : public INTERFACE {
+        /// framework selects the scheduler to reschedule on
+        template <typename... As>
+        reschedule(As&&... as) : 
+            INTERFACE(std::forward<As>(as)...) 
+        { }
+
+        virtual ~reschedule(){}
        
         /// acquire the destination
-        void on_suspend();
+        inline void on_suspend() {
+            auto& tl_sch = detail::scheduler::tl_this_scheduler();
+
+            /* 
+             Now that we're suspending we know to try and acquire a 
+             destination. If we're not in a scheduler then we're going to block 
+             on the thread_local condition variable and destination() won't be 
+             called.
+             */
+            if(tl_sch) {
+                this->destination_ = tl_sch;
+            }
+        }
 
         /// pass a resumed coroutine to its destination
-        void to_destination(std::coroutine_handle<> h);
+        inline void to_destination(std::coroutine_handle<> h) {
+            destination_->schedule_(std::move(h));
+        }
 
     private:
         // a weak_ptr to the scheduler we will reschedule on
@@ -306,15 +327,14 @@ struct scheduler : public printable {
      */
     template <typename T>
     struct joiner : 
-        hce::scheduler::reschedule,
-        hce::detail::scheduler::joiner<T>
+        public hce::scheduler::reschedule<hce::detail::scheduler::joiner<T>> 
     { 
         /**
          Join the coroutine and resume any suspended coroutine on a selected
          scheduler
          */
         joiner(hce::co<T>& co) :
-            hce::detail::scheduler::joiner<T>(co)
+            hce::scheduler::reschedule<hce::detail::scheduler::joiner<T>>(co)
         { 
         }
 
