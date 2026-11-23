@@ -114,14 +114,24 @@ struct unbuffered : channel::interface {
     }
 
     struct selector : channel::interface<T>::selector {
-        inline hce::awt<bool> make_select_recv(
-                T& r, 
-                select::group& g, 
-                int index,
-                select::notify* owner) 
-        {
+        inline hce::awt<bool> send(const request& r) {
+            return hce::awt<bool>(new send_interface(
+                &parent_, 
+                r.type == channel::select::request::type_e::move 
+                    ? detail::transfer(detail::pointer_send<T&&>, r.value)
+                    : detail::transfer(detail::pointer_send<const T&>, r.value), 
+                r.group, 
+                r.index, 
+                r.owner));
+        }
+
+        inline hce::awt<bool> recv(const request& r) {
             return hce::awt<bool>(new recv_interface(
-                *this, static_cast<void*>(&r), &g, index, owner));
+                &parent_, 
+                r.value,
+                r.group, 
+                r.index, 
+                r.owner));
         }
 
         // Returns true if the op parked, false if it completed immediately

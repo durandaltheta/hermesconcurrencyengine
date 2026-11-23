@@ -5,6 +5,7 @@
 #include <utility>
 #include <atomic>
 #include <vector>
+#include <type_traits>
 
 // local
 #include "hce/utility.hpp"
@@ -50,6 +51,26 @@ struct group {
 struct notify {
     virtual ~notify() = default;
     virtual void on_won(int index) = 0;
+};
+
+struct request {
+    enum struct type_e {
+        copy,
+        move
+    };
+
+    type_e type = type_e::unknown;
+    void* value = nullptr;
+    select::group* group = nullptr;
+    int index = -1;
+    select::notify* notify = nullptr;
+};
+
+struct case_base {
+    virtual ~case_base() = default;
+    virtual bool activate(select::notify* owner) = 0;
+    virtual void cancel() = 0;
+    virtual int index() const = 0;
 };
 
 struct state {
@@ -199,23 +220,7 @@ struct interface : printable {
          The returned awaitbale is not started. The select calls activate() to 
          register it under the channel lock.
          */
-        virtual hce::awt<bool> send(
-                const T& s, 
-                select::group& g, 
-                int index,
-                select::notify* owner) { return { }; }
-
-        /*
-         @brief build a select-send awaitable 
-
-         The returned awaitbale is not started. The select calls activate() to 
-         register it under the channel lock.
-         */
-        virtual hce::awt<bool> send(
-                T&& s, 
-                select::group& g, 
-                int index,
-                select::notify* owner) { return { }; }
+        virtual hce::awt<bool> send(const request& r) { return { }; }
 
         /*
          @brief build a select-recv awaitable 
@@ -223,11 +228,7 @@ struct interface : printable {
          The returned awaitbale is not started. The select calls activate() to 
          register it under the channel lock.
          */
-        virtual hce::awt<bool> recv(
-                T& r, 
-                select::group& g, 
-                int index,
-                select::notify* owner) { return { }; }
+        virtual hce::awt<bool> recv(const request& r) { return { }; }
 
         /**
          @brief activate a select awaitable
@@ -324,14 +325,16 @@ template <typename LOCK>
 struct base_send_interface :
     hce::awaitable::lockable<LOCK, hce::awt_interface<bool>>
 {
-    base_send_interface(LOCK& lk, transfer t, select::group* g, int idx) :
+    base_send_interface(LOCK& lk, transfer t, select::group* g, int idx,
+                        select::notify* own = nullptr) :
           hce::awaitable::lockable<LOCK, hce::awt_interface<bool>>(
               lk,
               hce::awaitable::await::policy::defer,
-              hce::awaitable::resume::policy::no_lock)
-        , tx(t)
-        , group(g)
-        , index(idx)
+              hce::awaitable::resume::policy::no_lock),
+        tx(t),
+        group(g),
+        index(idx),
+        owner(own)
     {}
 
     bool try_claim() {
@@ -342,6 +345,7 @@ struct base_send_interface :
         if(m) {
             tx.send(static_cast<void*>(m));
             success = true;
+            if(owner){ owner->on_won(index); }
         }
     }
 
@@ -351,6 +355,7 @@ struct base_send_interface :
     transfer tx;
     select::group* group = nullptr;
     int index = -1;
+    select::notify* owner = nullptr;
 };
 
 template <typename LOCK>
@@ -358,15 +363,15 @@ struct base_recv_interface :
     hce::awaitable::lockable<LOCK, hce::awt_interface<bool>>
 {
     base_recv_interface(LOCK& lk, void* d, select::group* g, int idx,
-                        select::notify* own) :
+                        select::notify* own = nullptr) :
           hce::awaitable::lockable<LOCK, hce::awt_interface<bool>>(
               lk,
               hce::awaitable::await::policy::defer,
-              hce::awaitable::resume::policy::no_lock)
-        , destination(d)
-        , group(g)
-        , index(idx)
-        , owner(own)
+              hce::awaitable::resume::policy::no_lock),
+        destination(d),
+        group(g),
+        index(idx),
+        owner(own)
     {}
 
     bool try_claim() {
@@ -390,30 +395,13 @@ struct base_recv_interface :
     select::notify* owner = nullptr;
 };
 
-struct case_base {
-    virtual ~case_base() = default;
-    virtual bool activate(select::notify* owner) = 0;
-    virtual void cancel() = 0;
-    virtual int index() const = 0;
-};
-
-template <typename T>
-struct recv_case : case_base {
-    channel::interface<T>* ch = nullptr;
-    T* dest = nullptr;
-    select::group* group = nullptr;
-    int idx = -1;
+struct case_impl : case_base {
+    channel::select::request request;
     hce::awt<bool> op;
     hce::awt<bool>::interface* iface = nullptr;
 
-    recv_case(channel::interface<T>& c, T& d, select::group& g, int i)
-        : ch(&c), dest(&d), group(&g), idx(i) {}
-
-    bool activate(select::notify* owner) override {
-        op = ch->select().recv(*dest, *group, idx, owner);
-        iface = dynamic_cast<hce::awt<bool>::interface*>(&op.implementation());
-        return ch->select().activate(iface);
-    }
+    case_impl(channel::interface<T>& c, const channel::select::request r&)
+        : ch(&c), request(r) {}
 
     void cancel() override {
         if(iface && ch){ 
@@ -422,6 +410,30 @@ struct recv_case : case_base {
     }
 
     int index() const override { return idx; }
+};
+
+struct case_send : case_impl {
+    template<typename... As>
+    case_send(As&&... as) : case_impl(std::forward<As>(as)...) { }
+
+    bool activate(select::notify* owner) override {
+        request.owner = owner;
+        op = ch->select().send(request);
+        iface = dynamic_cast<hce::awt<bool>::interface*>(&op.implementation());
+        return ch->select().activate(iface);
+    }
+};
+
+struct case_recv : case_impl {
+    template<typename... As>
+    case_recv(As&&... as) : case_impl(std::forward<As>(as)...) { }
+
+    bool activate(select::notify* owner) override {
+        request.owner = owner;
+        op = ch->select().recv(request);
+        iface = dynamic_cast<hce::awt<bool>::interface*>(&op.implementation());
+        return ch->select().activate(iface);
+    }
 };
 
 } // detail
@@ -433,7 +445,7 @@ struct recv_case : case_base {
  Example:
  ```
  hce::co<bool> foo(hce::channel::unbuffered<int> ich, 
-                 hce::channel::unbuffered<std::string> sch) {
+                   hce::channel::unbuffered<std::string> sch) {
      hce::select select;
      int i;
      std::string s = "hello";
@@ -458,33 +470,57 @@ struct recv_case : case_base {
  */
 struct select {
     template <typename T>
-    int recv(channel::interface<T>& ch, T& dest) {
+    int send(channel::interface<T>& ch, T&& src) {
+        channel::select::request::type_e type;
+
+        if constexpr (std::is_rvalue_reference_v<decltype(src)>) {
+            type = channel::select::request::type_e::move;
+        } else {
+            type = channel::select::request::type_e::copy;
+        }
+
+        channel::select::request r{ type, &dest, group, idx };
         return append( 
-            std::make_unique<channel::detail::recv_case<T>>(ch, dest, group, idx),
+            std::make_unique<channel::detail::send_case<T>>(ch, r),
+            std::unique_ptr<callback>()
+        );
+    }
+
+    template <typename T, typename CALLBACK>
+    int send(channel::interface<T>& ch, T&& src, CALLBACK&& cb) {
+        channel::select::request::type_e type;
+
+        if constexpr (std::is_rvalue_reference_v<decltype(src)>) {
+            type = channel::select::request::type_e::move;
+        } else {
+            type = channel::select::request::type_e::copy;
+        }
+
+        channel::select::request r{ type, &dest, group, idx };
+        return append( 
+            std::make_unique<channel::detail::send_case<T>>(ch, r),
+            callback_impl<CALLBACK>::make(std::forward<CALLBACK>(cb))
+        );
+    }
+
+    template <typename T>
+    int recv(channel::interface<T>& ch, T& dest) {
+        channel::select::request r{ 
+            channel::select::request::type_e::copy, &dest, group, idx 
+        };
+        return append( 
+            std::make_unique<channel::detail::case_impl<T>>(ch, r),
             std::unique_ptr<callback>()
         );
     }
 
     template <typename T, typename CALLBACK>
     int recv(channel::interface<T>& ch, T& dest, CALLBACK&& cb) {
+        channel::select::request r{ 
+            channel::select::request::type_e::copy, &dest, group, idx 
+        };
         return append( 
-            std::make_unique<channel::detail::recv_case<T>>(ch, dest, group, idx),
-            callback_impl<CALLBACK>::make(std::forward<CALLBACK>(cb))
-        );
-    }
-
-    template <typename T>
-    int send(channel::interface<T>& ch, T& src) {
-        return append( 
-            std::make_unique<channel::detail::send_case<T>>(ch, src, group, idx),
-            std::unique_ptr<callback>()
-        );
-    }
-
-    template <typename T, typename CALLBACK>
-    int send(channel::interface<T>& ch, T& src, CALLBACK&& cb) {
-        return append( 
-            std::make_unique<channel::detail::send_case<T>>(ch, src, group, idx),
+            std::make_unique<channel::detail::case_recv>(ch, r),
             callback_impl<CALLBACK>::make(std::forward<CALLBACK>(cb))
         );
     }
