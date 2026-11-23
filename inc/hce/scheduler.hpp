@@ -259,14 +259,14 @@ struct scheduler : public printable {
      intended to be used as part of the inheritted interface of a complete 
      implementation.
      */
-    struct reschedule {
+    struct reschedule : virtual awaitable::interface {
         virtual ~reschedule();
        
         /// acquire the destination
-        void on_suspend();
+        void on_suspend() override;
 
         /// pass a resumed coroutine to its destination
-        void to_destination(std::coroutine_handle<> h);
+        void to_destination(std::coroutine_handle<> h) override;
 
     private:
         // a weak_ptr to the scheduler we will reschedule on
