@@ -4,8 +4,7 @@
 // c++
 #include <utility>
 #include <atomic>
-#include <map>
-#include <optional>
+#include <vector>
 
 // local
 #include "hce/utility.hpp"
@@ -24,6 +23,33 @@ enum result {
     closed = 0, /// channel is closed
     failure, /// channel operation failed
     success /// channel operation success
+};
+
+/// group used for managing selects
+struct select_group {
+    std::atomic<bool> claimed{false};
+    std::atomic<int>  winner{-1};
+
+    bool try_claim(int index) {
+        bool expected = false;
+        if(claimed.compare_exchange_strong(
+                expected, true,
+                std::memory_order_acq_rel,
+                std::memory_order_acquire)) {
+            winner.store(index, std::memory_order_release);
+            return true;
+        }
+
+        return false;
+    }
+
+    bool is_claimed() const {
+        return claimed.load(std::memory_order_acquire);
+    }
+
+    int winner_index() const {
+        return winner.load(std::memory_order_acquire);
+    }
 };
 
 /**
@@ -154,69 +180,76 @@ private:
 };
 
 template <typename LOCK>
-struct base_send_interface : 
-    hce::awaitable::lockable<
-        LOCK,
-        awt_interface<bool>>
+struct base_send_interface :
+    hce::awaitable::lockable<LOCK, hce::awt_interface<bool>>
 {
-    base_send_interface(LOCK& lk, transfer t) : 
-        hce::awaitable::lockable<
-            LOCK,
-            awt_interface<bool>>(
-                lk,
-                hce::awaitable::await::policy::defer,
-                hce::awaitable::resume::policy::no_lock),
-        tx(t)
-    { }
+    base_send_interface(LOCK& lk, transfer t, select_group* g, int idx) :
+          hce::awaitable::lockable<LOCK, hce::awt_interface<bool>>(
+              lk,
+              hce::awaitable::await::policy::defer,
+              hce::awaitable::resume::policy::no_lock)
+        , tx(t)
+        , group(g)
+        , index(idx)
+    {}
 
-    inline void on_resume(void* m) {
-        if(m) [[likely]] {
-            // m is destination
-            tx.send(m);
+    bool try_claim() {
+        return group ? group->try_claim(index) : true;
+    }
+
+    inline void on_resume(void* m) override {
+        if(m) {
+            tx.send(static_cast<void*>(m));
             success = true;
         }
     }
 
-    inline bool get_result() { 
-        return success; 
-    }
+    inline bool get_result() { return success; }
 
     bool success = false;
     transfer tx;
+    select_group* group = nullptr;
+    int index = -1;
 };
 
 template <typename LOCK>
-struct base_recv_interface : 
-    hce::awaitable::lockable<
-        LOCK,
-        awt_interface<bool>>
+struct base_recv_interface :
+    hce::awaitable::lockable<LOCK, hce::awt_interface<bool>>
 {
-    base_recv_interface(LOCK& lk, void* d) : 
-        hce::awaitable::lockable<
-            LOCK,
-            awt_interface<bool>>(
-                lk,
-                hce::awaitable::await::policy::defer,
-                hce::awaitable::resume::policy::no_lock),
-        destination(d)
-    { }
+    base_recv_interface(LOCK& lk, void* d, select_group* g, int idx,
+                        select_notify* own) :
+          hce::awaitable::lockable<LOCK, hce::awt_interface<bool>>(
+              lk,
+              hce::awaitable::await::policy::defer,
+              hce::awaitable::resume::policy::no_lock)
+        , destination(d)
+        , group(g)
+        , index(idx)
+        , owner(own)
+    {}
 
-    inline void on_resume(void* m) {
-        if(m) [[likely]] {
-            // m is transfer struct
-            ((transfer*)m)->send(destination);
+    bool try_claim() {
+        return group ? group->try_claim(index) : true;
+    }
+
+    inline void on_resume(void* m) override {
+        if(m) {
+            static_cast<transfer*>(m)->send(destination);
             success = true;
+            if(owner){ owner->on_won(index); }
         }
     }
 
-    inline bool get_result() { 
-        return success; 
-    }
+    inline bool get_result() { return success; }
 
     bool success = false;
     void* destination = nullptr;
+    select_group* group = nullptr;
+    int index = -1;
+    select_notify* owner = nullptr;
 };
 
 } // detail 
+
 } // channel 
 } // hce
