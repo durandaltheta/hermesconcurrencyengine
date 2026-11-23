@@ -2,6 +2,8 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
 
+#include <coroutine>
+
 #include "hce/printable.hpp"
 #include "hce/type.hpp"
 #include "hce/alloc.hpp"

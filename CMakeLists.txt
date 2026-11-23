@@ -187,9 +187,12 @@ set_target_properties(hce PROPERTIES
     POSITION_INDEPENDENT_CODE ON  # Ensure PIC for shared builds
 )
 
-# enable unity build for faster compilation and greater optimization
-set(CMAKE_UNITY_BUILD ON)   
-set_target_properties(hce PROPERTIES UNITY_BUILD ON)
+# optionally enable unity build for faster compilation and greater optimization
+option(HCE_UNITY_BUILD "Enable unity builds for faster compilation" OFF)
+if(HCE_UNITY_BUILD)
+    set(CMAKE_UNITY_BUILD ON)
+    set_target_properties(hce PROPERTIES UNITY_BUILD ON)
+endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
