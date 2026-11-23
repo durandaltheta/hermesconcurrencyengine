@@ -82,75 +82,6 @@ struct state {
     bool completed = false;
 };
 
-struct impl : 
-    hce::awaitable::lockable<hce::spinlock, hce::awt_interface<int>>, 
-    select::notify
-{
-    std::unique_ptr<state> st;
-
-    explicit impl(std::unique_ptr<state> s):
-          hce::awaitable::lockable<hce::spinlock, hce::awt_interface<int>>(
-              s->lk,
-              hce::awaitable::await::policy::defer,
-              hce::awaitable::resume::policy::no_lock)
-        , st(std::move(s))
-    {}
-
-    static inline std::string info_name() { return "hce::channel::select::impl"; }
-    inline std::string name() const { return impl::info_name(); }
-
-    bool on_ready() override {
-        int parked_count = 0;
-
-        for(auto& c : st->cases) {
-            if(c->activate(this)) { ++parked_count; }
-        }
-
-        st->parked = true;
-
-        if(st->group->is_claimed()) {
-            st->winner = st->group->winner_index();
-            cancel_losers();
-            st->completed = true;
-            return true;
-        }
-
-        if(parked_count == 0) {
-            st->winner = -1;
-            st->completed = true;
-            return true;
-        }
-
-        return false;
-    }
-
-    void on_resume(void*) override {
-        if(st->winner < 0) { st->winner = st->group->winner_index(); }
-        cancel_losers();
-        st->completed = true;
-    }
-
-    int get_result() override { return st->winner; }
-
-    void on_won(int index) override {
-        st->winner = index;
-        if(st->parked && !st->completed) {
-            st->completed = true;
-            this->resume(nullptr);
-        }
-    }
-
-private:
-    void cancel_losers() {
-        int w = st->winner;
-
-        for(auto& c : st->cases) {
-            if(c->index() == w) { continue; }
-            c->cancel();
-        }
-    }
-};
-
 } // select
 
 /// result of a channel try operation
@@ -395,6 +326,8 @@ struct base_recv_interface :
     select::notify* owner = nullptr;
 };
 
+namespace select {
+
 struct case_impl : case_base {
     channel::select::request request;
     hce::awt<bool> op;
@@ -436,7 +369,77 @@ struct case_recv : case_impl {
     }
 };
 
+struct impl : 
+    hce::awaitable::lockable<hce::spinlock, hce::awt_interface<int>>, 
+    select::notify
+{
+    std::unique_ptr<state> st;
+
+    explicit impl(std::unique_ptr<state> s):
+          hce::awaitable::lockable<hce::spinlock, hce::awt_interface<int>>(
+              s->lk,
+              hce::awaitable::await::policy::defer,
+              hce::awaitable::resume::policy::no_lock)
+        , st(std::move(s))
+    {}
+
+    static inline std::string info_name() { return "hce::channel::select::impl"; }
+    inline std::string name() const { return impl::info_name(); }
+
+    bool on_ready() override {
+        int parked_count = 0;
+
+        for(auto& c : st->cases) {
+            if(c->activate(this)) { ++parked_count; }
+        }
+
+        st->parked = true;
+
+        if(st->group->is_claimed()) {
+            st->winner = st->group->winner_index();
+            cancel_losers();
+            st->completed = true;
+            return true;
+        }
+
+        if(parked_count == 0) {
+            st->winner = -1;
+            st->completed = true;
+            return true;
+        }
+
+        return false;
+    }
+
+    void on_resume(void*) override {
+        if(st->winner < 0) { st->winner = st->group->winner_index(); }
+        cancel_losers();
+        st->completed = true;
+    }
+
+    int get_result() override { return st->winner; }
+
+    void on_won(int index) override {
+        st->winner = index;
+        if(st->parked && !st->completed) {
+            st->completed = true;
+            this->resume(nullptr);
+        }
+    }
+
+private:
+    void cancel_losers() {
+        int w = st->winner;
+
+        for(auto& c : st->cases) {
+            if(c->index() == w) { continue; }
+            c->cancel();
+        }
+    }
+};
+
 } // detail
+} // select
 } // channel 
 
 /**
