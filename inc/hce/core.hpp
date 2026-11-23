@@ -3,5 +3,6 @@
 //Author: Blayne Dennis 
 #include "hce/base.hpp"
 #include "hce/coroutine.hpp"
+#include "hce/awaitable.hpp"
 #include "hce/scheduler.hpp"
 #include "hce/lifecycle.hpp"

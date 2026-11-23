@@ -2,6 +2,7 @@
 //Author: Blayne Dennis 
 #include "hce/atomic.hpp"
 #include "hce/coroutine.hpp"
+#include "hce/awaitable.hpp"
 
 #include <string>
 #include <sstream>

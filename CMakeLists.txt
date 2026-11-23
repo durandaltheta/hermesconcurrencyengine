@@ -60,6 +60,7 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/hce/network.hpp
     ${HCE_INCLUDE_DIR}/hce/synchronized_list.hpp
     ${HCE_INCLUDE_DIR}/hce/coroutine.hpp
+    ${HCE_INCLUDE_DIR}/hce/awaitable.hpp
     ${HCE_INCLUDE_DIR}/hce/scheduler/config.hpp
     ${HCE_INCLUDE_DIR}/hce/scheduler.hpp
     ${HCE_INCLUDE_DIR}/hce/blocking.hpp
@@ -79,6 +80,7 @@ set(HCE_SOURCE_FILES
     ${HCE_SOURCE_DIR}/printable.cpp
     ${HCE_SOURCE_DIR}/fatal.cpp
     ${HCE_SOURCE_DIR}/coroutine.cpp
+    ${HCE_SOURCE_DIR}/awaitable.cpp
     ${HCE_SOURCE_DIR}/scheduler.cpp
     ${HCE_SOURCE_DIR}/channel.cpp
     ${HCE_SOURCE_DIR}/blocking.cpp
@@ -184,6 +186,16 @@ endif()
 set_target_properties(hce PROPERTIES
     POSITION_INDEPENDENT_CODE ON  # Ensure PIC for shared builds
 )
+
+# optionally enable unity build for faster compilation and greater optimization
+option(HCE_UNITY_BUILD "Enable unity builds for faster compilation" OFF)
+if(HCE_UNITY_BUILD)
+    set(CMAKE_UNITY_BUILD ON)
+    set_target_properties(hce PROPERTIES UNITY_BUILD ON)
+else()
+    set(CMAKE_UNITY_BUILD OFF)
+    set_target_properties(hce PROPERTIES UNITY_BUILD OFF)
+endif()
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")

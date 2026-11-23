@@ -28,6 +28,7 @@
 #include "hce/thread.hpp"
 #include "hce/list.hpp"
 #include "hce/coroutine.hpp"
+#include "hce/awaitable.hpp"
 #include "hce/scheduler/config.hpp"
 
 namespace hce {
