@@ -10,6 +10,7 @@
 
 namespace hce {
 
+#if 0
 void sync_t::participant_t::release() {
     // release all the guards in the predetermined set order
     for(auto& guard : guards_) {
@@ -183,5 +184,6 @@ void multiplex::launch_(std::vector<channel::base_interface*>& bis) {
         e.e.interface->launch();
     }
 }
+#endif
 
 };

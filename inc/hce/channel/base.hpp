@@ -4,19 +4,22 @@
 // c++
 #include <utility>
 #include <atomic>
-#include <set>
-#include <vector>
+#include <map>
+#include <optional>
 
 // local
 #include "hce/utility.hpp"
 #include "hce/atomic.hpp"
 #include "hce/printable.hpp"
+#include "hce/fatal.hpp"
 #include "hce/list.hpp"
 #include "hce/circular_buffer.hpp"
 #include "hce/scheduler.hpp"
 
 namespace hce {
 namespace channel {
+
+#if 0
 namespace detail {
 
 struct sync_t;
@@ -69,28 +72,144 @@ private:
 };
 
 } // detail
+#endif 
+
+/// result of a channel try operation
+enum result {
+    closed = 0, /// channel is closed
+    failure, /// channel operation failed
+    success /// channel operation success
+};
+
+#if 0
+struct interest;
 
 /// the most basic channel interface
 struct base_interface : printable {
-    /*
-     Indicate to the channel that a participant wants to participate in 
-     synchronized receiving. Must be called prior to passing the participant 
-     pointer to receive operations.
+    /// lock the implementation
+    virtual void lock() = 0;
 
-     This operation will insert the channel's guard_t into the participant.
-     */
-    virtual void participate(participant* p) = 0;
+    /// unlock the implementation
+    virtual void unlock() = 0;
 
-    /*
-     Indicate to the channel the participant is withdrawing from synchronized 
-     receiving.
+    /// indicate interest
+    virtual void indicate(interest* i) = 0;
 
-     The channel must cancel and resume all blocked operations associated 
-     with the participant.
+    /// withdraw interest
+    virtual void withdraw(interest* i) = 0;
+};
 
-     This operation will erase the channel's guard_t from the participant.
-     */
-    virtual void withdraw(participant* p) = 0;
+struct interest {
+    enum struct operation_e {
+        none,
+        send,
+        try_send,
+        recv,
+        try_recv
+    };
+
+    operation_e operation = operation_e::none; 
+    std::optional<channel::result> result;
+    void* data = nullptr; /// reinterpretted as send/recv payload 
+    void* ctx = nullptr;  /// context to pass to callback
+    void (*callback)(void*, interest*); /// callback with this interest on completion
+};
+
+struct interests : printable {
+    using map = std::map<base_interface*,interests>;
+    using iterator = map::iterator;
+    using base_awaitable = 
+        hce::scheduler::reschedule<
+            hce::awaitable::lockable<
+                std::mutex,
+                awt_interface<iterator>>>;
+
+    struct awaitable : base_awaitable {
+        awaitable(interests& p, iterator it) :
+            base_awaitable(
+                p.mtx_,
+                hce::awaitable::await::policy::defer,
+                hce::awaitable::resume::policy::no_lock),
+            parent_(p),
+            it_(it)
+        { }
+
+        static inline std::string info_name() {
+            return "hce::channel::interests::awaitable";
+        };
+
+        inline std::string name() const { return awaitable::info_name(); }
+        inline bool on_ready() { return it->second.result_.valid(); }
+
+        inline void on_resume(void* m) { 
+            it_->second.result = (channel::result)m; 
+        }
+
+        inline iterator get_result() { 
+            std::unique_lock<std::mutex> lk(parent_.mtx_);
+
+            if(parent_.awt_) {
+                parent_.awt_ = nullptr;
+            }
+
+            return it_;
+        }
+
+    private:
+        interests& parent_;
+        iterator it_;
+    };
+
+    interests(map m = map()) : interests_(std::move(m)) { }
+    interests(const interests&) = delete;
+    interests(interests&&) = delete;
+
+    ~interests() {
+        std::unique_lock<std::mutex> lk(mtx_);
+
+        if(awt_) {
+            hce::fatal(
+                "did not await interests awaitable, cannot continue: ", 
+                *awt_);
+        }
+    }
+
+    interests& operator=(const interests&) = delete;
+    interests& operator=(interests&&) = delete;
+
+    static inline std::string info_name() { return "hce::channel::interests"; }
+    inline std::string name() const { return interests::info_name(); }
+
+    inline hce::awt<iterator> await() {
+        awt_ = new awaitable(*this);
+        auto begin = interest_map.begin();
+        auto end = interest_map.end();
+        auto it = begin;
+
+        // lock in a guaranteed order
+        for(; it!=end; ++it) {
+            (*it)->first->lock();
+        }
+
+        // indicate all interests
+        for(auto& pair : interest_map) {
+            pair.first->indicate(pair.second, awt_);
+        }
+
+        // unlock in the reverse guaranteed order
+        for(;; --it) {
+            (*it)->first->unlock();
+
+            if(it == begin) { break; }
+        }
+
+        return { awt_ };
+    }
+
+private:
+    awaitable* awt_ = nullptr;
+    map interests_;
+    std::mutex mtx_;
 };
 
 /**
@@ -198,12 +317,9 @@ struct sync_t {
     guard_t guard;
     hce::list<participant*> participants;
 };
+#endif
 
-/// result of a channel try operation
-enum result {
-    closed = 0, /// channel is closed
-    failure, /// channel operation failed
-    success /// channel operation success
+struct base_interface : printable {
 };
 
 /**

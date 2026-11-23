@@ -194,6 +194,7 @@ private:
 }; // hce::chan<T>
 
 
+#if 0
 /**
  @brief an object capable of negotiating the synchronized receives over one or more hce::chan channels 
 
@@ -435,5 +436,6 @@ private:
     std::vector<clause> clauses_; 
     hce::chan<state_t> ready_;
 }; // multiplex
+#endif 
 
 }
