@@ -462,14 +462,13 @@ struct case_recv : case_impl {
              std::cout << "sent std::string: " << s << std::endl;
          });
 
-         if(select.call(co_await select.wait())) {
-            // someone succeeded 
-            co_return true;
-         } else {
+         if(!select.call(co_await select.wait())) {
             // we were all canceled
             co_return false;
          }
      }
+            
+     co_return true;
  }
  ```
  */
