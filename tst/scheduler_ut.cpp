@@ -6,9 +6,9 @@
 #include <chrono>
 #include <vector>
 
-#include "logging.hpp"
-#include "atomic.hpp"
-#include "scheduler.hpp"
+#include "hce/logging.hpp"
+#include "hce/atomic.hpp"
+#include "hce/scheduler.hpp"
 
 #include <gtest/gtest.h> 
 #include "test_helpers.hpp"

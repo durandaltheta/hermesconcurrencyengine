@@ -1,5 +1,6 @@
 #include <iostream>
-#include "hce.hpp"
+#include <hce/core.hpp>
+#include <hce/module.hpp>
 
 struct example_module : public hce::module {
     virtual ~example_module(){}

@@ -22,6 +22,7 @@ set(HCE_UT_SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/coroutine_ut.cpp
     ${CMAKE_CURRENT_LIST_DIR}/scheduler_ut.cpp
     ${CMAKE_CURRENT_LIST_DIR}/channel_ut.cpp 
+    #${CMAKE_CURRENT_LIST_DIR}/multiplex_ut.cpp 
     ${CMAKE_CURRENT_LIST_DIR}/threadpool_ut.cpp
     ${CMAKE_CURRENT_LIST_DIR}/comparison_ut.cpp
     ${CMAKE_CURRENT_LIST_DIR}/blocking_ut.cpp

@@ -2,8 +2,9 @@
 
 #include <dlfcn.h>
 
-#include "module.hpp"
-#include "environment.hpp"
+#include "hce/module.hpp"
+#include "hce/logging.hpp"
+#include "hce/environment.hpp"
 
 using hce_close_handle_f = void (*)(void*);
 using hce_install_environment_f = void (*)(void*);

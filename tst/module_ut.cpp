@@ -5,7 +5,7 @@
 #include <string>
 #include <unistd.h>
 
-#include "hce.hpp"
+#include "hce/core.hpp"
 
 #include <gtest/gtest.h> 
 #include "test_module_helpers.hpp"

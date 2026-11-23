@@ -4,11 +4,11 @@
 #include <sstream>
 #include <thread>
 
-#include "loguru.hpp"
-#include "atomic.hpp"
-#include "thread.hpp"
-#include "coroutine.hpp"
-#include "thread_key_map.hpp"
+#include "hce/atomic.hpp"
+#include "hce/logging.hpp"
+#include "hce/thread.hpp"
+#include "hce/coroutine.hpp"
+#include "hce/thread_key_map.hpp"
 
 hce::coroutine*& hce::detail::coroutine::tl_this_coroutine() {
     thread_local hce::thread::local::ptr<hce::thread::key::coroutine> p;

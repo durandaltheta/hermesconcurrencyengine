@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis
 
-#include "codec/base64.hpp"
+#include "hce/codec/base64.hpp"
 
 #include <array>
 #include <cstdint>

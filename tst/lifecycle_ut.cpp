@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: Apache-2.0
 //Author: Blayne Dennis 
 
-#include "lifecycle.hpp"
+#include "hce/lifecycle.hpp"
 
 #include <gtest/gtest.h>
 

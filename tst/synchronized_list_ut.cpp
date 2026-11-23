@@ -3,7 +3,7 @@
 #include <string>
 #include <forward_list>
 
-#include "synchronized_list.hpp"
+#include "hce/synchronized_list.hpp"
 
 #include <gtest/gtest.h>
 #include "test_helpers.hpp"

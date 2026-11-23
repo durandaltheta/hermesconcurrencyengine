@@ -8,7 +8,7 @@
 
 #include <gtest/gtest.h>
 
-#include "codec/base64.hpp"
+#include "hce/codec/base64.hpp"
 
 namespace {
 

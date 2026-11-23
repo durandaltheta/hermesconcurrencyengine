@@ -1,8 +1,7 @@
 //SPDX-License-Identifier: Apache-2.0
 //Author: Blayne Dennis 
-#include "loguru.hpp"
-#include "atomic.hpp"
-#include "coroutine.hpp"
+#include "hce/atomic.hpp"
+#include "hce/coroutine.hpp"
 
 #include <string>
 #include <sstream>
@@ -34,7 +33,6 @@ inline void co_return_value_T() {
     std::string fname = hce::type::templatize<T>("co_return_value_T");
 
     {
-        HCE_INFO_FUNCTION_BODY(fname, "hce::co<T>");
         T t = test::init<T>(3);
         hce::co<T> co = test::coroutine::co(&t);
         EXPECT_TRUE(co);
@@ -46,7 +44,6 @@ inline void co_return_value_T() {
     }
 
     {
-        HCE_INFO_FUNCTION_BODY(fname, "type erased hce::coroutine");
         T t = test::init<T>(3);
         hce::coroutine co = test::coroutine::co(&t);
         EXPECT_TRUE(co);
@@ -454,7 +451,6 @@ void co_await_yield_T(const int init) {
     std::string fname = hce::type::templatize<T>("co_await_yield_T");
 
     {
-        HCE_INFO_FUNCTION_BODY(fname, "yield void");
         const int value = init + 1;
         T t = test::init<T>(init);
         hce::co<void> co(
@@ -476,7 +472,6 @@ void co_await_yield_T(const int init) {
     }
 
     {
-        HCE_INFO_FUNCTION_BODY(fname, "yield T");
         const int value = init + 1;
         T i = test::init<T>(init);
         hce::co<void> co(

@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "hce.hpp"
+#include "hce/core.hpp"
 #include "test_module_helpers.hpp"
 
 test::module::interface* g_test_module_intf_ = nullptr;

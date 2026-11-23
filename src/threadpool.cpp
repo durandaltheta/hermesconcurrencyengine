@@ -2,8 +2,9 @@
 //Author: Blayne Dennis 
 #include <sstream>
 
-#include "threadpool.hpp"
-#include "lifecycle.hpp"
+#include "hce/threadpool.hpp"
+#include "hce/logging.hpp"
+#include "hce/lifecycle.hpp"
 
 std::string hce::threadpool::info_name() { 
     return "hce::threadpool"; 

@@ -1,6 +1,6 @@
 //SPDX-License-Identifier: Apache-2.0
 //Author: Blayne Dennis 
-#include "atomic.hpp"
+#include "hce/atomic.hpp"
 
 #include <thread>
 #include <chrono>
