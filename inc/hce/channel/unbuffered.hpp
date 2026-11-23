@@ -141,6 +141,10 @@ struct unbuffered : channel::interface {
             std::lock_guard<LOCK> lk(lk_);
             return !static_cast<recv_interface*>(op)->on_ready();
         }
+
+    private:
+        selector(interface<T>& p) : parent(p) { }
+        interface<T>& parent;
     };
 
     channel::interface<T>::selector& select() { return selector_; }

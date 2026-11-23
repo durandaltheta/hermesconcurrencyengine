@@ -165,10 +165,6 @@ struct interface : printable {
          @brief activate a select awaitable
          */
         virtual bool activate(hce::awt<bool>::interface* op) { return false; }
-
-    private:
-        selector(interface<T>& p) : parent(p) { }
-        interface<T>& parent;
     };
 
     virtual selector& select() = 0;
