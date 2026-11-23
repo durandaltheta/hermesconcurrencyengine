@@ -26,22 +26,19 @@ namespace channel {
 /// buffered interface implementation
 template <typename T, typename LOCK=hce::spinlock, typename ALLOCATOR=hce::pool_allocator<T>>
 struct buffered : public interface<T> {
-    typedef buffered<T,LOCK,ALLOCATOR> self_type;
     typedef T value_type;
 
     buffered(int sz) : 
         buf_(sz ? (size_t)sz : (size_t)1),
         parked_send_(),
         parked_recv_()
-    { 
-    }
+    { }
 
     buffered(int sz, const ALLOCATOR& allocator) : 
         buf_(sz ? (size_t)sz : (size_t)1),
         parked_send_(allocator),
         parked_recv_(allocator)
-    { 
-    }
+    { }
 
     buffered(const buffered<T,LOCK,ALLOCATOR>&) = delete;
     buffered(buffered<T,LOCK,ALLOCATOR>&&) = delete;
@@ -132,34 +129,16 @@ struct buffered : public interface<T> {
                 return { result::failure }; 
             }
         } else [[likely]] {
-            if(guarded_()) [[unlikely]] {
-                return { result::failure }; 
-            } else [[likely]] {
-                r = std::move(buf_.front());
-                buf_.pop();
+            r = std::move(buf_.front());
+            buf_.pop();
 
-                if(parked_send_.size()) [[unlikely]] {
-                    parked_send_.front()->resume((void*)&buf_);
-                    parked_send_.pop();
-                }
-
-                // return an awaitable which immediately returns true
-                return { result::success }; 
+            if(parked_send_.size()) [[unlikely]] {
+                parked_send_.front()->resume((void*)&buf_);
+                parked_send_.pop();
             }
-        }
-    }
 
-    inline void set_guard(guard* g) { 
-        std::lock_guard<LOCK> lk(lk_);
-        
-        guard_ = g; 
-
-        if(guard_) {
-            guard_->children.emplace_back(
-                this,
-                [](void* v) { ((self_type*)v)->unblock_(); },
-                [](void* v) { ((self_type*)v)->remove_(); }
-            );
+            // return an awaitable which immediately returns true
+            return { result::success }; 
         }
     }
 
@@ -217,10 +196,7 @@ private:
         inline std::string name() const { return recv_interface::info_name(); }
 
         inline bool on_ready() {
-            if(key = parent_.guarded_()) [[unlikely]] {
-                parent_.parked_recv_.push_back(this);
-                return false;
-            } else if(parent_.buf_.empty()) [[unlikely]] {
+            if(parent_.buf_.empty()) [[unlikely]] {
                 if(parent_.closed_flag_ ) [[unlikely]] {
                     return true;
                 } else [[likely]] {
@@ -240,9 +216,6 @@ private:
                 return true;
             }
         }
-
-        // used for removal
-        void* key = nullptr;
 
     private:
         PARENT& parent_;
@@ -268,47 +241,11 @@ private:
         }
     }
 
-    // If return value is non-nullptr, it was guarded. Return value can be
-    // stored as a removal key in a parked awaitable.
-    inline void* guarded_() {
-        if(guard_ && 
-           !guard_->parent.try_claim_recv(parent_.guard_->parent.ctx)) [[unlikely]] {
-            return guard_;
-        } else {
-            return nullptr;
-        }
-    }
-
-    inline void unblock_() {
-        std::lock_guard<LOCK> lk(lk_);
-
-        if(!closed_flag_ && parked_send_.size() && !buf_.full()) {
-            if(guard_ && !guard_->parent.try_claim_recv(guard_->parent.ctx)) {
-                return;
-            }
-
-            auto awt = parked_recv_.front();
-            parked_recv_.pop();
-            awt->resume((void*)&buf_);
-        }
-    }
-
-    inline void remove_() {
-        std::lock_guard<LOCK> lk(lk_);
-
-        if(guard_) {
-            parked_recv_.remove_if([&](awt<bool>::interface* i) {
-                return guard_ == ((recv_interface*)i)->key;
-            });
-        }
-    } 
-
     mutable LOCK lk_;
     bool closed_flag_ = false;
     hce::circular_buffer<T> buf_;
     hce::list<awt<bool>::interface*,ALLOCATOR> parked_send_;
     hce::list<awt<bool>::interface*,ALLOCATOR> parked_recv_;
-    guard* guard_ = nullptr;
 };
 
 } // channel 

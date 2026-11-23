@@ -23,22 +23,17 @@
 namespace hce {
 namespace channel {
 
-/**
- @brief unlimited interface implementation, with has no max fixed size buffer 
- */
+/// unlimited interface implementation
 template <typename T, typename LOCK=hce::spinlock, typename ALLOCATOR=hce::pool_allocator<T>>
 struct unlimited : public interface<T> {
-    typedef unlimited<T,LOCK,ALLOCATOR> self_type;
     typedef T value_type;
 
-    unlimited() { 
-    }
+    unlimited() { }
 
     unlimited(const ALLOCATOR& allocator) : 
         queue_(allocator),
         parked_recv_(allocator)
-    { 
-    }
+    { }
 
     unlimited(const unlimited<T,LOCK,ALLOCATOR>&) = delete;
     unlimited(unlimited<T,LOCK,ALLOCATOR>&&) = delete;
@@ -129,29 +124,11 @@ struct unlimited : public interface<T> {
                 return { result::failure }; 
             }
         } else [[likely]] {
-            if(guarded_()) [[unlikely]] {
-                return { result::failure }; 
-            } else {
-                r = std::move(queue_.front());
-                queue_.pop();
+            r = std::move(queue_.front());
+            queue_.pop();
 
-                // return an awaitable which immediately returns true
-                return { result::success }; 
-            }
-        }
-    }
-
-    inline void set_guard(guard* g) { 
-        std::lock_guard<LOCK> lk(lk_);
-        
-        guard_ = g; 
-
-        if(guard_) {
-            guard_->children.emplace_back(
-                this,
-                [](void* v) { ((self_type*)v)->unblock_(); },
-                [](void* v) { ((self_type*)v)->remove_(); }
-            );
+            // return an awaitable which immediately returns true
+            return { result::success }; 
         }
     }
 
@@ -213,9 +190,6 @@ private:
                     parent_.parked_recv_.push_back(this);
                     return false;
                 }
-            } else if(key = parent_.guarded_()) [[unlikely]] {
-                parent_.parked_recv_.push_back(this);
-                return false;
             } else [[likely]] {
                 detail::transfer tx(&detail::list_recv<T,hce::list<T,ALLOCATOR>>,&(parent_.queue_));
                 tx.send(this->destination);
@@ -223,9 +197,6 @@ private:
                 return true;
             }
         }
-
-        // used for removal
-        void* key = nullptr;
 
     private:
         PARENT& parent_;
@@ -251,46 +222,12 @@ private:
         } 
     }
 
-    // If return value is non-nullptr, it was guarded. Return value can be
-    // stored as a removal key in a parked awaitable.
-    inline void* guarded_() {
-        if(guard_ && 
-           !guard_->parent.try_claim_recv(parent_.guard_->parent.ctx)) [[unlikely]] {
-            return guard_;
-        } else {
-            return nullptr;
-        }
-    }
-
-    inline void unblock_() {
-        std::lock_guard<LOCK> lk(lk_);
-
-        if(!closed_flag_ && parked_recv_.size()) {
-            if(guard_ && !guard_->parent.try_claim_recv(guard_->parent.ctx)) {
-                return;
-            }
-
-            auto awt = parked_recv_.front();
-            parked_recv_.pop();
-            awt->resume((void*)&queue_);
-        }
-    }
-
-    inline void remove_() {
-        std::lock_guard<LOCK> lk(lk_);
-
-        if(guard_) {
-            parked_recv_.remove_if([&](awt<bool>::interface* i) {
-                return guard_ == ((recv_interface*)i)->key;
-            });
-        }
-    } 
-
     mutable LOCK lk_;
     bool closed_flag_ = false;
     hce::list<T,ALLOCATOR> queue_;
+
+    // send() never blocks, so only has parked recv queue
     hce::list<awt<bool>::interface*,ALLOCATOR> parked_recv_;
-    guard* guard_ = nullptr;
 };
 
 } // channel 
