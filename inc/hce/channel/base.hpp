@@ -193,8 +193,6 @@ struct interface : printable {
     virtual hce::yield<channel::result> try_recv(T& t) = 0;
 
     struct selector {
-        ~selector();
-
         /*
          @brief build a select-send awaitable 
 
