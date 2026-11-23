@@ -71,28 +71,24 @@ hce::interface::network::socket& network::connection::get_socket() {
 // ---- send ----------------------------------------------------------------
 
 struct send_awaitable :
-    public hce::scheduler::reschedule<
-        hce::awaitable::lockable<
-            hce::spinlock,
-            hce::awt<std::error_code>::interface>>
+    hce::scheduler::reschedule,
+    hce::awaitable::lockable<
+        hce::spinlock,
+        hce::awt<std::error_code>::interface>
 {
     send_awaitable(detail::network::socket& s,
                    std::span<const std::byte> d) :
-        hce::scheduler::reschedule<
-            hce::awaitable::lockable<
-                hce::spinlock,
-                hce::awt<std::error_code>::interface>>(
-                    slk_,
-                    hce::awaitable::await::policy::defer,
-                    hce::awaitable::resume::policy::lock),
+        hce::awaitable::lockable<
+            hce::spinlock,
+            hce::awt<std::error_code>::interface>(
+                slk_,
+                hce::awaitable::await::policy::defer,
+                hce::awaitable::resume::policy::lock),
         sock(s),
         data(d)
     {}
 
-    using base = hce::scheduler::reschedule<
-        hce::awaitable::lockable<
-            hce::spinlock,
-            hce::awt<std::error_code>::interface>>;
+    using base = hce::scheduler::reschedule;
 
     bool on_ready() override { return ready_; }
 
@@ -159,29 +155,24 @@ network::connection::send(std::span<const std::byte> data) {
 // ---- send_all ------------------------------------------------------------
 
 struct send_all_awaitable :
-    public hce::scheduler::reschedule<
-        hce::awaitable::lockable<
-            hce::spinlock,
-            hce::awt<std::error_code>::interface>>
+    hce::scheduler::reschedule,
+    hce::awaitable::lockable<
+        hce::spinlock,
+        hce::awt<std::error_code>::interface>
 {
     send_all_awaitable(detail::network::socket& s,
                        std::span<const std::byte> d) :
-        hce::scheduler::reschedule<
-            hce::awaitable::lockable<
-                hce::spinlock,
-                hce::awt<std::error_code>::interface>>(
-                    slk_,
-                    hce::awaitable::await::policy::defer,
-                    hce::awaitable::resume::policy::lock),
+        hce::awaitable::lockable<
+            hce::spinlock,
+            hce::awt<std::error_code>::interface>(
+                slk_,
+                hce::awaitable::await::policy::defer,
+                hce::awaitable::resume::policy::lock),
         sock(s),
         data(d)
     {}
 
-    using base = hce::scheduler::reschedule<
-        hce::awaitable::lockable<
-            hce::spinlock,
-            hce::awt<std::error_code>::interface>>;
-
+    using base = hce::scheduler::reschedule;
 
     bool try_progress() {
         while(offset < data.size()) {
@@ -213,11 +204,7 @@ struct send_all_awaitable :
     }
 
     void on_suspend() override {
-        // Capture destination scheduler (fixes the earlier null dest crash).
-        hce::scheduler::reschedule<
-            hce::awaitable::lockable<
-                hce::spinlock,
-                hce::awt<std::error_code>::interface>>::on_suspend();
+        base::on_suspend();
 
         auto& backend = hce::service<network>::get().get_backend();
         backend.register_op(
@@ -239,7 +226,6 @@ struct send_all_awaitable :
                     r->ec = self->result;
                     self->resume(r);
                 } else {
-                    // still need more — re-register
                     self->on_suspend();
                 }
             });
@@ -270,27 +256,23 @@ network::connection::send_all(std::span<const std::byte> data) {
 // ---- recv ----------------------------------------------------------------
 
 struct recv_awaitable :
-    public hce::scheduler::reschedule<
-        hce::awaitable::lockable<
-            hce::spinlock,
-            hce::awt<hce::expected<size_t, std::error_code>>::interface>>
+    hce::scheduler::reschedule,
+    hce::awaitable::lockable<
+        hce::spinlock,
+        hce::awt<hce::expected<size_t, std::error_code>>::interface>
 {
     recv_awaitable(detail::network::socket& s, std::span<std::byte> b) :
-        hce::scheduler::reschedule<
-            hce::awaitable::lockable<
-                hce::spinlock,
-                hce::awt<hce::expected<size_t, std::error_code>>::interface>>(
-                    slk_,
-                    hce::awaitable::await::policy::defer,
-                    hce::awaitable::resume::policy::lock),
+        hce::awaitable::lockable<
+            hce::spinlock,
+            hce::awt<hce::expected<size_t, std::error_code>>::interface>(
+                slk_,
+                hce::awaitable::await::policy::defer,
+                hce::awaitable::resume::policy::lock),
         sock(s),
         buf(b)
     {}
 
-    using base = hce::scheduler::reschedule<
-        hce::awaitable::lockable<
-            hce::spinlock,
-            hce::awt<hce::expected<size_t, std::error_code>>::interface>>;
+    using base = hce::scheduler::reschedule;
 
     bool on_ready() override { return ready_; }
 
@@ -347,27 +329,23 @@ network::connection::recv(std::span<std::byte> data) {
 // ---- recv_all ------------------------------------------------------------
 
 struct recv_all_awaitable :
-    public hce::scheduler::reschedule<
-        hce::awaitable::lockable<
-            hce::spinlock,
-            hce::awt<hce::expected<size_t, std::error_code>>::interface>>
+    hce::scheduler::reschedule,
+    hce::awaitable::lockable<
+        hce::spinlock,
+        hce::awt<hce::expected<size_t, std::error_code>>::interface>
 {
     recv_all_awaitable(detail::network::socket& s, std::span<std::byte> b) :
-        hce::scheduler::reschedule<
-            hce::awaitable::lockable<
-                hce::spinlock,
-                hce::awt<hce::expected<size_t, std::error_code>>::interface>>(
-                    slk_,
-                    hce::awaitable::await::policy::defer,
-                    hce::awaitable::resume::policy::lock),
+        hce::awaitable::lockable<
+            hce::spinlock,
+            hce::awt<hce::expected<size_t, std::error_code>>::interface>(
+                slk_,
+                hce::awaitable::await::policy::defer,
+                hce::awaitable::resume::policy::lock),
         sock(s),
         buf(b)
     {}
-
-    using base = hce::scheduler::reschedule<
-        hce::awaitable::lockable<
-            hce::spinlock,
-            hce::awt<hce::expected<size_t, std::error_code>>::interface>>;
+    
+    using base = hce::scheduler::reschedule;
 
     bool try_progress() {
         while(offset < buf.size()) {
@@ -404,10 +382,7 @@ struct recv_all_awaitable :
     }
 
     void on_suspend() override {
-        hce::scheduler::reschedule<
-            hce::awaitable::lockable<
-                hce::spinlock,
-                hce::awt<hce::expected<size_t, std::error_code>>::interface>>::on_suspend();
+        base::on_suspend();
 
         auto& backend = hce::service<network>::get().get_backend();
         backend.register_op(
@@ -488,29 +463,24 @@ hce::interface::network::socket& network::acceptor::get_socket() {
 }
 
 struct accept_awaitable :
-    public hce::scheduler::reschedule<
+    hce::scheduler::reschedule,
+    hce::awaitable::lockable<
+        hce::spinlock,
+        hce::awt<hce::expected<network::connection,
+                               std::error_code>>::interface>
+{
+    explicit accept_awaitable(detail::network::socket& s) :
         hce::awaitable::lockable<
             hce::spinlock,
             hce::awt<hce::expected<network::connection,
-                                   std::error_code>>::interface>>
-{
-    explicit accept_awaitable(detail::network::socket& s) :
-        hce::scheduler::reschedule<
-            hce::awaitable::lockable<
-                hce::spinlock,
-                hce::awt<hce::expected<network::connection,
-                                       std::error_code>>::interface>>(
-                    slk_,
-                    hce::awaitable::await::policy::defer,
-                    hce::awaitable::resume::policy::lock),
+                                   std::error_code>>::interface>(
+                slk_,
+                hce::awaitable::await::policy::defer,
+                hce::awaitable::resume::policy::lock),
         sock(s)
     {}
 
-    using base = hce::scheduler::reschedule<
-        hce::awaitable::lockable<
-            hce::spinlock,
-            hce::awt<hce::expected<network::connection,
-                                   std::error_code>>::interface>>;
+    using base = hce::scheduler::reschedule;
 
     bool on_ready() override { return ready_; }
 
@@ -597,29 +567,24 @@ std::string network::name() const {
 // ---- connect -------------------------------------------------------------
 
 struct connect_awaitable :
-    public hce::scheduler::reschedule<
+    hce::scheduler::reschedule,
+    hce::awaitable::lockable<
+        hce::spinlock,
+        hce::awt<hce::expected<network::connection,
+                               std::error_code>>::interface>
+{
+    explicit connect_awaitable(const network::address& a) :
         hce::awaitable::lockable<
             hce::spinlock,
             hce::awt<hce::expected<network::connection,
-                                   std::error_code>>::interface>>
-{
-    explicit connect_awaitable(const network::address& a) :
-        hce::scheduler::reschedule<
-            hce::awaitable::lockable<
-                hce::spinlock,
-                hce::awt<hce::expected<network::connection,
-                                       std::error_code>>::interface>>(
-                    slk_,
-                    hce::awaitable::await::policy::defer,
-                    hce::awaitable::resume::policy::lock),
+                                   std::error_code>>::interface>(
+                slk_,
+                hce::awaitable::await::policy::defer,
+                hce::awaitable::resume::policy::lock),
         addr(a)
     {}
 
-    using base = hce::scheduler::reschedule<
-        hce::awaitable::lockable<
-            hce::spinlock,
-            hce::awt<hce::expected<network::connection,
-                                   std::error_code>>::interface>>;
+    using base = hce::scheduler::reschedule;
 
     // Returns true if the operation is already finished (success or hard error).
     bool try_connect() {

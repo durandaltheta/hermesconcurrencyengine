@@ -21,10 +21,10 @@ namespace detail {
 namespace sync {
 
 struct done : 
-    public hce::scheduler::reschedule<
-        hce::awaitable::lockable<
-            hce::lockfree,
-            hce::awt_interface<void>>>
+    hce::scheduler::reschedule,
+    hce::awaitable::lockable<
+        hce::lockfree,
+        hce::awt_interface<void>>
 {
     done();
 
