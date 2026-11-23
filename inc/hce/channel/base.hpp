@@ -379,7 +379,7 @@ struct impl :
         , st(std::move(s))
     {}
 
-    static inline std::string info_name() { return "hce::channel::select::impl"; }
+    static inline std::string info_name() { return "hce::channel::detail::select::impl"; }
     inline std::string name() const { return impl::info_name(); }
 
     bool on_ready() override {
