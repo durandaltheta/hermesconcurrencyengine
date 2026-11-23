@@ -67,12 +67,13 @@ size_t block_T() {
             bool ids_identical = false;
             bool ids_identical2 = false;
             bool ids_identical3 = false;
+            std::vector<std::thread> threads;
 
             auto launch_sender_thd = [&]{
-                std::thread([&](T t){
+                threads.emplace_back([&](T t){
                     EXPECT_EQ(0, hce::service<hce::blocking>::get().worker_count());
                     q.push(std::move(t));
-                },t).detach();
+                }, t);
             };
 
             if(worker_count_check) {
@@ -91,6 +92,10 @@ size_t block_T() {
 
             if(worker_count_check) {
                 EXPECT_EQ(0, hce::service<hce::blocking>::get().worker_count());
+            }
+
+            for (auto& th : threads) {
+                if (th.joinable()) th.join();
             }
         };
 
