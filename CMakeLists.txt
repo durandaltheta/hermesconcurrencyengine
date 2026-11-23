@@ -60,6 +60,7 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/hce/network.hpp
     ${HCE_INCLUDE_DIR}/hce/synchronized_list.hpp
     ${HCE_INCLUDE_DIR}/hce/coroutine.hpp
+    ${HCE_INCLUDE_DIR}/hce/awaitable.hpp
     ${HCE_INCLUDE_DIR}/hce/scheduler/config.hpp
     ${HCE_INCLUDE_DIR}/hce/scheduler.hpp
     ${HCE_INCLUDE_DIR}/hce/blocking.hpp
@@ -79,6 +80,7 @@ set(HCE_SOURCE_FILES
     ${HCE_SOURCE_DIR}/printable.cpp
     ${HCE_SOURCE_DIR}/fatal.cpp
     ${HCE_SOURCE_DIR}/coroutine.cpp
+    ${HCE_SOURCE_DIR}/awaitable.cpp
     ${HCE_SOURCE_DIR}/scheduler.cpp
     ${HCE_SOURCE_DIR}/channel.cpp
     ${HCE_SOURCE_DIR}/blocking.cpp
