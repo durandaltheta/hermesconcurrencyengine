@@ -46,6 +46,12 @@ struct group {
     }
 };
 
+// Implemented by the select awaitable. A winning case calls on_won.
+struct notify {
+    virtual ~notify() = default;
+    virtual void on_won(int index) = 0;
+};
+
 struct state {
     hce::spinlock lk;
     select::group* group = nullptr; // owned by the select object
@@ -57,7 +63,7 @@ struct state {
 
 struct impl : 
     hce::awaitable::lockable<hce::spinlock, hce::awt_interface<int>>, 
-    select_notify
+    select::notify
 {
     std::unique_ptr<state> st;
 
@@ -199,7 +205,7 @@ struct interface : printable {
                 const T& s, 
                 select::group& g, 
                 int index,
-                select_notify* owner) { }
+                select::notify* owner) { }
 
         /*
          @brief build a select-send awaitable 
@@ -211,7 +217,7 @@ struct interface : printable {
                 T&& s, 
                 select::group& g, 
                 int index,
-                select_notify* owner) { }
+                select::notify* owner) { }
 
         /*
          @brief build a select-recv awaitable 
@@ -223,7 +229,7 @@ struct interface : printable {
                 T& r, 
                 select::group& g, 
                 int index,
-                select_notify* owner) { }
+                select::notify* owner) { }
 
         /**
          @brief activate a select awaitable
@@ -235,16 +241,12 @@ struct interface : printable {
         interface<T>& parent;
     };
 
-    inline selector& select() { return selector_; }
+    virtual selector& select() = 0;
    
     /**
      @brief cancel a send or recv operation
      */
     virtual void cancel(hce::awt<bool>::interface* op) { }
-
-private:
-    interface() : select_(*this) { }
-    selector select_;
 };
 
 namespace detail {
@@ -358,7 +360,7 @@ struct base_recv_interface :
     hce::awaitable::lockable<LOCK, hce::awt_interface<bool>>
 {
     base_recv_interface(LOCK& lk, void* d, select::group* g, int idx,
-                        select_notify* own) :
+                        select::notify* own) :
           hce::awaitable::lockable<LOCK, hce::awt_interface<bool>>(
               lk,
               hce::awaitable::await::policy::defer,
@@ -387,12 +389,12 @@ struct base_recv_interface :
     void* destination = nullptr;
     select::group* group = nullptr;
     int index = -1;
-    select_notify* owner = nullptr;
+    select::notify* owner = nullptr;
 };
 
 struct case_base {
     virtual ~case_base() = default;
-    virtual bool activate(select_notify* owner) = 0;
+    virtual bool activate(select::notify* owner) = 0;
     virtual void cancel() = 0;
     virtual int index() const = 0;
 };
@@ -409,7 +411,7 @@ struct recv_case : case_base {
     recv_case(channel::interface<T>& c, T& d, select::group& g, int i)
         : ch(&c), dest(&d), group(&g), idx(i) {}
 
-    bool activate(select_notify* owner) override {
+    bool activate(select::notify* owner) override {
         op = ch->select().recv(*dest, *group, idx, owner);
         iface = dynamic_cast<hce::awt<bool>::interface*>(&op.implementation());
         return ch->select().activate(iface);
@@ -460,7 +462,7 @@ struct select {
     template <typename T>
     int recv(channel::interface<T>& ch, T& dest) {
         return append( 
-            std::make_unique<recv_case<T>>(ch, dest, group, idx),
+            std::make_unique<channel::detail::recv_case<T>>(ch, dest, group, idx),
             std::unique_ptr<callback>()
         );
     }
@@ -468,7 +470,7 @@ struct select {
     template <typename T, typename CALLBACK>
     int recv(channel::interface<T>& ch, T& dest, CALLBACK&& cb) {
         return append( 
-            std::make_unique<recv_case<T>>(ch, dest, group, idx),
+            std::make_unique<channel::detail::recv_case<T>>(ch, dest, group, idx),
             callback_imp<CALLBACK>::make(std::forward<CALLBACK>(cb))
         );
     }
@@ -476,7 +478,7 @@ struct select {
     template <typename T>
     int send(channel::interface<T>& ch, T& src) {
         return append( 
-            std::make_unique<send_case<T>>(ch, src, group, idx),
+            std::make_unique<channel::detail::send_case<T>>(ch, src, group, idx),
             std::unique_ptr<callback>()
         );
     }
@@ -484,7 +486,7 @@ struct select {
     template <typename T, typename CALLBACK>
     int send(channel::interface<T>& ch, T& src, CALLBACK&& cb) {
         return append( 
-            std::make_unique<send_case<T>>(ch, src, group, idx),
+            std::make_unique<channel::detail::send_case<T>>(ch, src, group, idx),
             callback_imp<CALLBACK>::make(std::forward<CALLBACK>(cb))
         );
     }

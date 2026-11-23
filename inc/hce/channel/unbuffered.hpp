@@ -23,7 +23,7 @@
 namespace hce {
 namespace channel {
 
-late <typename T, typename LOCK = hce::spinlock, typename ALLOCATOR = hce::pool_allocator<T>>
+template <typename T, typename LOCK = hce::spinlock, typename ALLOCATOR = hce::pool_allocator<T>>
 struct unbuffered : channel::interface {
     using self_type = unbuffered<T, LOCK, ALLOCATOR>;
     using value_type = T;
@@ -113,23 +113,27 @@ struct unbuffered : channel::interface {
         return { result::failure };
     }
 
-    inline hce::awt<bool> make_select_recv(
-            T& r, 
-            select::group& g, 
-            int index,
-            select_notify* owner) 
-    {
-        return hce::awt<bool>(new recv_interface(
-            *this, static_cast<void*>(&r), &g, index, owner));
-    }
+    struct selector {
+        inline hce::awt<bool> make_select_recv(
+                T& r, 
+                select::group& g, 
+                int index,
+                select::notify* owner) 
+        {
+            return hce::awt<bool>(new recv_interface(
+                *this, static_cast<void*>(&r), &g, index, owner));
+        }
 
-    // Returns true if the op parked, false if it completed immediately
-    // (matched or closed).
-    bool activate_select(hce::awt<bool>::interface* op) {
-        if(!op) { return false; }
-        std::lock_guard<LOCK> lk(lk_);
-        return !static_cast<recv_interface*>(op)->on_ready();
-    }
+        // Returns true if the op parked, false if it completed immediately
+        // (matched or closed).
+        bool activate(hce::awt<bool>::interface* op) {
+            if(!op) { return false; }
+            std::lock_guard<LOCK> lk(lk_);
+            return !static_cast<recv_interface*>(op)->on_ready();
+        }
+    };
+
+    channel::interface<T>::selector& select() { return selector_; }
 
     void cancel(hce::awt<bool>::interface* op) {
         if(!op){ return; }
@@ -153,6 +157,8 @@ struct unbuffered : channel::interface {
     }
 
 private:
+    unbuffered() : select_(*this) { }
+
     template <typename U>
     inline hce::yield<result> try_send_(U&& s) {
         std::lock_guard<LOCK> lk(lk_);
@@ -213,7 +219,7 @@ private:
 
     struct recv_interface : public detail::base_recv_interface<LOCK> {
         recv_interface(self_type& p, void* destination, select::group* g,
-                       int idx, select_notify* own)
+                       int idx, select::notify* own)
             : detail::base_recv_interface<LOCK>(p.lk_, destination, g, idx, own)
             , parent_(p)
         {}
@@ -255,6 +261,7 @@ private:
         self_type& parent_;
     };
 
+    selector select_;
     mutable LOCK lk_;
     bool closed_flag_ = false;
     hce::list<hce::awt<bool>::interface*, ALLOCATOR> parked_send_;
