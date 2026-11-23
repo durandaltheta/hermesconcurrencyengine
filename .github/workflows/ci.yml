@@ -77,7 +77,7 @@ jobs:
         run: |
           cmake --build build --target hce_ut --parallel $(nproc)
           ./tst/ut_bin/hce_ut --gtest_color=yes
-          ./tst/ut_bin/hce_ex 
+          cmake --build build --target hce_ex --parallel $(nproc)
 
       - name: Upload test logs on failure
         if: failure()
