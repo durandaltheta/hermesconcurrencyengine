@@ -3,66 +3,200 @@
 //Author: Blayne Dennis 
 // c++
 #include <utility>
+#include <atomic>
+#include <set>
 #include <vector>
 
 // local
 #include "hce/utility.hpp"
+#include "hce/atomic.hpp"
 #include "hce/printable.hpp"
+#include "hce/list.hpp"
 #include "hce/circular_buffer.hpp"
 #include "hce/scheduler.hpp"
 
 namespace hce {
 namespace channel {
+namespace detail {
 
-// Used to specially control blocking behavior of the channel interface. 
-struct guard {
-    /* 
-     All values here are set by a parent object. Functions in this block are 
-     always passed the parent_t::ctx.
-     */
-    struct parent_t {
-        void* ctx = nullptr; // a context pointer (will already be set)
+struct sync_t;
 
-        /*
-         Called by the interface *every* time a recv occurs. Returns true if the 
-         recv can proceed, and false if the channel must block.
+// an atomic to guard claims for receive operations
+struct guard_t {
+    // notify callback for when release() is called
+    struct notify_t {
+        typedef void (*on_release_t)(void*);
 
-         Accepts the ctx context pointer.
-         */
-        bool (*try_claim_recv)(void*) = nullptr;
+        void* ctx = nullptr;
+        on_release_t on_release = nullptr;
     };
 
+    guard_t(notify_t n) : notify_(n) { }
 
     /*
-     All values must be assigned by the interface during set_guard(). Functions 
-     in this block are always passed the specific child_t::ctx.
+     Called by the interface *every* time a recv occurs when there's 
+     participants competing for guarded receives. Returns true if the recv 
+     can proceed, and false if the channel must block.
+
+     Accepts the ctx context pointer.
      */
-    struct child_t {
-        void* ctx = nullptr; // pointer to the child implementation
+    inline bool try_claim_recv() {
+        bool expected = false;
+        return claimed_.compare_exchange_strong(
+            expected, true,
+            std::memory_order_acq_rel,
+            std::memory_order_acquire);
+    }
 
-        /*
-         Called by the parent when the channel must become unblocked. Passes in 
-         self as the argument.
-         */
-        void (*unblock)(void*) = nullptr;
+    inline bool claimed() {
+        return claimed_.load(std::memory_order_acquire);
+    }
 
-        /*
-         Called by the parent when the parent context needs to be removed from 
-         the child.
-         */
-        void (*remove)(void*) = nullptr;
-    };
+    // release the guard
+    inline void release() { 
+        release_();
+        notify_.on_release(notify_.ctx);
+    }
+
+private:
+    inline void release_() {
+        claimed_.store(false, std::memory_order_release); 
+    }
+
+    const notify_t notify_;
+    std::atomic<bool> claimed_{false};
+    friend struct sync_t;
+};
+
+} // detail
+
+/// the most basic channel interface
+struct base_interface : printable {
+    /*
+     Indicate to the channel that a participant wants to participate in 
+     synchronized receiving. Must be called prior to passing the participant 
+     pointer to receive operations.
+
+     This operation will insert the channel's guard_t into the participant.
+     */
+    virtual void participate(participant* p) = 0;
 
     /*
-     Parent context comes pre-assigned.
-     */
-    const parent_t parent;
+     Indicate to the channel the participant is withdrawing from synchronized 
+     receiving.
 
-    /*
-     The channel is responsible to append their child_t to this vector during 
-     a call to set_guard().
+     The channel must cancel and resume all blocked operations associated 
+     with the participant.
+
+     This operation will erase the channel's guard_t from the participant.
      */
-    std::vector<child_t> children;
+    virtual void withdraw(participant* p) = 0;
+};
+
+/**
+ @brief a participant in guarded receiving 
+
+ Guarded receives allow a participant to attempt to receive over multiple 
+ channels at once. 
+
+ Any successful receive operations will be a synchronized among *all* channels 
+ where the participant called participate().
+
+ The caller of the receive operation must call release() to allow other 
+ receives to succeed. 
+
+ When the participant wants to end guarded receives, it must call withdraw().
+
+ Once receives begin it is *NOT* safe to call participate() with this object
+ again. Instead, the owner *MUST* call withdraw() on *ALL* channels first.
+ */
+struct participant {
+    participant() = delete;
+    participant(const participant&) = delete;
+    participant(participant&) = delete;
+
+    participant(std::vector<base_interface*> cs) : 
+            channels_(std::move(cs)) 
+    { 
+        for(const auto channel : channels_) {
+            channel->participate(*this);
+        }
+
+        // the structure of guards_ is constant post construction
+        current_ = syncs_.begin();
+    }
+
+    ~participant() {
+        for(const auto channel : channels_) {
+            channel->withdraw(*this);
+        }
+    }
+
+    participant& operator=(const participant&) = delete;
+    participant& operator=(participant&) = delete;
+
+    // release all the guards
+    void release();
+   
+private:
+    // insert a guard
+    void insert(detail::guard_t*);
+
+    // remove a guard
+    void erase(detail::guard_t*);
+
+    // attempt to claim all the guards
+    bool try_claim_recv();
+
+    // find a new valid current_
+    void next();
+
+    std::vector<base_interface*> channels_;
+
+    /// only used in insert and erase during construction and destruction
+    std::mutex mtx_;
+
+    // ordered set of channel guards
+    std::set<detail::guard_t*> guards_;
+
+    // used for round robin iteration
+    std::set<detail::guard_t*>::iterator current_;
+
+    friend struct sync_t;
+};
+
+/// the multi-participant synchronization data held by a channel instance
+struct sync_t {
+    sync_t(guard_t g) : guard(g) { }
+
+    inline void insert(participant* p) { 
+        participants.push_back(p);
+        p->insert(&guard); 
+    }
+
+    inline void erase(participant* p) { 
+        p->erase(&guard); 
+        sync.participants.remove_if([&](participant* cur) { return p == cur; });
+    }
+
+    /// return true if the sync is in active use
+    inline bool active() { return participants.size(); }
+
+    /// return true if the sync is claimed
+    inline bool claimed() { return guard.claimed(); }
+
+    /// try to claim all guards known by the participant, else claim the guard_t
+    inline bool try_claim_recv(participant* p) { 
+        return p ? p->try_claim_recv() : guard.try_claim_recv();
+    }
+
+    /// try to release all guards known by the participant, else release the guard_t
+    inline void release(participant* p) { 
+        return p ? p->release() : guard.release();
+    }
+
+    guard_t guard;
+    hce::list<participant*> participants;
 };
 
 /// result of a channel try operation
@@ -76,7 +210,7 @@ enum result {
  @brief interface for coroutine-safe channel implementations
  */
 template <typename T>
-struct interface : public printable {
+struct interface : base_interface {
     virtual ~interface(){}
 
     /// type_info of the implementation
@@ -107,8 +241,18 @@ struct interface : public printable {
     /// send a rvalue copy, awaitable returning true on success, else false
     virtual hce::awt<bool> send(T&& t) = 0;
 
-    /// receive a value, awaitable returning true on success, else false
+    /**
+     @brief receive a value
+     @return awaitable returning true on success, else false
+     */
     virtual hce::awt<bool> recv(T& t) = 0;
+
+    /**
+     @brief receive a value
+     @param p context indicating *who* is participating in the guarded receive
+     @return awaitable returning true on success, else false
+     */
+    virtual hce::awt<bool> recv(T& t, participant* p) = 0;
 
     /// attempt to send a lvalue copy
     virtual hce::yield<channel::result> try_send(const T& t) = 0;
@@ -116,11 +260,18 @@ struct interface : public printable {
     /// attempt to send a rvalue copy
     virtual hce::yield<channel::result> try_send(T&& t) = 0;
 
-    /// attempt receive a value
+    /**
+     @brief attempt to receive a value
+     @return awaitable returning true a result 
+     */
     virtual hce::yield<channel::result> try_recv(T& t) = 0;
 
-    /// register a guard object
-    virtual void set_guard(guard*) = 0;
+    /**
+     @brief attempt to receive a value
+     @param p context indicating *who* is participating in the guarded receive
+     @return awaitable returning true a result 
+     */
+    virtual hce::yield<channel::result> try_recv(T& t, participant* p) = 0;
 };
 
 namespace detail {

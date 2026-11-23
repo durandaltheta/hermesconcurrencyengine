@@ -28,13 +28,19 @@ struct unbuffered : public interface<T> {
     typedef unbuffered<T,LOCK,ALLOCATOR> self_type;
     typedef T value_type;
 
-    unbuffered() { }
+    unbuffered() :
+        sync_(
+            sync_t::guard_t{ 
+                this, 
+                [](void* v){ ((self_type*)v)->on_release_(); } 
+            }
+        )
+    { }
 
     unbuffered(const ALLOCATOR& allocator) : 
         parked_send_(allocator),
         parked_recv_(allocator)
-    { 
-    }
+    { }
 
     unbuffered(const unbuffered<T,LOCK,ALLOCATOR>&) = delete;
     unbuffered(unbuffered<T,LOCK,ALLOCATOR>&&) = delete;
@@ -97,7 +103,11 @@ struct unbuffered : public interface<T> {
     }
 
     inline awt<bool> recv(T& r) {
-        return hce::awt<bool>(new recv_interface(*this, (void*)&r));
+        return recv(r, nullptr);
+    }
+
+    inline awt<bool> recv(T& r, participant_t* p) {
+        return hce::awt<bool>(new recv_interface(*this, (void*)&r, p));
     }
 
     inline hce::yield<result> try_send(const T& s) {
@@ -109,42 +119,51 @@ struct unbuffered : public interface<T> {
     }
 
     inline hce::yield<result> try_recv(T& r) {
+        return try_recv(r, nullptr);
+    } 
+    
+    inline hce::yield<result> try_recv(T& r, participant_t* p) {
         std::lock_guard<LOCK> lk(lk_);
 
         if(closed_flag_) [[unlikely]] { 
             return { result::closed }; 
-        } else if(!parked_send_.size() ||
-                  (guard_ && 
-                   !guard_->parent.try_claim_recv(guard_->parent.ctx))) [[unlikely]] {
+        } else if(!parked_send_.size() || guard_(p)) [[unlikely]] {
             return { result::failure }; 
         } else [[likely]] {
             parked_send_.front()->resume((void*)&r);
+            if(p && sync_.active()) [[unlikely]] { sync_.release(p); }
 
             // return an awaitable which immediately returns true
             return { result::success }; 
         }
     }
 
-    inline void set_guard(guard* g) { 
+    inline void participate(participant_t* p) { 
         std::lock_guard<LOCK> lk(lk_);
-        
-        guard_ = g; 
 
-        if(guard_) {
-            guard_->children.emplace_back(
-                this,
-                [](void* v) { ((self_type*)v)->unblock_(); }
-            );
-        }
+        sync_.insert(p); 
+    }
+
+    inline void withdraw(participant_t* p) {
+        std::lock_guard<LOCK> lk(lk_);
+
+        parked_recv_.remove_if([&](awt<bool>::interface* i) {
+            if(p == ((recv_interface*)i)->key) {
+                i->resume(nullptr);
+                return true;
+            } else {
+                return false;
+            }
+        });
+
+        sync_.erase(p);
     }
 
 private:
-    typedef unbuffered<T,LOCK,ALLOCATOR> PARENT;
-
     struct send_interface : 
         public detail::base_send_interface<LOCK> 
     {
-        send_interface(PARENT& p, detail::transfer tx) :
+        send_interface(self_type& p, detail::transfer tx) :
             detail::base_send_interface<LOCK>(p.lk_, tx),
             parent_(p)
         { }
@@ -160,9 +179,7 @@ private:
             if(parent_.closed_flag_) [[unlikely]] {
                 return true;
             } else if(parent_.parked_recv_.size()) [[likely]] {
-                parent_.parked_recv_.front()->resume((void*)&(this->tx));
-                parent_.parked_recv_.pop();
-                this->success = true;
+                this->success = resume_parked_receive_();
                 return true;
             } else [[unlikely]] {
                 parent_.parked_send_.push_back(this);
@@ -171,12 +188,13 @@ private:
         }
 
     private:
-        PARENT& parent_;
+        self_type& parent_;
     };
 
     struct recv_interface : public detail::base_recv_interface<LOCK> {
-        recv_interface(PARENT& p, void* destination) :
+        recv_interface(self_type& p, void* destination, participant_t* k) :
             detail::base_recv_interface<LOCK>(p.lk_, destination),
+            key(k),
             parent_(p)
         { }
 
@@ -191,8 +209,7 @@ private:
             if(parent_.closed_flag_) [[unlikely]] { 
                 return true;
             } else if(!parent_.parked_send_.size() ||
-                      (parent_.guard_ && 
-                       !parent_.guard_->parent.try_claim_recv(parent_.guard_->parent.ctx))) [[unlikely]] {
+                      (key = parent_.guard_(key))) [[unlikely]] {
                 parent_.parked_recv_.push_back(this);
                 return false;
             } else [[likely]] {
@@ -203,8 +220,11 @@ private:
             } 
         }
 
+        // used for removal
+        participant_t* key = nullptr;
+
     private:
-        PARENT& parent_;
+        self_type& parent_;
     };
     
     template <typename U>
@@ -215,32 +235,69 @@ private:
             return { result::closed }; 
         } else if(parked_recv_.size()) [[likely]] {
             detail::transfer tx(detail::pointer_send<U>,&s);
-            parked_recv_.front()->resume((void*)(&tx));
-            parked_recv_.pop();
 
-            return { result::success }; 
+            if(resume_parked_receive_((void*)(&tx))) [[likely]] {
+                return { result::success }; 
+            } else [[unlikely]] {
+                return { result::failure }; 
+            }
         } else [[unlikely]] { return { result::failure }; }
     }
 
-    inline void unblock_() {
+    inline bool resume_parked_receive_(void* v) {
+        auto ri = (recv_interface*)(parked_recv_.front());
+
+        if(sync_.active()) [[unlikely]] {
+            // get the participant
+            auto key = ri->key;
+            
+            if(sync_.try_claim_recv(key)) [[unlikely]] { 
+                // can't resume right now, someone else acquired the guard
+                return false;
+            }
+
+            ri->resume(v ? v : ri->destination);
+
+            if(!key) { 
+                // interface was not a participant, need to release immediately
+                sync_.release(key); 
+            }
+
+            parked_recv_.pop();
+            return true;
+        } else {
+            ri->resume(ri->destination);
+            parked_recv_.pop();
+            return true;
+        }
+    }
+
+    /*
+     If return value is non-nullptr, was guarded and failed to be acquired. 
+     Return value can be stored as a removal key in a parked awaitable.
+     */
+    inline participant_t* guard_(participant_t* p) {
+        // first check if we can do the fast path
+        if(sync_.active() && sync_.try_claim_recv(p)) [[unlikely]] {
+            return p;
+        } else [[likely]] {
+            return nullptr;
+        }
+    }
+
+    inline void on_release_() {
         std::lock_guard<LOCK> lk(lk_);
 
         if(!closed_flag_ && parked_send_.size() && parked_recv_.size()) {
-            if(guard_ && !guard_->parent.try_claim_recv(guard_->parent.ctx)) {
-                return;
-            }
-
-            auto awt = parked_recv_.front();
-            parked_recv_.pop();
-            awt->resume(((recv_interface*)awt)->destination);
+            resume_parked_receive_();
         }
-    }
+    } 
 
     mutable LOCK lk_;
     bool closed_flag_ = false;
     hce::list<awt<bool>::interface*,ALLOCATOR> parked_send_;
     hce::list<awt<bool>::interface*,ALLOCATOR> parked_recv_;
-    guard* guard_ = nullptr;
+    hce::channel::sync_t sync_;
 };
 
 } // channel 

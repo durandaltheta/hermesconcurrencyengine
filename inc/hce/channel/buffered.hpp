@@ -132,8 +132,7 @@ struct buffered : public interface<T> {
                 return { result::failure }; 
             }
         } else [[likely]] {
-            if(guard_ && 
-               !guard_->parent.try_claim_recv(guard_->parent.ctx)) [[unlikely]] {
+            if(guarded_()) [[unlikely]] {
                 return { result::failure }; 
             } else [[likely]] {
                 r = std::move(buf_.front());
@@ -158,7 +157,8 @@ struct buffered : public interface<T> {
         if(guard_) {
             guard_->children.emplace_back(
                 this,
-                [](void* v) { ((self_type*)v)->unblock_(); }
+                [](void* v) { ((self_type*)v)->unblock_(); },
+                [](void* v) { ((self_type*)v)->remove_(); }
             );
         }
     }
@@ -217,9 +217,7 @@ private:
         inline std::string name() const { return recv_interface::info_name(); }
 
         inline bool on_ready() {
-            if(parent_.guard_ && 
-               !parent_.guard_->parent.try_claim_recv(parent_.guard_->parent.ctx)) [[unlikely]] 
-            {
+            if(key = parent_.guarded_()) [[unlikely]] {
                 parent_.parked_recv_.push_back(this);
                 return false;
             } else if(parent_.buf_.empty()) [[unlikely]] {
@@ -242,6 +240,9 @@ private:
                 return true;
             }
         }
+
+        // used for removal
+        void* key = nullptr;
 
     private:
         PARENT& parent_;
@@ -267,6 +268,17 @@ private:
         }
     }
 
+    // If return value is non-nullptr, it was guarded. Return value can be
+    // stored as a removal key in a parked awaitable.
+    inline void* guarded_() {
+        if(guard_ && 
+           !guard_->parent.try_claim_recv(parent_.guard_->parent.ctx)) [[unlikely]] {
+            return guard_;
+        } else {
+            return nullptr;
+        }
+    }
+
     inline void unblock_() {
         std::lock_guard<LOCK> lk(lk_);
 
@@ -280,6 +292,16 @@ private:
             awt->resume((void*)&buf_);
         }
     }
+
+    inline void remove_() {
+        std::lock_guard<LOCK> lk(lk_);
+
+        if(guard_) {
+            parked_recv_.remove_if([&](awt<bool>::interface* i) {
+                return guard_ == ((recv_interface*)i)->key;
+            });
+        }
+    } 
 
     mutable LOCK lk_;
     bool closed_flag_ = false;

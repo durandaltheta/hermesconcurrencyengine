@@ -13,6 +13,7 @@ A simple example where a coroutine is constructed, scheduled, and communicated w
 ```cpp
 #include <iostream>
 #include <hce/core.hpp>
+#include <hce/channel.hpp>
 
 hce::co<void> my_coroutine(hce::chan<int> ch) {
     int i;
@@ -300,6 +301,7 @@ A simple example program:
 ```cpp
 #include <iostream>
 #include <hce/core.hpp>
+#include <hce/channel.hpp>
 
 hce::co<void> my_coroutine(hce::chan<int> in_ch, hce::chan<int> out_ch) {
     int i;
@@ -1103,6 +1105,7 @@ Implementation is fairly simple. You will need a host which is compiled against 
 ```cpp
 #include <string>
 #include <hce/core.hpp>
+#include <hce/channel.hpp>
 
 hce::co<void> op(hce::chan<std::string> ch) {
     co_await ch.send(std::string("hello world"));
@@ -1131,6 +1134,7 @@ Write a dynamically linked library and compile it against the same `hce` library
 #include <iostream>
 #include <string>
 #include <hce/core.hpp>
+#include <hce/channel.hpp>
 #include <hce/module.hpp>
 
 struct example_module : public hce::module {

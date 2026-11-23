@@ -2,54 +2,73 @@
 //Author: Blayne Dennis 
 // c++
 #include <utility>
+#include <iterator>
+#include <mutex>
 
 #include "hce/channel.hpp"
 #include "hce/fatal.hpp"
 
-namespace { // anonymous
-
-/*
- Deterministic round-robin index generator
-
- Begin at an arbitrary start index and walk the range [0, max) repeatedly.
- */
-struct round_robin {
-    explicit round_robin(std::size_t start = 0) noexcept
-        : current_(start) {}
-
-    // return the current index, then advance
-    inline std::size_t next(std::size_t max) noexcept {
-        std::size_t ret = current_ % max;
-        current_ = ret + 1;
-        return ret;
-    }
-
-    // reset the next index that will be returned
-    inline void reset(std::size_t start) noexcept {
-        current_ = start;
-    }
-
-    // peek without advancing
-    inline std::size_t peek(std::size_t max) const noexcept {
-        return current_ % max;
-    }
-
-private:
-    std::size_t current_;
-};
-
-} // anonymous
-
 namespace hce {
 
-multiplex::interface::~interface() {
+void sync_t::participant_t::release() {
+    // release all the guards in the predetermined set order
+    for(auto& guard : guards_) {
+        guard->release();
+    }
 }
 
-multiplex::erased::erased(multiplex::interface* i, multiplex::interface::deleter d) :
+void sync_t::participant_t::insert(channel::guard_t* g) {
+    std::lock_guard<std::mutex> lk(mtx_);
+    guards_.insert(g);
+}
+
+void sync_t::participant_t::erase(channel::guard_t* g) {
+    std::lock_guard<std::mutex> lk(mtx_);
+    guards_.erase(g);
+}
+
+bool sync_t::participant_t::try_claim_recv() {
+    // iterate over all guards in the predetermined set order
+    auto it = guards_.begin();
+
+    for(; it != guards_.end(); ++it) {
+        if(!((*it)->try_claim_recv())) {
+            // `it` points at the failing clause, roll back from the previous 
+            if(it != guards_.begin()) {
+                --it;// last successful
+                for(;; --it) {
+                    (*it)->release();
+                    if(it == guards_.begin()) { break; }
+                }
+            }
+
+            return false;
+        }
+    }
+
+    return true;  // everything succeeded
+}
+        
+void sync_t::participant_t::next() {
+    auto end = guards_.end();
+
+    if(current_ != end) {
+        current_ = std::next(current_);
+
+        if(current_ == end) {
+            current_ = guards_.begin();
+        }
+    }
+}
+
+multiplex::interface::~interface() { }
+
+multiplex::erased::erased(
+        multiplex::interface* i, 
+        multiplex::interface::deleter d) :
     interface(i),
     deleter(d)
-{
-}
+{ }
         
 multiplex::erased::erased(multiplex::erased&& rhs) {
     interface = rhs.interface;
@@ -77,42 +96,16 @@ multiplex::guard_mgr::guard_mgr(channel::guard&& g) :
 {
 }
 
-void multiplex::guard_mgr::unblock() {
-    round_robin rr(current_idx);
-
-    for(std::size_t n = 0; n < guard.children.size(); ++n) {
-        std::size_t idx = rr.next(guard.children.size());
-        auto& child = guard.children[idx];
-
-        if(child.ctx) {
-            child.unblock(child.ctx);
-        }
-    }
-
-    // update the starting index for next time after completing the loop
-    current_idx = rr.next(guard.children.size());
+bool multiplex::participant::finished() {
+    return finished_.load(std::memory_order_acquire);
 }
 
-bool multiplex::guard_mgr::try_claim_recv() {
-    // pure try, does not hold anything across the call
-    if(finished.load(std::memory_order_acquire)) {
-        return false;
-    }
-
-    bool expected = false;
-
-    return claimed.compare_exchange_strong(
-        expected, true,
-        std::memory_order_acq_rel,
-        std::memory_order_acquire);
-}
-
-void multiplex::guard_mgr::release() {
-    claimed.store(false, std::memory_order_release);
+void multiplex::participant::finish(bool val) {
+    finished_.store(val, std::memory_order_release); 
 }
 
 multiplex::~multiplex() {
-    if(guard_mgr_.finished.load(std::memory_order_acquire) == false) {
+    if(participant_) {
         hce::fatal(
            "did not call hce::multiplex::finish() on ",
            *this);
@@ -127,19 +120,46 @@ std::string multiplex::name() const {
     return multiplex::info_name(); 
 }
 
+hce::awt<bool> multiplex::select() {
+    struct local {
+        hce::co<bool> op(multiplex* self) {
+            result_t result;
+
+            if(co_await self->ready_.recv(result)) {
+                auto& intf = *(self->clauses_[result.idx].e.interface);
+
+                if(result.done) {
+                    if(intf.awt.valid()) {
+                        // join the finished coroutine
+                        co_await std::move(intf.awt);
+                    }
+                } else {
+                    // execute the callback for the associated clause
+                    intf.call();
+                }
+
+                // release the claim now that callback handling is complete
+                self->participant_->release();
+                co_return true;
+            } else {
+                // selection failed, the ready channel is closed
+                co_return false;
+            }
+        }
+    };
+
+    return hce::schedule(local::op(this));
+}
+
 hce::awt<void> multiplex::finish() {
     struct local {
         static hce::co<void> op(multiplex* self) {
-            // mark the guard operations as finished
-            self->guard_mgr_.finished.store(true, std::memory_order_release);
-   
-            // close the received channel
-            self->received_.close();
+            // close the ready channel
+            self->ready_.close();
 
             // remove the guard from the channels and end forwarding operations
-            for(size_t idx=0; idx < self->elements_.size(); ++idx) {
-                self->unmanage_(idx);
-                auto& intf = *(self->elements_[idx].e.interface);
+            for(size_t idx=0; idx < self->clauses_.size(); ++idx) {
+                auto& intf = *(self->clauses_[idx].e.interface);
 
                 if(intf.awt.valid()) {
                     // join with the forwarding coroutine
@@ -148,63 +168,20 @@ hce::awt<void> multiplex::finish() {
             }
 
             // clean everything up
-            self->guard_mgr_.release();
-            self->guard_mgr_.guard.children.clear();
-            self->elements_.clear();
+            self->clauses_.clear();
+            self->participant_.reset();
         }
     };
 
     return hce::schedule(local::op(this));
 }
 
-hce::awt<bool> multiplex::select() {
-    return hce::schedule(multiplex::selector_(this));
-}
+void multiplex::launch_(std::vector<channel::base_interface*>& bis) {
+    participant_.reset(new multiplex::participant(std::move(bis)));
 
-hce::co<bool> multiplex::selector_(multiplex* parent) {
-    auto& p = *parent;
-    result_t result;
-
-    if(co_await p.received_.recv(result)) {
-        auto& intf = *(p.elements_[result.idx].e.interface);
-
-        if(result.done) {
-            if(intf.awt.valid()) {
-                // join the finished coroutine
-                co_await std::move(intf.awt);
-
-                // the operation ended, release control of the channel 
-                p.unmanage_(result.idx);
-            }
-        } else {
-            // execute the callback for the associated element
-            intf.call();
-        }
-
-        // release the claim now that callback handling is complete
-        p.guard_mgr_.release();
-
-        // unblock the children and allow them to re-try claiming
-        p.guard_mgr_.unblock();
-        co_return true;
-    } else {
-        co_return false;
-    }
-}
-
-void multiplex::launch_() {
-    for(const auto& e : elements_) {
+    for(const auto& e : clauses_) {
         e.e.interface->launch();
     }
-
-    guard_mgr_.finished.store(false, std::memory_order_release);
-}
-    
-void multiplex::unmanage_(size_t idx) {
-    // unmanage a channel and let it operate independently
-    elements_[idx].e.interface->set_guard(nullptr);
-    auto& child = guard_mgr_.guard.children[idx];
-    child.unblock(child.ctx);
 }
 
 };

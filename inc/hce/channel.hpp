@@ -3,11 +3,13 @@
 //Author: Blayne Dennis 
 // c++
 #include <typeinfo>
+#include <cstddef>
 #include <mutex>
 #include <functional>
 #include <utility>
 #include <vector>
 #include <atomic>
+#include <memory>
 
 // local
 #include "hce/utility.hpp"
@@ -237,20 +239,19 @@ struct multiplex : public printable {
     using callback = std::function<void()>;
 
 private:
-    // element interface
+    // clause interface
     struct interface {
         typedef void(*deleter)(interface*);
 
         virtual ~interface();
-        virtual void set_guard(channel::guard*) = 0; // set the channel guard
+        virtual channel::base_interface* get_channel_base_interface() = 0;
         virtual void launch() = 0; // launch forwarding operation
-        virtual void close() = 0;  // close the channel and end forwarding
-        virtual void* child() = 0; // get the child context
+        virtual void finish() = 0; // end forwarding
        
-        multiplex* parent = nullptr; // owning multiplex 
-        size_t idx;                  // index of this element
-        hce::awt<void> awt;           // launched coroutine awaitable
-        callback call;               // registered callback
+        multiplex* parent;  // owning multiplex  
+        size_t idx = 0;     // index of this clause
+        hce::awt<void> awt; // launched coroutine awaitable
+        callback call;      // registered callback
     };
 
     // type erased interface with packaged deleter
@@ -268,29 +269,11 @@ private:
         multiplex::interface::deleter deleter = nullptr;
     };
 
-    struct guard_mgr {
-        channel::guard guard;
-        std::atomic<bool> claimed{false};
-        std::atomic<bool> finished{true};
-        std::size_t current_idx = 0;
-
-        guard_mgr(channel::guard&& g);
-
-        // unblock all guarded children
-        void unblock();
-
-        // attempt to claim the guard
-        bool try_claim_recv();
-
-        // release the guard
-        void release();
-    };
-
 public:
     /**
-     @brief an object which connects a channel to a callback
+     @brief an object which connects a value and channel to a callback
      */
-    struct element {
+    struct clause {
         /**
          The user must guarantee the argument value T stays in existence.
 
@@ -299,7 +282,7 @@ public:
          @param cb callback to execute when t is received
          */
         template <typename T>
-        element(T& t, hce::chan<T> ch, callback cb) :
+        clause(T& t, hce::chan<T> ch, callback cb) :
             e(make_interface(t, std::move(ch), std::move(cb)), &deleter<T>)
         { }
 
@@ -324,22 +307,20 @@ public:
         friend struct multiplex;
     };
 
+
     /**
-     @brief launch a multiplex of elements on construction
+     @brief launch a multiplex of clauses  
+
+     Start clause's operations to select between channels.
+
+     Can be called more than once to multiplex additional channels.
      */
     template <typename... Es>
-    multiplex(Es&&... es) :
-        guard_mgr_(
-            channel::guard{
-                channel::guard::parent_t{ 
-                    this, 
-                    [](void* v) -> bool { 
-                        return ((multiplex::guard_mgr*)v)->try_claim_recv();
-                    }
-                }
-            })
-    {
-        launch(std::forward<Es>(es)...);
+    multiplex(Es&&... es) {
+        ready_ = hce::chan<state_t>::make();
+        clauses_.reserve(clauses_.size() + sizeof...(es)); 
+        std::vector<channel::base_interface*> bis;
+        launch_(bis, std::forward<Es>(es)...);
     }
 
     /// WARNING: finish() must be called or this will throw a fatal
@@ -347,23 +328,6 @@ public:
 
     static std::string info_name();
     std::string name() const;
-
-    /**
-     @brief launch a multiplex of elements  
-
-     Start element's operations to select between channels.
-
-     Can be called more than once to multiplex additional channels.
-     */
-    template <typename... Es>
-    void launch(Es&&... es) {
-        if(!received_ || received_.closed()) {
-            received_ = hce::chan<result_t>::make();
-        }
-
-        elements_.reserve(elements_.size() + sizeof...(es)); 
-        launch_(std::forward<Es>(es)...);
-    }
 
     /**
      @brief await until some callback gets called or multiplexing is finish()ed 
@@ -378,19 +342,19 @@ public:
     /**
      @brief end multiplexing 
 
-     This unregisters this object from associated element channels.
+     This unregisters this object from associated clause channels.
 
      @return await the result to finish multiplexing operations
      */
     hce::awt<void> finish();
 
 private:
-    struct result_t {
+    struct state_t {
         size_t idx = 0;
         bool done = false;
     };
     
-    // element implementation
+    // clause implementation
     template <typename T>
     struct impl : interface {
         virtual ~impl() { }
@@ -401,27 +365,40 @@ private:
             ch(std::forward<CHAN>(c))
         { }
 
-        inline void set_guard(channel::guard* g) { ch.set_guard(g); }
+        inline channel::base_interface* get_channel_base_interface() {
+            return ch.context().get();
+        }
+
         inline void launch() { awt = hce::schedule(forwarder(this)); }
-        inline void close() { ch.close(); }
-        inline void* child() { return ch.context().get(); }; 
+
+        inline void finish() { 
+            // unregister for guarded receives with the channel
+            self->ch.withdraw(parent.participant_);
+        }
 
         // A single shot coroutine to receive over the multiplexed channel
         static inline hce::co<void> forwarder(impl<T>* self) {
-            result_t result;
+            state_t result;
             result.idx = self->idx;
+            auto& parent = *(self->parent);
+
+            // register for guarded receives with the channel
+            self->ch.participate(parent.participant_.get());
 
             // recv blocks until:
             // A) a send succeeds in acquiring the guard lock 
             // B) the parent finishes processing the callback and releases the claim
-            while(co_await self->ch.recv(self->value)) {
+            while(co_await self->ch.recv(self->value, parent.participant_.get())) {
                 // we have the guard claimed, notify the selector 
-                co_await self->parent->received_.send(result);
+                co_await parent.ready_.send(result);
             } 
 
-            // notify we died
+            // withdraw immediately
+            self->ch.withdraw(parent.participant_.get());
+
+            // notify clause finished
             result.done = true;
-            co_await self->parent->received_.send(result);
+            co_await self->parent->ready_.send(result);
         }
 
         T& value;
@@ -431,25 +408,32 @@ private:
 
     hce::co<bool> selector_(hce::multiplex*);
 
-    void launch_(); 
+    void launch_(std::vector<channel::base_interface*>&); 
 
     template <typename... Es>
-    void launch_(element e, Es&&... es) {
-        elements_.push_back(std::move(e));
-        auto& intf = *(elements_.back().e.interface);
+    void launch_(std::vector<channel::base_interface*> bis, clause e, Es&&... es) {
+        clauses_.push_back(std::move(e));
+        auto& intf = *(clauses_.back().e.interface);
         intf.parent = this;
-        intf.idx = elements_.size() - 1;
-        // increment the children vector in sync with the elements_ vector
-        intf.set_guard(&(guard_mgr_.guard));
+        intf.idx = clauses_.size() - 1;
+        bis.push_back(intf.get_channel_base_interface());
         launch_(std::forward<Es>(es)...);
     }
 
-    void unmanage_(size_t idx);
+    struct participant : channel::participant {
+        // return whether operations are finished
+        bool finished();
 
-    guard_mgr guard_mgr_;
-    // the indexes of this should match that of guard_mgr::guard::children
-    std::vector<element> elements_; 
-    hce::chan<result_t> received_;
+        // set operations as finished
+        void finish(bool val);
+
+    private:
+        std::atomic<bool> finished_;
+    };
+
+    std::unique_ptr<participant> participant_;
+    std::vector<clause> clauses_; 
+    hce::chan<state_t> ready_;
 }; // multiplex
 
 }
