@@ -203,7 +203,7 @@ struct interface : printable {
                 const T& s, 
                 select::group& g, 
                 int index,
-                select::notify* owner) { }
+                select::notify* owner) { return { }; }
 
         /*
          @brief build a select-send awaitable 
@@ -215,7 +215,7 @@ struct interface : printable {
                 T&& s, 
                 select::group& g, 
                 int index,
-                select::notify* owner) { }
+                select::notify* owner) { return { }; }
 
         /*
          @brief build a select-recv awaitable 
@@ -227,12 +227,12 @@ struct interface : printable {
                 T& r, 
                 select::group& g, 
                 int index,
-                select::notify* owner) { }
+                select::notify* owner) { return { }; }
 
         /**
          @brief activate a select awaitable
          */
-        virtual bool activate(hce::awt<bool>::interface* op) { }
+        virtual bool activate(hce::awt<bool>::interface* op) { return false; }
 
     private:
         selector(interface<T>& p) : parent(p) { }
