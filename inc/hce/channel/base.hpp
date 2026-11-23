@@ -444,8 +444,8 @@ struct case_recv : case_impl {
 
  Example:
  ```
- hce::co<bool> foo(hce::channel::unbuffered<int> ich, 
-                   hce::channel::unbuffered<std::string> sch) {
+ hce::co<bool> foo(hce::channel::unbuffered<int>* ich, 
+                   hce::channel::unbuffered<std::string>* sch) {
      hce::select select;
      int i;
      std::string s = "hello";
@@ -453,11 +453,11 @@ struct case_recv : case_impl {
 
      while(!done) {
          // build our channel requests
-         select.recv(ich, i, [&]{ 
+         select.recv(*ich, i, [&]{ 
              std::cout << "received int: " << i << std::endl;
          });
 
-         select.send(sch, s, [&]{ 
+         select.send(*sch, s, [&]{ 
              done = true; // we can access outside context
              std::cout << "sent std::string: " << s << std::endl;
          });
