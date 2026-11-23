@@ -113,7 +113,7 @@ struct unbuffered : channel::interface {
         return { result::failure };
     }
 
-    struct selector {
+    struct selector : channel::interface<T>::selector {
         inline hce::awt<bool> make_select_recv(
                 T& r, 
                 select::group& g, 
