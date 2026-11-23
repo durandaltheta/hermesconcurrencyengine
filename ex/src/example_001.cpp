@@ -1,5 +1,6 @@
 #include <iostream>
 #include <hce/core.hpp>
+#include <hce/channel.hpp>
 
 hce::co<void> my_coroutine(hce::chan<int> ch) {
     int i;
