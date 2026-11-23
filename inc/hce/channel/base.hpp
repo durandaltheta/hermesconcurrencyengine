@@ -155,19 +155,17 @@ private:
 
 template <typename LOCK>
 struct base_send_interface : 
-    public hce::scheduler::reschedule<
-        hce::awaitable::lockable<
-            LOCK,
-            awt_interface<bool>>>
+    hce::awaitable::lockable<
+        LOCK,
+        awt_interface<bool>>
 {
     base_send_interface(LOCK& lk, transfer t) : 
-        hce::scheduler::reschedule<
-            hce::awaitable::lockable<
-                LOCK,
-                awt_interface<bool>>>(
-                    lk,
-                    hce::awaitable::await::policy::defer,
-                    hce::awaitable::resume::policy::no_lock),
+        hce::awaitable::lockable<
+            LOCK,
+            awt_interface<bool>>(
+                lk,
+                hce::awaitable::await::policy::defer,
+                hce::awaitable::resume::policy::no_lock),
         tx(t)
     { }
 
@@ -189,19 +187,17 @@ struct base_send_interface :
 
 template <typename LOCK>
 struct base_recv_interface : 
-    public hce::scheduler::reschedule<
-        hce::awaitable::lockable<
-            LOCK,
-            awt_interface<bool>>>
+    hce::awaitable::lockable<
+        LOCK,
+        awt_interface<bool>>
 {
     base_recv_interface(LOCK& lk, void* d) : 
-        hce::scheduler::reschedule<
-            hce::awaitable::lockable<
-                LOCK,
-                awt_interface<bool>>>(
-                    lk,
-                    hce::awaitable::await::policy::defer,
-                    hce::awaitable::resume::policy::no_lock),
+        hce::awaitable::lockable<
+            LOCK,
+            awt_interface<bool>>(
+                lk,
+                hce::awaitable::await::policy::defer,
+                hce::awaitable::resume::policy::no_lock),
         destination(d)
     { }
 

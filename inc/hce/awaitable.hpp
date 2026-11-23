@@ -147,7 +147,7 @@ struct awaitable : public printable {
 
          The lock is unlocked during this call.
          */
-        virtual void to_destination(std::coroutine_handle<>) = 0;
+        virtual void to_destination(std::coroutine_handle<>);
 
         /**
          @brief returns whether the operation can resume immediately or not 
@@ -164,7 +164,7 @@ struct awaitable : public printable {
          return `false` because the awaitable has taken responsibility for 
          the coroutine handle.
          */
-        virtual void on_suspend() = 0;
+        virtual void on_suspend();
 
         /**
          @brief called when resume()ing the suspended operation.  
@@ -182,6 +182,7 @@ struct awaitable : public printable {
         bool awaited_ = false;
         detail::coroutine::this_thread* tt_ = nullptr;
         std::coroutine_handle<> handle_;
+        void* destination_ = nullptr;
     };
 
     /**

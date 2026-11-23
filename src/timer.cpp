@@ -63,13 +63,12 @@ bool hce::timer::cancel(const hce::sid& sid) {
 }
 
 hce::timer::awaitable::awaitable() : 
-    hce::scheduler::reschedule<
-        hce::awaitable::lockable<
-            hce::spinlock,
-            hce::awt<bool>::interface>>(
-                slk_,
-                hce::awaitable::await::policy::defer,
-                hce::awaitable::resume::policy::lock),
+    hce::awaitable::lockable<
+        hce::spinlock,
+        hce::awt<bool>::interface>(
+            slk_,
+            hce::awaitable::await::policy::defer,
+            hce::awaitable::resume::policy::lock),
     ready_(false),
     result_(false)
 { 
