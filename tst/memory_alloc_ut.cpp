@@ -8,10 +8,10 @@
 #include <gtest/gtest.h>
 #include "test_helpers.hpp"
 
-namespace test {
+namespace {
 
 template <typename T> 
-void allocate_deallocate_T(){
+void mem_allocate_deallocate_T(){
     for(size_t i=0; i<100; ++i) {
         // can allocate valid memory
         T* t = hce::allocate<T>();
@@ -30,12 +30,12 @@ void allocate_deallocate_T(){
 }
 
 TEST(memory, allocate_deallocate) {
-    test::allocate_deallocate_T<int>();
-    test::allocate_deallocate_T<unsigned int>();
-    test::allocate_deallocate_T<size_t>();
-    test::allocate_deallocate_T<float>();
-    test::allocate_deallocate_T<double>();
-    test::allocate_deallocate_T<char>();
-    test::allocate_deallocate_T<std::string>();
-    test::allocate_deallocate_T<test::CustomObject>();
+    mem_allocate_deallocate_T<int>();
+    mem_allocate_deallocate_T<unsigned int>();
+    mem_allocate_deallocate_T<size_t>();
+    mem_allocate_deallocate_T<float>();
+    mem_allocate_deallocate_T<double>();
+    mem_allocate_deallocate_T<char>();
+    mem_allocate_deallocate_T<std::string>();
+    mem_allocate_deallocate_T<test::CustomObject>();
 }

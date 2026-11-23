@@ -8,10 +8,10 @@
 #include <gtest/gtest.h>
 #include "test_helpers.hpp"
 
-namespace test {
+namespace {
 
 template <typename T>
-void emplace_back_front_pop_T() {
+void sync_emplace_back_front_pop_T() {
     hce::synchronized_list<T> q;
     T t{};
 
@@ -36,7 +36,7 @@ void emplace_back_front_pop_T() {
 }
 
 template <typename T>
-void rvalue_push_back_front_pop_T() {
+void sync_rvalue_push_back_front_pop_T() {
     hce::synchronized_list<T> q;
     T t{};
 
@@ -61,7 +61,7 @@ void rvalue_push_back_front_pop_T() {
 }
 
 template <typename T>
-void lvalue_push_back_front_pop_T() {
+void sync_lvalue_push_back_front_pop_T() {
     hce::synchronized_list<T> q;
 
     EXPECT_EQ(0, q.size());
@@ -89,34 +89,34 @@ void lvalue_push_back_front_pop_T() {
 }
 
 TEST(synchronized_queue, emplace_back_front_pop) {
-    test::emplace_back_front_pop_T<int>();
-    test::emplace_back_front_pop_T<unsigned int>();
-    test::emplace_back_front_pop_T<size_t>();
-    test::emplace_back_front_pop_T<float>();
-    test::emplace_back_front_pop_T<double>();
-    test::emplace_back_front_pop_T<char>();
-    test::emplace_back_front_pop_T<std::string>();
-    test::emplace_back_front_pop_T<test::CustomObject>();
+    sync_emplace_back_front_pop_T<int>();
+    sync_emplace_back_front_pop_T<unsigned int>();
+    sync_emplace_back_front_pop_T<size_t>();
+    sync_emplace_back_front_pop_T<float>();
+    sync_emplace_back_front_pop_T<double>();
+    sync_emplace_back_front_pop_T<char>();
+    sync_emplace_back_front_pop_T<std::string>();
+    sync_emplace_back_front_pop_T<test::CustomObject>();
 }
 
 TEST(synchronized_queue, rvalue_push_back_front_pop) {
-    test::rvalue_push_back_front_pop_T<int>();
-    test::rvalue_push_back_front_pop_T<unsigned int>();
-    test::rvalue_push_back_front_pop_T<size_t>();
-    test::rvalue_push_back_front_pop_T<float>();
-    test::rvalue_push_back_front_pop_T<double>();
-    test::rvalue_push_back_front_pop_T<char>();
-    test::rvalue_push_back_front_pop_T<std::string>();
-    test::rvalue_push_back_front_pop_T<test::CustomObject>();
+    sync_rvalue_push_back_front_pop_T<int>();
+    sync_rvalue_push_back_front_pop_T<unsigned int>();
+    sync_rvalue_push_back_front_pop_T<size_t>();
+    sync_rvalue_push_back_front_pop_T<float>();
+    sync_rvalue_push_back_front_pop_T<double>();
+    sync_rvalue_push_back_front_pop_T<char>();
+    sync_rvalue_push_back_front_pop_T<std::string>();
+    sync_rvalue_push_back_front_pop_T<test::CustomObject>();
 }
 
 TEST(synchronized_queue, lvalue_push_back_front_pop) {
-    test::lvalue_push_back_front_pop_T<int>();
-    test::lvalue_push_back_front_pop_T<unsigned int>();
-    test::lvalue_push_back_front_pop_T<size_t>();
-    test::lvalue_push_back_front_pop_T<float>();
-    test::lvalue_push_back_front_pop_T<double>();
-    test::lvalue_push_back_front_pop_T<char>();
-    test::lvalue_push_back_front_pop_T<std::string>();
-    test::lvalue_push_back_front_pop_T<test::CustomObject>();
+    sync_lvalue_push_back_front_pop_T<int>();
+    sync_lvalue_push_back_front_pop_T<unsigned int>();
+    sync_lvalue_push_back_front_pop_T<size_t>();
+    sync_lvalue_push_back_front_pop_T<float>();
+    sync_lvalue_push_back_front_pop_T<double>();
+    sync_lvalue_push_back_front_pop_T<char>();
+    sync_lvalue_push_back_front_pop_T<std::string>();
+    sync_lvalue_push_back_front_pop_T<test::CustomObject>();
 }

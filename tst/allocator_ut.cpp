@@ -8,7 +8,7 @@
 #include <gtest/gtest.h>
 #include "test_helpers.hpp"
 
-namespace test {
+namespace {
 
 template <typename T> 
 void allocate_deallocate_T(){
@@ -136,23 +136,23 @@ void introspect_pool_T() {
 }
 
 TEST(pool_allocator, allocate_deallocate) {
-    test::allocate_deallocate_T<int>();
-    test::allocate_deallocate_T<unsigned int>();
-    test::allocate_deallocate_T<size_t>();
-    test::allocate_deallocate_T<float>();
-    test::allocate_deallocate_T<double>();
-    test::allocate_deallocate_T<char>();
-    test::allocate_deallocate_T<std::string>();
-    test::allocate_deallocate_T<test::CustomObject>();
+    allocate_deallocate_T<int>();
+    allocate_deallocate_T<unsigned int>();
+    allocate_deallocate_T<size_t>();
+    allocate_deallocate_T<float>();
+    allocate_deallocate_T<double>();
+    allocate_deallocate_T<char>();
+    allocate_deallocate_T<std::string>();
+    allocate_deallocate_T<test::CustomObject>();
 }
 
 TEST(pool_allocator, introspect_pool) {
-    test::introspect_pool_T<int>();
-    test::introspect_pool_T<unsigned int>();
-    test::introspect_pool_T<size_t>();
-    test::introspect_pool_T<float>();
-    test::introspect_pool_T<double>();
-    test::introspect_pool_T<char>();
-    test::introspect_pool_T<std::string>();
-    test::introspect_pool_T<test::CustomObject>();
+    introspect_pool_T<int>();
+    introspect_pool_T<unsigned int>();
+    introspect_pool_T<size_t>();
+    introspect_pool_T<float>();
+    introspect_pool_T<double>();
+    introspect_pool_T<char>();
+    introspect_pool_T<std::string>();
+    introspect_pool_T<test::CustomObject>();
 }
