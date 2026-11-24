@@ -69,55 +69,51 @@ struct unbuffered : channel::interface {
         }
     }
 
-    inline hce::awt<bool> send(const T& s) {
-        return hce::awt<bool>(new send_interface(
-            *this, detail::transfer(detail::pointer_send<const T&>, &s), nullptr, -1));
-    }
-
-    inline hce::awt<bool> send(T&& s) {
-        return hce::awt<bool>(new send_interface(
-            *this, detail::transfer(detail::pointer_send<T&&>, &s), nullptr, -1));
-    }
-
-    inline hce::awt<bool> recv(T& r) { 
-        return hce::awt<bool>(new recv_interface(
-            *this, static_cast<void*>(&r), nullptr, -1));
-    }
-
-    inline hce::yield<result> try_send(const T& s) { return try_send_(s); }
-    inline hce::yield<result> try_send(T&& s) { return try_send_(std::move(s)); }
-
-    inline hce::yield<result> try_recv(T& r) { 
-        std::lock_guard<LOCK> lk(lk_);
-
-        if(closed_flag_) { return { result::closed }; }
-
-        while(parked_send_.size()) {
-            auto* si = static_cast<send_interface*>(parked_send_.front());
-
-            if(si->group && si->group->is_claimed()) {
-                parked_send_.pop();
-                si->resume(nullptr);
-                continue;
-            }
-
-            if(si->try_claim()) {
-                parked_send_.pop();
-                si->resume(static_cast<void*>(&r));
-                return { result::success };
-            }
-
-            parked_send_.pop();
-            si->resume(nullptr);
-        }
-        return { result::failure };
+    inline channel::operation request(const channel::request& r) {
+        switch(r.op) {
+            case channel::request::op_e::send_deep:
+                return {
+                    new send_interface(
+                        *this, 
+                        detail::transfer(detail::pointer_send<const T&>, &s), 
+                        nullptr, 
+                        -1),
+                    channel::result::success
+                };
+            case channel::request::op_e::send_shallow:
+                return {
+                    new send_interface(
+                        *this, 
+                        detail::transfer(detail::pointer_send<T&&>, &s), 
+                        nullptr, 
+                        -1),
+                    channel::result::success
+                };
+            case channel::request::op_e::try_send_deep:
+                return { nullptr, try_send_(*((T*)(r.value))) };
+            case channel::request::op_e::try_send_deep:
+                return { nullptr, try_send_(std::move(*((T*)(r.value)))) };
+            case channel::request::op_e::recv:
+                return {
+                    new recv_interface(
+                        *this, 
+                        static_cast<void*>(&r), 
+                        nullptr, 
+                        -1),
+                    channel::result::success
+                };
+            case channel::request::op_e::try_recv:
+                return { nullptr, try_recv_(*((T*)(r.value)))};
+            default:
+                return { nullptr, channel::operation::failure };
+        };
     }
 
     struct selector : channel::interface<T>::selector {
         inline hce::awt<bool> send(const request& r) {
             return hce::awt<bool>(new send_interface(
                 &parent_, 
-                r.type == channel::select::request::type_e::move 
+                r.move
                     ? detail::transfer(detail::pointer_send<T&&>, r.value)
                     : detail::transfer(detail::pointer_send<const T&>, r.value), 
                 r.group, 
@@ -138,6 +134,7 @@ struct unbuffered : channel::interface {
         // (matched or closed).
         bool activate(hce::awt<bool>::interface* op) {
             if(!op) { return false; }
+
             std::lock_guard<LOCK> lk(lk_);
             return !static_cast<recv_interface*>(op)->on_ready();
         }
@@ -174,10 +171,12 @@ private:
     unbuffered() : select_(*this) { }
 
     template <typename U>
-    inline hce::yield<result> try_send_(U&& s) {
+    inline result try_send_(U&& s) {
         std::lock_guard<LOCK> lk(lk_);
-        if(closed_flag_) return { result::closed };
+        if(closed_flag_) { return result::closed; }
+
         detail::transfer tx(detail::pointer_send<U>, &s);
+
         while(parked_recv_.size()) {
             auto* ri = static_cast<recv_interface*>(parked_recv_.front());
             if(ri->group && ri->group->is_claimed()) {
@@ -188,12 +187,39 @@ private:
             if(ri->try_claim()) {
                 parked_recv_.pop();
                 ri->resume(static_cast<void*>(&tx));
-                return { result::success };
+                return result::success;
             }
             parked_recv_.pop();
             ri->resume(nullptr);
         }
-        return { result::failure };
+
+        return result::failure;
+    }
+
+    inline result try_recv_(T& r) { 
+        std::lock_guard<LOCK> lk(lk_);
+
+        if(closed_flag_) { return result::closed; }
+
+        while(parked_send_.size()) {
+            auto* si = static_cast<send_interface*>(parked_send_.front());
+
+            if(si->group && si->group->is_claimed()) {
+                parked_send_.pop();
+                si->resume(nullptr);
+                continue;
+            }
+
+            if(si->try_claim()) {
+                parked_send_.pop();
+                si->resume(static_cast<void*>(&r));
+                return result::success;
+            }
+
+            parked_send_.pop();
+            si->resume(nullptr);
+        }
+        return result::failure;
     }
 
     struct send_interface : public detail::base_send_interface<LOCK> {
