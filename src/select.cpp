@@ -98,6 +98,8 @@ select::result::error_e select::result::status() {
     return index < 0 ? (result::error_e)index : result::error_e::ok;
 }
 
+int select::size() { return clauses.size(); }
+
 int select::clause(std::unique_ptr<channel::select::clause::base> cb) {
     int idx = static_cast<int>(clauses.size());
     clauses.push_back(std::move(ca));

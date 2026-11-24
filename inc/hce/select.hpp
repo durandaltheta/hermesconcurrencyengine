@@ -25,20 +25,50 @@ namespace hce {
 
      while(!done) {
          // build our clauses each time
-        
-         // register a receive clause
+         select.recv(*ich, i); // gets index 0
+         select.send(*sch, s); // gets index 1
+         auto result = co_await select.wait(timeout);
+
+         switch(result.index) {
+             case 0:
+                 std::cout << "received int: " << i << std::endl;
+             case 1:
+                 done = true; 
+                 std::cout << "sent std::string: " << s << std::endl;
+             default:
+                 std::cout << "an error occurred: " << result.index << std::endl;
+                 co_return false;
+         }
+     }
+            
+     co_return true;
+ }
+ ```
+
+ In trivial cases a small switch statement is easy to read. However, select 
+ send()/recv() methods allow for callbacks to be assigned. This is useful for 
+ complex cases or if the user can't easily manage indexes:
+ ```
+ hce::co<bool> foo(hce::channel::unbuffered<int>* ich, 
+                   hce::channel::unbuffered<std::string>* sch) {
+     hce::select select;
+     int i;
+     std::string s = "hello";
+     bool done = false;
+     auto timeout = hce::chrono::milliseconds(1000);
+
+     while(!done) {
          select.recv(*ich, i, [&]{ 
              std::cout << "received int: " << i << std::endl;
          });
 
-         // register a send clause
          select.send(*sch, s, [&]{ 
              done = true; 
              std::cout << "sent std::string: " << s << std::endl;
          });
 
-         if(!co_await select.wait(timeout)) {
-            std::cout << "an error occurred" << std::endl;
+         if(!(auto result = co_await select.wait(timeout))) {
+            std::cout << "an error occurred: " << result.index << std::endl;
             co_return false;
          }
      }
@@ -81,6 +111,9 @@ struct select {
         /// underlying index value
         int index=-1;
     };
+
+    /// return the current count of clauses
+    int size();
 
     /**
      @brief register a send clause and return the index 
@@ -139,7 +172,7 @@ struct select {
     /**
      @brief register some clause with the select
      */
-    int select::clause(std::unique_ptr<channel::select::clause::base> cb);
+    int clause(std::unique_ptr<channel::select::clause::base> cb);
 
     /**
      returns an awaitable that parks until exactly one case wins.
