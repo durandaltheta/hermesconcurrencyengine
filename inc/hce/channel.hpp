@@ -23,8 +23,10 @@
 #include "hce/scheduler.hpp"
 #include "hce/channel/base.hpp"
 #include "hce/channel/unbuffered.hpp"
+#if 0
 #include "hce/channel/buffered.hpp"
 #include "hce/channel/unlimited.hpp"
+#endif
 
 namespace hce {
 
@@ -111,10 +113,13 @@ struct chan : public channel::interface<T> {
               typename ALLOCATOR=hce::pool_allocator<T>,
               typename... As>
     inline chan<T>& construct(int sz=0, As&&... as) {
+#if 0
         if(sz == 0) {
+#endif
             context_ = std::shared_ptr<channel::interface<T>>(
                 static_cast<channel::interface<T>*>(
                     new hce::channel::unbuffered<T,LOCK,ALLOCATOR>(std::forward<As>(as)...)));
+#if 0
         } else if(sz < 0) {
             context_ = std::shared_ptr<channel::interface<T>>(
                 static_cast<channel::interface<T>*>(
@@ -124,6 +129,7 @@ struct chan : public channel::interface<T> {
                 static_cast<channel::interface<T>*>(
                     new hce::channel::buffered<T,LOCK,ALLOCATOR>(sz, std::forward<As>(as)...)));
         }
+#endif
 
         return *this;
     }

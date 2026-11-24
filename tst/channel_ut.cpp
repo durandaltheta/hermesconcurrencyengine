@@ -72,6 +72,7 @@ void context_construct_capacity_T() {
         ASSERT_NE(ctx, ch.context());
     }
 
+#if 0
     {
         HCE_INFO_FUNCTION_BODY(fname, "buffered spinlock size 1");
         hce::chan<T> ch; 
@@ -202,6 +203,7 @@ void context_construct_capacity_T() {
         ASSERT_EQ(-1,ch.size());
     }
 }
+#endif
 
 }
 }
@@ -272,6 +274,7 @@ void make_capacity_T() {
         ASSERT_EQ(ch.size(),0);
     }
 
+#if 0
     {
         HCE_INFO_FUNCTION_BODY(fname, "buffered spinlock size 1");
         hce::chan<T> ch; 
@@ -362,6 +365,7 @@ void make_capacity_T() {
         ASSERT_EQ(ch.size(),-1);
     }
 }
+#endif
 
 }
 }

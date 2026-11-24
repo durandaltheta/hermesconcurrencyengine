@@ -64,6 +64,10 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/hce/scheduler/config.hpp
     ${HCE_INCLUDE_DIR}/hce/scheduler.hpp
     ${HCE_INCLUDE_DIR}/hce/blocking.hpp
+    ${HCE_INCLUDE_DIR}/hce/channel/base.hpp
+    ${HCE_INCLUDE_DIR}/hce/channel/unbuffered.hpp
+    #${HCE_INCLUDE_DIR}/hce/channel/buffered.hpp
+    #${HCE_INCLUDE_DIR}/hce/channel/unlimited.hpp
     ${HCE_INCLUDE_DIR}/hce/channel.hpp
     ${HCE_INCLUDE_DIR}/hce/threadpool/config.hpp
     ${HCE_INCLUDE_DIR}/hce/threadpool.hpp
