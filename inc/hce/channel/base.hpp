@@ -46,7 +46,7 @@ struct base {
     virtual ~base() = default;
     virtual bool activate(select::notify* owner) = 0; ///< activate the clause
     virtual void cancel() = 0; ///< cancel the clause
-    virtual void call() = 0; ///< call the clause callback
+    virtual void call() = 0; ///< the victorious clause callback
     int index = -1; ///< associated clause index
 };
 
@@ -97,6 +97,7 @@ struct operation {
     channel::result result = channel::result::closed; 
 };
 
+/// base channel interface
 struct base : printable {
     virtual ~base(){}
 
@@ -125,6 +126,9 @@ struct base : printable {
     /// request an operation 
     virtual operation request(const request& r) = 0;
 
+    /**
+     @brief an object capable of handling select operations
+     */
     struct selector {
         /*
          @brief build a select awaitable 
@@ -140,6 +144,9 @@ struct base : printable {
         virtual bool activate(hce::awt<bool>::interface* op) { return false; }
     };
 
+    /**
+     @brief return the selector object
+     */
     virtual selector& select() = 0;
    
     /**
@@ -148,9 +155,7 @@ struct base : printable {
     virtual void cancel(hce::awt<bool>::interface* op) { }
 };
 
-/**
- @brief interface for coroutine-safe channel implementations
- */
+/// typed interface for coroutine-safe channel implementations 
 template <typename T>
 struct interface : base {
     virtual ~interface(){}
@@ -158,10 +163,8 @@ struct interface : base {
     /// send a lvalue copy, awaitable returning true on success, else false
     hce::awt<bool> send(const T& t) {
         return { 
-            request(channel::request{ 
-                channel::request::op_e::send,
-                channel::request::type_e::block,
-                channel::request::copy_e::deep,
+            this->request(channel::request{ 
+                channel::request::op_e::send_deep,
                 (void*)&t
             }).awt 
         };
@@ -170,10 +173,8 @@ struct interface : base {
     /// send a rvalue copy, awaitable returning true on success, else false
     hce::awt<bool> send(T&& t) {
         return { 
-            request(channel::request{ 
-                channel::request::op_e::send,
-                channel::request::type_e::block,
-                channel::request::copy_e::shallow,
+            this->request(channel::request{ 
+                channel::request::op_e::send_shallow,
                 (void*)&t
             }).awt 
         };
@@ -185,10 +186,8 @@ struct interface : base {
      */
     hce::awt<bool> recv(T& t) {
         return { 
-            request(channel::request{ 
+            this->request(channel::request{ 
                 channel::request::op_e::recv,
-                channel::request::type_e::block,
-                channel::request::copy_e::deep,
                 (void*)&t
             }).awt 
         };
@@ -197,10 +196,8 @@ struct interface : base {
     /// attempt to send a lvalue copy
     hce::yield<channel::result> try_send(const T& t) {
         return { 
-            request(channel::request{ 
-                channel::request::op_e::send,
-                channel::request::type_e::nonblock,
-                channel::request::copy_e::deep,
+            this->request(channel::request{ 
+                channel::request::op_e::try_send_deep,
                 (void*)&t
             }).result
         };
@@ -209,10 +206,8 @@ struct interface : base {
     /// attempt to send a rvalue copy
     hce::yield<channel::result> try_send(T&& t) {
         return { 
-            request(channel::request{ 
-                channel::request::op_e::send,
-                channel::request::type_e::nonblock,
-                channel::request::copy_e::shallow,
+            this->request(channel::request{ 
+                channel::request::op_e::try_send_shallow,
                 (void*)&t
             }).result
         };
@@ -224,14 +219,17 @@ struct interface : base {
      */
     hce::yield<channel::result> try_recv(T& t) {
         return { 
-            request(channel::request{ 
-                channel::request::op_e::recv,
-                channel::request::type_e::nonblock,
-                channel::request::copy_e::deep,
+            this->request(channel::request{ 
+                channel::request::op_e::try_recv,
                 (void*)&t
             }).result
         };
     }
+   
+    /**
+     @brief cancel an operation
+     */
+    void cancel(const hce::awt<bool>& op) { cancel(op.get()); }
 };
 
 namespace detail {
@@ -288,7 +286,7 @@ inline void list_recv(void* destination, void* source) {
  that constructs it.
 
  Rather than accepting void*, the constructor and `send()` accept any source 
- or destination pointer type and will cast implicitly for the user.
+ or destination pointer type and will cast implicitly for the call.
  */
 struct transfer {
     typedef void (*op_f)(void*,void*);
@@ -307,6 +305,7 @@ private:
     void* source_;
 };
 
+namespace awt {
 namespace send {
 
 struct base : hce::awt_interface<bool> {
@@ -334,7 +333,7 @@ struct interface : hce::awaitable::lockable<LOCK, base> {
     { }
 };
 
-}
+} // send
 
 namespace recv {
 
@@ -366,17 +365,19 @@ struct interface :
 };
 
 } // recv
+} // awt
 
 namespace select {
 namespace clause {
 
 struct partial : clause::base {
-    partial(channel::interface<T>& c, const channel::select::request& r, int idx);
+    partial(channel::interface<T>& c, const channel::request& r, int idx);
     ~partial() = default;
     void cancel() override;
+    virtual bool is_send() = 0;
 
     hce::channel::base* ch;
-    channel::select::request request;
+    channel::request request;
     hce::awt<bool>::interface* iface = nullptr;
 };
 
@@ -386,6 +387,7 @@ struct send : partial {
 
     ~send() = default;
     bool activate(select::notify* owner) override;
+    bool is_send() { return true; }
 };
 
 struct recv : partial {
@@ -394,10 +396,11 @@ struct recv : partial {
 
     ~recv() = default;
     bool activate(select::notify* owner) override;
+    bool is_send() { return false; }
 };
 
-} // clause
-} // detail
+} // clause 
 } // select
+} // detail
 } // channel 
 } // hce

@@ -9,9 +9,11 @@
 #include "hce/awaitable.hpp"
 #include "hce/scheduler.hpp"
 
-hce::awaitable::interface::interface() { HCE_LOW_CONSTRUCTOR(); }
+namespace hce {
 
-hce::awaitable::interface::~interface() { 
+awaitable::interface::interface() { HCE_LOW_CONSTRUCTOR(); }
+
+awaitable::interface::~interface() { 
     HCE_TRACE_DESTRUCTOR();
 
     if(this->handle_) [[unlikely]] {
@@ -33,25 +35,25 @@ hce::awaitable::interface::~interface() {
     }
 }
 
-void* hce::awaitable::interface::operator new(std::size_t n) noexcept {
-    return hce::memory::allocate(n);
+void* awaitable::interface::operator new(std::size_t n) noexcept {
+    return memory::allocate(n);
 }
 
-void hce::awaitable::interface::operator delete(void* ptr) noexcept {
-    hce::memory::deallocate(ptr);
+void awaitable::interface::operator delete(void* ptr) noexcept {
+    memory::deallocate(ptr);
 }
 
-std::string hce::awaitable::interface::info_name() { 
-    return "hce::awaitable::interface"; 
+std::string awaitable::interface::info_name() { 
+    return "awaitable::interface"; 
 }
 
-std::string hce::awaitable::interface::name() const { 
+std::string awaitable::interface::name() const { 
     return interface::info_name(); 
 }
 
-bool hce::awaitable::interface::awaited() { return this->awaited_; }
+bool awaitable::interface::awaited() { return this->awaited_; }
 
-bool hce::awaitable::interface::await_ready() {
+bool awaitable::interface::await_ready() {
     HCE_LOW_METHOD_ENTER("await_ready");
 
     // acquire the lock if implementation was not constructed with 
@@ -72,7 +74,7 @@ bool hce::awaitable::interface::await_ready() {
     }
 }
 
-void hce::awaitable::interface::await_suspend(std::coroutine_handle<> h) {
+void awaitable::interface::await_suspend(std::coroutine_handle<> h) {
     HCE_LOW_METHOD_ENTER("await_suspend");
 
     // still locked from await_ready()
@@ -112,7 +114,7 @@ void hce::awaitable::interface::await_suspend(std::coroutine_handle<> h) {
     this->unlock();
 }
 
-void hce::awaitable::interface::resume(void* m) {
+void awaitable::interface::resume(void* m) {
     HCE_LOW_METHOD_ENTER("resume");
 
     auto rp = this->resume_policy();
@@ -151,7 +153,7 @@ void hce::awaitable::interface::resume(void* m) {
     }
 }
 
-void hce::awaitable::interface::on_suspend() {
+void awaitable::interface::on_suspend() {
     auto& tl_sch = detail::scheduler::tl_this_scheduler();
 
     /* 
@@ -166,49 +168,51 @@ void hce::awaitable::interface::on_suspend() {
 }
 
 /// pass a resumed coroutine to its destination
-void hce::awaitable::interface::to_destination(std::coroutine_handle<> h) {
-    ((hce::scheduler*)destination_)->schedule_(std::move(h));
+void awaitable::interface::to_destination(std::coroutine_handle<> h) {
+    ((scheduler*)destination_)->schedule_(std::move(h));
 }
 
-hce::awaitable::awaitable() : impl_(nullptr) {
+awaitable::awaitable() : impl_(nullptr) {
     HCE_TRACE_CONSTRUCTOR();
 }
 
-hce::awaitable::~awaitable() { 
+awaitable::~awaitable() { 
     HCE_TRACE_DESTRUCTOR();
     wait(); 
 }
 
-std::string hce::awaitable::info_name() { return "hce::awaitable"; }
-std::string hce::awaitable::name() const { return awaitable::info_name(); }
+std::string awaitable::info_name() { return "awaitable"; }
+std::string awaitable::name() const { return awaitable::info_name(); }
 
-std::string hce::awaitable::content() const {
+std::string awaitable::content() const {
     return impl_ ? impl_->to_string() : std::string();
 }
 
-bool hce::awaitable::valid() const { return (bool)impl_; }
+bool awaitable::valid() const { return (bool)impl_; }
 
-hce::awaitable::interface& hce::awaitable::implementation() { return *impl_; }
+awaitable::interface& awaitable::get() const { return impl_.get(); }
 
-void hce::awaitable::reset() { impl_.reset(); }
+awaitable::interface& awaitable::implementation() { return *impl_; }
 
-void hce::awaitable::reset(interface* i) { impl_.reset(i); }
+void awaitable::reset() { impl_.reset(); }
 
-hce::awaitable::interface* hce::awaitable::release() { return impl_.release(); }
+void awaitable::reset(interface* i) { impl_.reset(i); }
 
-bool hce::awaitable::await_ready() { return impl_->await_ready(); }
+awaitable::interface* awaitable::release() { return impl_.release(); }
 
-void hce::awaitable::await_suspend(std::coroutine_handle<> h) { 
+bool awaitable::await_ready() { return impl_->await_ready(); }
+
+void awaitable::await_suspend(std::coroutine_handle<> h) { 
     impl_->await_suspend(h); 
 }
 
-void hce::awaitable::wait() {
+void awaitable::wait() {
     HCE_MIN_METHOD_ENTER("wait");
     if(impl_ && !(impl_->awaited())) [[unlikely]] {
         if(coroutine::in()) [[unlikely]] { 
             // coroutine failed to `co_await` the awaitable
             std::stringstream ss;
-            ss << hce::coroutine::local()
+            ss << coroutine::local()
                << "did not call co_await on "
                << *this;
             HCE_FATAL_METHOD_BODY("wait",ss.str());
@@ -227,7 +231,9 @@ void hce::awaitable::wait() {
     }
 }
 
-void hce::awaitable::interface_deleter::operator()(interface* ptr) const noexcept {
+void awaitable::interface_deleter::operator()(interface* ptr) const noexcept {
     ptr->~interface(); // call destructor
     ptr->operator delete(ptr);  // call custom delete 
 }
+
+} // hce

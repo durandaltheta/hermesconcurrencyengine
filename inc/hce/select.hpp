@@ -9,39 +9,9 @@
 #include "hce/chrono.hpp"
 
 namespace hce {
-namespace detail {
-namespace select {
-
-struct callback {
-    virtual ~callback(){}
-    virtual void call() = 0;
-};
-
-template <typename T> {
-struct callback_send : 
-    channel::detail::select::clause::send,
-    callback
-{
-    virtual ~callback_send(){}
-    inline void call() override { callback(); }
-    std::unique_ptr<detail::select::callback> callback;
-}
-
-template <typename T> {
-struct callback_recv : 
-    channel::detail::select::clause::recv,
-    callback
-{
-    virtual ~callback_recv(){}
-    inline void call() override { callback(); }
-    std::unique_ptr<detail::select::callback> callback;
-}
-
-} // select 
-} // detail
 
 /**
- @brief register with multiple channels for send or receive
+ @brief register with multiple channels for send or receive 
 
  Example:
  ```
@@ -50,21 +20,22 @@ struct callback_recv :
      hce::select select;
      int i;
      std::string s = "hello";
-     bool done = false
+     bool done = false;
+     auto timeout = hce::chrono::milliseconds(1000);
+
+     // build our channel requests
+     select.recv(*ich, i, [&]{ 
+         std::cout << "received int: " << i << std::endl;
+     });
+
+     select.send(*sch, s, [&]{ 
+         done = true; 
+         std::cout << "sent std::string: " << s << std::endl;
+     });
 
      while(!done) {
-         // build our channel requests
-         select.recv(*ich, i, [&]{ 
-             std::cout << "received int: " << i << std::endl;
-         });
-
-         select.send(*sch, s, [&]{ 
-             done = true; // we can access outside context
-             std::cout << "sent std::string: " << s << std::endl;
-         });
-
-         if(!select.call(co_await select.wait())) {
-            // we were all canceled
+         if(co_await select.wait(timeout) > -1) {
+            // all clauses failed or timeout
             co_return false;
          }
      }
@@ -74,12 +45,18 @@ struct callback_recv :
  ```
  */
 struct select {
-    /// register a clause in the select
-    select& clause(std::unique_ptr<channel::select::clause::base> ca);
+    /**
+     @brief register a send clause and return the index 
 
-    /// register a send clause
-    template <typename T, typename CALLBACK>
-    select& send(channel::interface<T>& ch, T&& src, CALLBACK&& cb) {
+     WARNING: callbacks are NOT coroutines.
+
+     @param ch the channel to receive from 
+     @param src the channel input to read from
+     @param cb the callback to execute on success
+     @param optional arguments for the callback
+     */
+    template <typename T, typename CALLBACK, typename... As>
+    int send(channel::interface<T>& ch, T&& src, CALLBACK&& cb, As&&... as) {
         channel::request::op_e op;
 
         if constexpr (std::is_rvalue_reference_v<decltype(src)>) {
@@ -92,14 +69,27 @@ struct select {
         channel::request r{ op, &src, &group, idx };
 
         return clause({ 
-            new callback_send<unqualified<CALLBACK>>>(
-                std::forward<CALLBACK>(cb), ch, r);
+            new callback_send<>>(
+                package_callback(
+                    std::forward<CALLBACK>(cb), 
+                    std::forward<As>(as)...),
+                ch, 
+                r);
         });
     }
 
-    /// register a receive clause
-    template <typename T, typename CALLBACK>
-    select& recv(channel::interface<T>& ch, T& dest, CALLBACK&& cb) {
+    /**
+     @brief register a receive clause and return the index 
+
+     WARNING: callbacks are NOT coroutines.
+
+     @param ch the channel to receive from 
+     @param dest the channel output to write to 
+     @param cb the callback to execute on success
+     @param optional arguments for the callback
+     */
+    template <typename T, typename CALLBACK, typename... As>
+    int recv(channel::interface<T>& ch, T& dest, CALLBACK&& cb, As&&... as) {
         int idx = static_cast<int>(clauses.size());
 
         channel::request r{ 
@@ -111,9 +101,16 @@ struct select {
 
         return clause({ 
             new callback_recv<unqualified<CALLBACK>>>(
-                std::forward<CALLBACK>(cb), ch, r);
+                package_callback(
+                    std::forward<CALLBACK>(cb), 
+                    std::forward<As>(as)...),
+                ch, 
+                r);
         });
     }
+
+    /// register a clause in the select
+    int clause(std::unique_ptr<channel::select::clause::base> ca);
 
     /*
      returns an awaitable that parks until exactly one case wins.
@@ -121,18 +118,27 @@ struct select {
      The select object must remain alive until the awaitable completes.
      Result is the winning case index, or -1 if every case failed.
 
+     When this returns >-1, the associated clause won and its callback executed.
+
      @param timeout optional timeout duration 
      */
     hce::awt<int> wait(hce::chrono::duration timeout = hce::chrono::duration());
 
-    /**
-     @brief call the selected callback, if any 
-     @param idx index of the callback returned from wait() awaitable 
-     @return true on success, else false
-     */
-    bool call(int idx);
-
 private:
+    template <typename CALLBACK, typename A, typename... As>
+    auto package_callback(CALLBACK&& cb, A&& a, As&&... as) {
+        // thunkize the result 
+        return [a = std::forward<A>(a), 
+                ...args = std::forward<Args>(args)]() mutable -> { 
+            cb(std::forward<A>(a), std::forward<As>(as)...);
+        };
+    }
+
+    template <typename CALLBACK>
+    auto package_callback(CALLBACK&& cb) {
+        return std::forward<CALLBACK>(cb);
+    }
+
     template <typename CALLBACK>
     struct callback_send : channel::detail::select::clause::send {
         template<typename CALLBACK_SHADOW, typename... As>

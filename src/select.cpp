@@ -10,11 +10,12 @@ namespace detail {
 namespace select {
 
 struct awt : hce::awaitable::lockable<hce::spinlock, detail::select::notify> {
-    explicit awt(std::unique_ptr<state> s, hce::chrono::duration t):
-          hce::awaitable::lockable<hce::spinlock, detail::select::notify>(
-              s->lk,
-              hce::awaitable::await::policy::defer,
-              hce::awaitable::resume::policy::no_lock),
+    explicit awt(select& p, std::unique_ptr<state> s, hce::chrono::duration t):
+        hce::awaitable::lockable<hce::spinlock, detail::select::notify>(
+            s->lk,
+            hce::awaitable::await::policy::defer,
+            hce::awaitable::resume::policy::no_lock),
+        parent(p),
         st(std::move(s)),
         timeout(std::move(t))
     { }
@@ -25,26 +26,26 @@ struct awt : hce::awaitable::lockable<hce::spinlock, detail::select::notify> {
     bool on_ready() {
         int parked_count = 0;
 
-        for(auto& c : *(st->clauses)) {
+        for (auto& c : *st->clauses) {
             if(c->activate(this)) { ++parked_count; }
         }
 
         st->parked = true;
 
-        if(st->group->is_claimed()) {
+        if (st->group->is_claimed()) { // some clause won during activate
             st->winner = st->group->winner_index();
             cancel_losers();
             st->completed = true;
             return true;
         }
 
-        if(parked_count == 0) {
+        if (parked_count == 0) { // every clause failed/closed
             st->winner = -1;
             st->completed = true;
             return true;
         }
 
-        return false;
+        return false; // waiting
     }
 
     void on_resume(void*) {
@@ -57,8 +58,15 @@ struct awt : hce::awaitable::lockable<hce::spinlock, detail::select::notify> {
 
     void on_won(int index) {
         st->winner = index;
+
         if(st->parked && !st->completed) {
             st->completed = true;
+
+            if(index > -1 && clauses[idx]) {
+                // execute the winning callback
+                parent.clauses[index]->call();
+            }
+
             this->resume(nullptr);
         }
     }
@@ -72,6 +80,7 @@ struct awt : hce::awaitable::lockable<hce::spinlock, detail::select::notify> {
         }
     }
 
+    select& parent;
     std::unique_ptr<state> st;
     hce::chrono::duration timeout;
     hce::sid sid;
@@ -81,9 +90,10 @@ struct awt : hce::awaitable::lockable<hce::spinlock, detail::select::notify> {
 } // select 
 } // detail
 
-select& select::clause(std::unique_ptr<channel::select::clause::base> ca) {
+int select::clause(std::unique_ptr<channel::select::clause::base> ca) {
+    int idx = static_cast<int>(clauses.size());
     clauses.push_back(std::move(ca));
-    return *this;
+    return idx;
 }
 
 hce::awt<int> select::wait(hce::chrono::duration timeout) {
@@ -99,7 +109,7 @@ hce::awt<int> select::wait(hce::chrono::duration timeout) {
             }
         }
 
-        static hce::co<bool> main_op(detail::select::awt* sawt) {
+        static hce::co<bool> op(detail::select::awt* sawt) {
             // sid of the running timer
             hce::sid sid;
 
@@ -134,18 +144,10 @@ hce::awt<int> select::wait(hce::chrono::duration timeout) {
     state->clauses = &clauses;
     return hce::awt<int>(
         hce::schedule(
-            local::op(new detail::select::awt(std::move(state)))));
-}
-    
-bool select::call(int idx) { 
-    bool result = false;
-
-    if(idx > -1 && clauses[idx]) {
-        ((detail::select::callback*)(clauses[idx].get()))->call();
-        result = true;
-    } 
-
-    return result;
+            local::op(new detail::select::awt(
+                *this,
+                std::move(state),
+                std::move(timeout)))));
 }
 
 } // hce

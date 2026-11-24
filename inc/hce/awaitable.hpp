@@ -260,6 +260,9 @@ struct awaitable : public printable {
      */
     bool valid() const;
 
+    /// return the pointer to underlying implementation
+    interface* get() const;
+
     /// return the underlying implementation
     interface& implementation();
 
