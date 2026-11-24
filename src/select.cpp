@@ -61,12 +61,6 @@ struct awt : hce::awaitable::lockable<hce::spinlock, detail::select::notify> {
 
         if(st->parked && !st->completed) {
             st->completed = true;
-
-            if(index > -1 && clauses[idx]) {
-                // execute the winning callback
-                parent.clauses[index]->call();
-            }
-
             // resume the blocking coroutine
             this->resume(nullptr);
         }
@@ -176,36 +170,16 @@ void select::cancel(const hce::awt<int>& awt) {
     }
 }
 
-select::no_callback_send::no_callback_send(
-        channel::base& ch, 
-        const channel::request& r) :
-    channel::detail::select::clause::send(ch, r)
-{ }
-
-select::no_callback_send::~no_callback_send(){}
-
-void select::no_callback_send::call(){}
-
-select::no_callback_recv::no_callback_recv(
-        channel::base& ch, 
-        const channel::request& r) :
-    channel::detail::select::clause::recv(ch, r)
-{ }
-
-select::no_callback_recv::~no_callback_recv(){}
-
-void select::no_callback_recv::call(){}
-
 std::unique_ptr<channel::select::clause::base> make_send(
         channel::base& ch, const channel::request& r)
 {
-    return { new no_callback_send(ch, r) };
+    return { new detail::channel::select::clause::send(ch, r) };
 }
 
 std::unique_ptr<channel::select::clause::base> select::make_recv(
             channel::base& ch, const channel::request& r)
 {
-    return { new no_callback_recv(ch, r) };
+    return { new detail::channel::select::clause::recv(ch, r) };
 }
 
 } // hce

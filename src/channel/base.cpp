@@ -110,12 +110,22 @@ hce::awt<bool> complete() {
 
 int partial::index() const { return idx; }
 
+send::send(channel::interface<T>& c, const channel::request& r) :
+    partial(c, r)
+{ }
+
 bool send::activate(select::notify* owner) {
     request.owner = owner;
     op = ch->select().send(request);
     iface = dynamic_cast<hce::awt<bool>::interface*>(op.get());
     return ch->select().activate(iface);
 }
+    
+bool send::is_send() const { return true; }
+
+recv::recv(channel::interface<T>& c, const channel::request& r) :
+    partial(c, r)
+{ }
 
 bool recv::activate(select::notify* owner) {
     request.owner = owner;
@@ -123,6 +133,8 @@ bool recv::activate(select::notify* owner) {
     iface = dynamic_cast<hce::awt<bool>::interface*>(op.get());
     return ch->select().activate(iface);
 }
+    
+bool recv::is_send() const { return false; }
 
 } // clause 
 } // select

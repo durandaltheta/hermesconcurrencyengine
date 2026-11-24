@@ -46,7 +46,6 @@ struct base {
     virtual ~base() = default;
     virtual bool activate(select::notify* owner) = 0; ///< activate the clause
     virtual void cancel() = 0; ///< cancel the clause
-    virtual void call() = 0; ///< the victorious clause callback
     int index = -1; ///< associated clause index
 };
 
@@ -389,21 +388,17 @@ struct partial : clause::base {
 };
 
 struct send : partial {
-    template<typename... As>
-    send(As&&... as) : partial(std::forward<As>(as)...) { }
-
+    send(channel::interface<T>& c, const channel::request& r);
     ~send() = default;
     bool activate(select::notify* owner) override;
-    bool is_send() { return true; }
+    bool is_send() const;
 };
 
 struct recv : partial {
-    template<typename... As>
-    recv(As&&... as) : partial(std::forward<As>(as)...) { }
-
+    recv(channel::interface<T>& c, const channel::request& r);
     ~recv() = default;
     bool activate(select::notify* owner) override;
-    bool is_send() { return false; }
+    bool is_send() const;
 };
 
 } // clause 
