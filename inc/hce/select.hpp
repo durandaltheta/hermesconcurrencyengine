@@ -164,6 +164,7 @@ private:
     std::unique_ptr<channel::select::clause::base> make_recv(
             channel::base& ch, const channel::request& r);
 
+    std::size_t activate_index = 0;
     channel::select::group group;
     std::vector<std::unique_ptr<clause::base>> clauses;
 };

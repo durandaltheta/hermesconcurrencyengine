@@ -33,6 +33,7 @@ endfunction()
 set(HCE_HEADER_FILES 
     ${LOGURU_DIR}/loguru.hpp
     ${HCE_INCLUDE_DIR}/hce/base.hpp
+    ${HCE_INCLUDE_DIR}/hce/utility/round_robin.hpp
     ${HCE_INCLUDE_DIR}/hce/utility.hpp
     ${HCE_INCLUDE_DIR}/hce/expected.hpp
     ${HCE_INCLUDE_DIR}/hce/cleanup.hpp

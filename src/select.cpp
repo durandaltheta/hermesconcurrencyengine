@@ -26,25 +26,40 @@ struct awt : hce::awaitable::lockable<hce::spinlock, detail::select::notify> {
     bool on_ready() {
         int parked_count = 0;
 
-        for(auto& c : *st->clauses) {
-            if(c->activate(this)) { ++parked_count; }
+        {
+            // activate the awaitables
+            hce::utility::round_robin rr(activate_index);
+            auto& idx = parent.activate_index;
+
+            std::size_t rem = clauses.size();
+
+            while(rem) {
+                if(clauses[idx]->activate(op)) { ++parked_count; }
+                activate_index = rr.next(clauses.size());
+                --rem;
+            }
+
+            // increment our next start index for the next awt
+            idx = rr.next(clauses.size());
         }
 
-        st->parked = true;
-
-        if(st->group->is_claimed()) { // some clause won during activate
+        if(st->group->is_claimed()) { 
+            // Some clause won during activate. This is a transient, race 
+            // condition edgecase.
             st->winner = st->group->winner_index();
             cancel_losers();
             st->completed = true;
             return true;
         }
 
-        if (parked_count == 0) { // every clause failed/closed
+        if(parked_count == 0) { 
+            // every clause failed/closed
             st->winner = -1;
             st->completed = true;
             return true;
         }
 
+        st->parked = true;
         return false; // waiting
     }
 
@@ -180,6 +195,9 @@ std::unique_ptr<channel::select::clause::base> select::make_recv(
             channel::base& ch, const channel::request& r)
 {
     return { new detail::channel::select::clause::recv(ch, r) };
+}
+
+void select::activate(hce::awt<bool>::interface* op) {
 }
 
 } // hce
