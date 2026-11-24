@@ -20,10 +20,9 @@ namespace hce {
      hce::select select;
      int i;
      std::string s = "hello";
-     bool done = false;
      auto timeout = hce::chrono::milliseconds(1000);
 
-     while(!done) {
+     while(true) {
          // build our clauses each time
          select.recv(ich, i); // gets index 0
          select.send(sch, s); // gets index 1
@@ -32,16 +31,15 @@ namespace hce {
          switch(result.index) {
              case 0:
                  std::cout << "received int: " << i << std::endl;
+                 break;
              case 1:
-                 done = true; 
                  std::cout << "sent std::string: " << s << std::endl;
+                 co_return true;
              default:
                  std::cout << "an error occurred: " << result.index << std::endl;
                  co_return false;
          }
      }
-            
-     co_return true;
  }
  ```
 
