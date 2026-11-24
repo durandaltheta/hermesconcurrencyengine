@@ -15,8 +15,8 @@ namespace hce {
 
  Example:
  ```
- hce::co<bool> foo(hce::channel::unbuffered<int>* ich, 
-                   hce::channel::unbuffered<std::string>* sch) {
+ hce::co<bool> foo(hce::channel::unbuffered<int>& ich, 
+                   hce::channel::unbuffered<std::string>& sch) {
      hce::select select;
      int i;
      std::string s = "hello";
@@ -25,8 +25,8 @@ namespace hce {
 
      while(!done) {
          // build our clauses each time
-         select.recv(*ich, i); // gets index 0
-         select.send(*sch, s); // gets index 1
+         select.recv(ich, i); // gets index 0
+         select.send(sch, s); // gets index 1
          auto result = co_await select.wait(timeout);
 
          switch(result.index) {
@@ -45,9 +45,16 @@ namespace hce {
  }
  ```
 
+ Because the above example uses a switch statement, each case remains as part 
+ of the coroutine, and allows the user to `co_await` further operations.
+
  In trivial cases a small switch statement is easy to read. However, select 
  send()/recv() methods allow for callbacks to be assigned. This is useful for 
- complex cases or if the user can't easily manage indexes:
+ complex cases or if the user can't easily manage indexes.
+
+ WARNING: callbacks are not coroutines!
+
+ Example:
  ```
  hce::co<bool> foo(hce::channel::unbuffered<int>* ich, 
                    hce::channel::unbuffered<std::string>* sch) {
@@ -58,11 +65,11 @@ namespace hce {
      auto timeout = hce::chrono::milliseconds(1000);
 
      while(!done) {
-         select.recv(*ich, i, [&]{ 
+         select.recv(ich, i, [&]{ 
              std::cout << "received int: " << i << std::endl;
          });
 
-         select.send(*sch, s, [&]{ 
+         select.send(sch, s, [&]{ 
              done = true; 
              std::cout << "sent std::string: " << s << std::endl;
          });
