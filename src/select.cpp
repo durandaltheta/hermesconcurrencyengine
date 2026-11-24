@@ -26,7 +26,7 @@ struct awt : hce::awaitable::lockable<hce::spinlock, detail::select::notify> {
     bool on_ready() {
         int parked_count = 0;
 
-        for (auto& c : *st->clauses) {
+        for(auto& c : *st->clauses) {
             if(c->activate(this)) { ++parked_count; }
         }
 
@@ -54,7 +54,7 @@ struct awt : hce::awaitable::lockable<hce::spinlock, detail::select::notify> {
         st->completed = true;
     }
 
-    int get_result() { return st->winner; }
+    hce::select::result get_result() { return { st->winner }; }
 
     void on_won(int index) {
         st->winner = index;
@@ -67,6 +67,7 @@ struct awt : hce::awaitable::lockable<hce::spinlock, detail::select::notify> {
                 parent.clauses[index]->call();
             }
 
+            // resume the blocking coroutine
             this->resume(nullptr);
         }
     }
@@ -97,13 +98,13 @@ select::result::error_e select::result::status() {
     return index < 0 ? (result::error_e)index : result::error_e::ok;
 }
 
-int select::clause(std::unique_ptr<channel::select::clause::base> ca) {
+int select::clause(std::unique_ptr<channel::select::clause::base> cb) {
     int idx = static_cast<int>(clauses.size());
     clauses.push_back(std::move(ca));
     return idx;
 }
 
-hce::awt<int> select::wait(hce::chrono::duration timeout) {
+hce::awt<hce::select::result> select::wait(hce::chrono::duration timeout) {
     struct local {
         static hce::co<void> timer_op(detail::select::awt* sawt, 
                                       hce::awt<bool> timer) 
@@ -132,7 +133,7 @@ hce::awt<int> select::wait(hce::chrono::duration timeout) {
                 timer_co_awt = hce::schedule(timer_op(sawt, &timer_awt));
             }
 
-            // await on a select clause to succeed or all fail
+            // await till on_won() or everything is canceled
             bool result = co_await hce::awt<bool>(sawt);
 
             if(timer_awt.valid()) {
@@ -140,8 +141,14 @@ hce::awt<int> select::wait(hce::chrono::duration timeout) {
                 hce::timer::cancel(sid);
                 co_await std::move(timer_awt);
             }
+
+            // cleanup all our memory
+            for(auto& c : sawt->parent.clauses) {
+                auto partial = (channel::detail::select::clause::partial*)(c.get());
+                // properly deallocate internal awaitable
+                co_await partial->complete();
+            }
    
-            // cleanup our clauses
             parent.clauses.clear();
             co_return result;
         }
@@ -151,7 +158,7 @@ hce::awt<int> select::wait(hce::chrono::duration timeout) {
     auto state = std::make_unique<state>();
     state->group = &group;
     state->clauses = &clauses;
-    return hce::awt<int>(
+    return hce::awt<hce::select::result>(
         hce::schedule(
             local::op(new detail::select::awt(
                 *this,
@@ -165,6 +172,38 @@ void select::cancel(const hce::awt<int>& awt) {
     if(intf->group.try_claim((int)(select::result::error_e::user_cancelled))) {
         intf->cancel_losers();
     }
+}
+
+select::no_callback_send::no_callback_send(
+        channel::base& ch, 
+        const channel::request& r) :
+    channel::detail::select::clause::send(ch, r)
+{ }
+
+select::no_callback_send::~no_callback_send(){}
+
+void select::no_callback_send::call(){}
+
+select::no_callback_recv::no_callback_recv(
+        channel::base& ch, 
+        const channel::request& r) :
+    channel::detail::select::clause::recv(ch, r)
+{ }
+
+select::no_callback_recv::~no_callback_recv(){}
+
+void select::no_callback_recv::call(){}
+
+std::unique_ptr<channel::select::clause::base> make_send(
+        channel::base& ch, const channel::request& r)
+{
+    return { new no_callback_send(ch, r) };
+}
+
+std::unique_ptr<channel::select::clause::base> select::make_recv(
+            channel::base& ch, const channel::request& r)
+{
+    return { new no_callback_recv(ch, r) };
 }
 
 } // hce

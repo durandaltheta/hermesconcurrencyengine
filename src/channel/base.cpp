@@ -37,11 +37,9 @@ int group::winner_index() const {
 namespace detail {
 namespace send {
 
-base::base(transfer t, select::group* g, int idx, select::notify* own = nullptr) :
+base::base(transfer t, const channel::request& r) :
     tx(t),
-    group(g),
-    index(idx),
-    owner(own)
+    request(r)
 { }
 
 bool base::try_claim() { return group ? group->try_claim(index) : true; }
@@ -60,11 +58,9 @@ bool base::get_result() { return success; }
 
 namespace recv {
 
-base::base(void* d, select::group* g, int idx, select::notify* own = nullptr) :
+base::base(void* d, const channel::request& r) :
     destination(d),
-    group(g),
-    index(idx),
-    owner(own)
+    request(r)
 { }
 
 bool base::try_claim() { return group ? group->try_claim(index) : true; }
@@ -84,17 +80,32 @@ bool base::get_result() { return success; }
 namespace select {
 namespace clause {
 
-partial::partial(channel::interface<T>& c, const channel::select::request r&, int idx) :
+partial::partial(channel::interface<T>& c, const channel::select::request& r) :
     ch(&c), 
     request(r),
-    index(idx)
-{}
+    iface(ch.select().request(r))
+{
+}
+
+void ~partial::partial() {
+    if(iface) {
+        // if this is a non-coroutine, it will block, otherwise it will become 
+        // a fatal error
+        hce::awt<bool>(iface);
+    }
+}
 
 void partial::cancel() {
     if(iface && ch){ 
         ch->cancel(iface); 
         iface = nullptr;
     }
+}
+    
+hce::awt<bool> complete() {
+    auto i = iface;
+    iface = nullptr;
+    return { i };
 }
 
 int partial::index() const { return idx; }

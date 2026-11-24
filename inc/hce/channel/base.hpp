@@ -138,8 +138,13 @@ struct base : printable {
 
          Select awaitables can fail either due to cancel or due to race 
          conditions.
+
+         @param c a clause to select for 
+         @return an awaitable 
          */
-        virtual hce::awt<bool> request(const request& r) { return { }; }
+        virtual hce::awt<bool> request(const select::clause::base& cb) { 
+            return { }; 
+        }
 
         /**
          @brief activate a select awaitable
@@ -312,16 +317,14 @@ namespace awt {
 namespace send {
 
 struct base : hce::awt_interface<bool> {
-    base(transfer t, select::group* g, int idx, select::notify* own);
+    base(transfer t, const channel::request& r);
     bool try_claim();
     void on_resume(void* m) override;
     bool get_result();
 
     bool success = false;
     transfer tx;
-    select::group* group = nullptr;
-    int index = -1;
-    select::notify* owner = nullptr;
+    channel::request request;
 };
 
 template <typename LOCK>
@@ -341,16 +344,14 @@ struct interface : hce::awaitable::lockable<LOCK, base> {
 namespace recv {
 
 struct base : hce::awt_interface<bool> {
-    base(void* d, select::group* g, int idx, select::notify* own = nullptr);
+    base(void* d, const channel::request& r);
     bool try_claim();
     void on_resume(void* m) override;
     bool get_result();
 
     bool success = false;
     void* destination = nullptr;
-    select::group* group = nullptr;
-    int index = -1;
-    select::notify* owner = nullptr;
+    channel::request request;
 };
 
 template <typename LOCK>
@@ -374,13 +375,16 @@ namespace select {
 namespace clause {
 
 struct partial : clause::base {
-    partial(channel::interface<T>& c, const channel::request& r, int idx);
+    partial(channel::interface<T>& c, const channel::request& r);
     ~partial() = default;
     void cancel() override;
+    hce::awt<bool> complete();
     virtual bool is_send() = 0;
 
     hce::channel::base* ch;
     channel::request request;
+
+    // pointer to the channel allocated awaitable
     hce::awt<bool>::interface* iface = nullptr;
 };
 

@@ -37,8 +37,8 @@ namespace hce {
              std::cout << "sent std::string: " << s << std::endl;
          });
 
-         if(co_await select.wait(timeout) < 0) {
-            std::cout << "all clauses failed or timeout" << std::endl;
+         if(!co_await select.wait(timeout)) {
+            std::cout << "an error occurred" << std::endl;
             co_return false;
          }
      }
@@ -49,7 +49,7 @@ namespace hce {
  */
 struct select {
     /**
-     @brief utility object for interpretting results of a wait()
+     @brief object for interpretting results of a wait()
 
      Example:
      ```
@@ -89,8 +89,7 @@ struct select {
 
      @param ch the channel to receive from 
      @param src the channel input to read from
-     @param cb the callback to execute on success
-     @param optional arguments for the callback
+     @param as... an optional callback and its arguments to execute on success
      @return the index of the clause
      */
     template <typename T, typename CALLBACK, typename... As>
@@ -107,12 +106,7 @@ struct select {
         channel::request r{ op, &src, &group, idx };
 
         return clause({ 
-            new callback_send<>>(
-                package_callback(
-                    std::forward<CALLBACK>(cb), 
-                    std::forward<As>(as)...),
-                ch, 
-                r);
+            new make_send(ch, r,std::forward<As>(as)...);
         });
     }
 
@@ -123,12 +117,11 @@ struct select {
 
      @param ch the channel to receive from 
      @param dest the channel output to write to 
-     @param cb the callback to execute on success
-     @param optional arguments for the callback 
+     @param as... an optional callback and its arguments to execute on success
      @return the index of the clause
      */
-    template <typename T, typename CALLBACK, typename... As>
-    int recv(channel::interface<T>& ch, T& dest, CALLBACK&& cb, As&&... as) {
+    template <typename T, typename... As>
+    int recv(channel::interface<T>& ch, T& dest, As&&... as) {
         int idx = static_cast<int>(clauses.size());
 
         channel::request r{ 
@@ -139,21 +132,14 @@ struct select {
         };
 
         return clause({ 
-            new callback_recv<unqualified<CALLBACK>>>(
-                package_callback(
-                    std::forward<CALLBACK>(cb), 
-                    std::forward<As>(as)...),
-                ch, 
-                r);
+            new make_recv(ch, r, std::forward<As>(as)...);
         });
     }
 
     /**
-     @brief register a clause in the select 
-     @param c the clause 
-     @return the index of the clause 
+     @brief register some clause with the select
      */
-    int clause(std::unique_ptr<channel::select::clause::base> c);
+    int select::clause(std::unique_ptr<channel::select::clause::base> cb);
 
     /**
      returns an awaitable that parks until exactly one case wins.
@@ -165,7 +151,7 @@ struct select {
 
      @param timeout optional timeout duration 
      */
-    hce::awt<int> wait(hce::chrono::duration timeout = hce::chrono::duration());
+    hce::awt<result> wait(hce::chrono::duration timeout = hce::chrono::duration());
 
     /**
      @brief cancel a running select wait()
@@ -185,17 +171,24 @@ private:
         };
     }
 
-    template <typename CALLBACK>
-    auto package_callback(CALLBACK&& cb) {
-        return std::forward<CALLBACK>(cb);
-    }
+    struct no_callback_send : channel::detail::select::clause::send {
+        no_callback_send(channel::base& ch, const channel::request& r);
+        ~no_callback_send();
+        void call();
+    };
+
+    struct no_callback_recv : channel::detail::select::clause::recv {
+        no_callback_recv(channel::base& ch, const channel::request& r);
+        ~no_callback_recv(){}
+        void call();
+    };
 
     template <typename CALLBACK>
     struct callback_send : channel::detail::select::clause::send {
-        template<typename CALLBACK_SHADOW, typename... As>
-        callback_send(CALLBACK_SHADOW&& c, As&&... as) :
+        template<typename... As>
+        callback_send(CALLBACK&& c, As&&... as) :
             channel::detail::select::clause::send(std::forward<As>(as)...),
-            cb(std::forward<CALLBACK_SHADOW>(c))
+            cb(std::forward<CALLBACK>(c))
         { }
 
         ~callback_send(){}
@@ -206,10 +199,10 @@ private:
 
     template <typename CALLBACK>
     struct callback_recv : channel::detail::select::clause::recv {
-        template<typename CALLBACK_SHADOW, typename... As>
-        callback_recv(CALLBACK_SHADOW&& c, As&&... as) :
+        template<typename... As>
+        callback_recv(CALLBACK&& c, As&&... as) :
             channel::detail::select::clause::recv(std::forward<As>(as)...),
-            cb(std::forward<CALLBACK_SHADOW>(c))
+            cb(std::forward<CALLBACK>(c))
         { }
 
         ~callback_recv(){}
@@ -217,6 +210,38 @@ private:
 
         CALLBACK cb;
     };
+
+    std::unique_ptr<channel::select::clause::base> make_send(
+            channel::base& ch, const channel::request& r);
+
+    template <typename A, typename... As>
+    std::unique_ptr<channel::select::clause::base> make_send(
+            channel::base& ch, const channel::request& r, A&& a, As&&... as)
+    {
+        return { 
+            static_cast<channel::select::clause::base*>(new callback_send(
+                package_callback(std::forward<A>(a), std::forward<As>(as)...),
+                ch,
+                r
+            ))
+        };
+    }
+
+    std::unique_ptr<channel::select::clause::base> make_recv(
+            channel::base& ch, const channel::request& r);
+
+    template <typename A, typename... As>
+    std::unique_ptr<channel::select::clause::base> make_recv(
+            channel::base& ch, const channel::request& r, A&& a, As&&... as)
+    {
+        return { 
+            static_cast<channel::select::clause::base*>(new callback_recv(
+                package_callback(std::forward<A>(a), std::forward<As>(as)...),
+                ch,
+                r
+            ))
+        };
+    }
 
     channel::select::group group;
     std::vector<std::unique_ptr<clause::base>> clauses;
