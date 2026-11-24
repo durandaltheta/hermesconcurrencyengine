@@ -118,7 +118,7 @@ struct select {
         auto state = std::make_unique<state>();
         state->group = &group;
         state->clauses = &clauses;
-        return hce::awt<int>(new channel::select::impl(std::move(state)));
+        return hce::awt<int>(new channel::select::awt(std::move(state)));
     }
 
     /**

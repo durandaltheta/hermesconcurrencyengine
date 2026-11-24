@@ -21,33 +21,16 @@ namespace select {
 
 /// group used for managing selects
 struct group {
+    bool try_claim(int index);
+    bool is_claimed() const;
+    int winner_index() const;
+
     std::atomic<bool> claimed{false};
     std::atomic<int>  winner{-1};
-
-    bool try_claim(int index) {
-        bool expected = false;
-        if(claimed.compare_exchange_strong(
-                expected, true,
-                std::memory_order_acq_rel,
-                std::memory_order_acquire)) {
-            winner.store(index, std::memory_order_release);
-            return true;
-        }
-
-        return false;
-    }
-
-    bool is_claimed() const {
-        return claimed.load(std::memory_order_acquire);
-    }
-
-    int winner_index() const {
-        return winner.load(std::memory_order_acquire);
-    }
 };
 
 // Implemented by the select awaitable. A winning case calls on_won.
-struct notify {
+struct notify : hce::awt_interface<int> {
     virtual ~notify() = default;
     virtual void on_won(int index) = 0;
 };
@@ -318,35 +301,13 @@ private:
     void* source_;
 };
 
-template <typename LOCK>
-struct base_send_interface :
-    hce::awaitable::lockable<LOCK, hce::awt_interface<bool>>
-{
-    base_send_interface(LOCK& lk, transfer t, select::group* g, int idx,
-                        select::notify* own = nullptr) :
-          hce::awaitable::lockable<LOCK, hce::awt_interface<bool>>(
-              lk,
-              hce::awaitable::await::policy::defer,
-              hce::awaitable::resume::policy::no_lock),
-        tx(t),
-        group(g),
-        index(idx),
-        owner(own)
-    {}
+namespace send {
 
-    bool try_claim() {
-        return group ? group->try_claim(index) : true;
-    }
-
-    inline void on_resume(void* m) override {
-        if(m) {
-            tx.send(static_cast<void*>(m));
-            success = true;
-            if(owner){ owner->on_won(index); }
-        }
-    }
-
-    inline bool get_result() { return success; }
+struct base : hce::awt_interface<bool> {
+    base(transfer t, select::group* g, int idx, select::notify* own = nullptr);
+    bool try_claim();
+    void on_resume(void* m) override;
+    bool get_result();
 
     bool success = false;
     transfer tx;
@@ -356,34 +317,26 @@ struct base_send_interface :
 };
 
 template <typename LOCK>
-struct base_recv_interface :
-    hce::awaitable::lockable<LOCK, hce::awt_interface<bool>>
-{
-    base_recv_interface(LOCK& lk, void* d, select::group* g, int idx,
-                        select::notify* own = nullptr) :
-          hce::awaitable::lockable<LOCK, hce::awt_interface<bool>>(
-              lk,
-              hce::awaitable::await::policy::defer,
-              hce::awaitable::resume::policy::no_lock),
-        destination(d),
-        group(g),
-        index(idx),
-        owner(own)
-    {}
+struct interface : hce::awaitable::lockable<LOCK, base> {
+    template <typename... As>
+    interface(LOCK& lk, As&&... as) :
+        hce::awaitable::lockable<LOCK, send::base>(
+            lk,
+            hce::awaitable::await::policy::defer,
+            hce::awaitable::resume::policy::no_lock,
+            std::forward<As>(as)...)
+    { }
+};
 
-    bool try_claim() {
-        return group ? group->try_claim(index) : true;
-    }
+}
 
-    inline void on_resume(void* m) override {
-        if(m) {
-            static_cast<transfer*>(m)->send(destination);
-            success = true;
-            if(owner){ owner->on_won(index); }
-        }
-    }
+namespace recv {
 
-    inline bool get_result() { return success; }
+struct base : hce::awt_interface<bool> {
+    base(void* d, select::group* g, int idx, select::notify* own = nullptr);
+    bool try_claim();
+    void on_resume(void* m) override;
+    bool get_result();
 
     bool success = false;
     void* destination = nullptr;
@@ -392,121 +345,67 @@ struct base_recv_interface :
     select::notify* owner = nullptr;
 };
 
+template <typename LOCK>
+struct interface :
+    hce::awaitable::lockable<LOCK, recv::base>
+{
+    template <typename... As>
+    interface(LOCK& lk, As&&... as) :
+          hce::awaitable::lockable<LOCK, recv::base>(
+              lk,
+              hce::awaitable::await::policy::defer,
+              hce::awaitable::resume::policy::no_lock,
+              std::forward<As>(as)...)
+    { }
+};
+
+} // recv
+
 namespace select {
 namespace clause {
 
-struct impl : base {
+struct impl : clause::base {
+    impl(channel::interface<T>& c, const channel::select::request& r, int idx);
+    ~impl() = default;
+    void cancel() override;
+    int index() const override;
+
     hce::channel::base* ch;
     channel::select::request request;
-    hce::awt<bool> op;
+    int index;
     hce::awt<bool>::interface* iface = nullptr;
-
-    impl(channel::interface<T>& c, const channel::select::request r&)
-        : ch(&c), request(r) {}
-
-    void cancel() override {
-        if(iface && ch){ 
-            ch->cancel(iface); 
-            iface = nullptr;
-        }
-    }
-
-    int index() const override { return idx; }
 };
 
 struct send : impl {
     template<typename... As>
     send(As&&... as) : impl(std::forward<As>(as)...) { }
 
-    bool activate(select::notify* owner) override {
-        request.owner = owner;
-        op = ch->select().send(request);
-        iface = dynamic_cast<hce::awt<bool>::interface*>(&op.implementation());
-        return ch->select().activate(iface);
-    }
+    ~send() = default;
+    bool activate(select::notify* owner) override;
 };
 
 struct recv : impl {
     template<typename... As>
     recv(As&&... as) : impl(std::forward<As>(as)...) { }
 
-    bool activate(select::notify* owner) override {
-        request.owner = owner;
-        op = ch->select().recv(request);
-        iface = dynamic_cast<hce::awt<bool>::interface*>(&op.implementation());
-        return ch->select().activate(iface);
-    }
+    ~recv() = default;
+    bool activate(select::notify* owner) override;
 };
 
 } // clause
 
-struct impl : 
-    hce::awaitable::lockable<hce::spinlock, hce::awt_interface<int>>, 
-    select::notify
-{
-    std::unique_ptr<state> st;
-
-    explicit impl(std::unique_ptr<state> s):
-          hce::awaitable::lockable<hce::spinlock, hce::awt_interface<int>>(
-              s->lk,
-              hce::awaitable::await::policy::defer,
-              hce::awaitable::resume::policy::no_lock)
-        , st(std::move(s))
-    {}
-
-    static inline std::string info_name() { return "hce::channel::detail::select::impl"; }
-    inline std::string name() const { return impl::info_name(); }
-
-    bool on_ready() override {
-        int parked_count = 0;
-
-        for(auto& c : *(st->clauses)) {
-            if(c->activate(this)) { ++parked_count; }
-        }
-
-        st->parked = true;
-
-        if(st->group->is_claimed()) {
-            st->winner = st->group->winner_index();
-            cancel_losers();
-            st->completed = true;
-            return true;
-        }
-
-        if(parked_count == 0) {
-            st->winner = -1;
-            st->completed = true;
-            return true;
-        }
-
-        return false;
-    }
-
-    void on_resume(void*) override {
-        if(st->winner < 0) { st->winner = st->group->winner_index(); }
-        cancel_losers();
-        st->completed = true;
-    }
-
-    int get_result() override { return st->winner; }
-
-    void on_won(int index) override {
-        st->winner = index;
-        if(st->parked && !st->completed) {
-            st->completed = true;
-            this->resume(nullptr);
-        }
-    }
+struct awt : hce::awaitable::lockable<hce::spinlock, detail::select::notify> {
+    explicit awt(std::unique_ptr<state> s);
+    static std::string info_name();
+    std::string name() const;
+    bool on_ready() override; 
+    void on_resume(void*) override;
+    int get_result() override;
+    void on_won(int index) override;
 
 private:
-    void cancel_losers() {
-        int w = st->winner;
-
-        for(auto& c : *(st->clauses)) {
-            if(c->index() == w) { continue; }
-            c->cancel();
-        }
-    }
+    void cancel_losers();
+    std::unique_ptr<state> st;
 };
 
 } // detail

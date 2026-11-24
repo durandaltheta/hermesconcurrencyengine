@@ -22,13 +22,30 @@
 
 namespace hce {
 namespace channel {
+namespace detail {
+namespace unbuffered {
+
+struct base : channel::interface {
+    channel::operation request(const channel::request& r);
+
+protected:
+    virtual hce::awt<bool>::interface* send_deep_(const channel::request&) = 0;
+    virtual hce::awt<bool>::interface* send_shallow_(const channel::request&) = 0;
+    virtual hce::awt<bool>::interface* recv_(const channel::request&) = 0;
+    virtual result try_send_(const channel::request&) = 0;
+    virtual result try_recv_(const channel::request&) = 0;
+};
+
+} // unbuffered
+} // detail
 
 template <typename T, typename LOCK = hce::spinlock, typename ALLOCATOR = hce::pool_allocator<T>>
-struct unbuffered : channel::interface {
+struct unbuffered : detail::unbuffered::base {
     using self_type = unbuffered<T, LOCK, ALLOCATOR>;
     using value_type = T;
 
-    unbuffered() = default;
+    unbuffered() : select_(*this) { }
+
     unbuffered(const ALLOCATOR& allocator)
         : parked_send_(allocator)
         , parked_recv_(allocator)
@@ -67,46 +84,6 @@ struct unbuffered : channel::interface {
             parked_recv_.front()->resume(nullptr);
             parked_recv_.pop();
         }
-    }
-
-    inline channel::operation request(const channel::request& r) {
-        switch(r.op) {
-            case channel::request::op_e::send_deep:
-                return {
-                    new send_interface(
-                        *this, 
-                        detail::transfer(detail::pointer_send<const T&>, &s), 
-                        nullptr, 
-                        -1),
-                    channel::result::success
-                };
-            case channel::request::op_e::send_shallow:
-                return {
-                    new send_interface(
-                        *this, 
-                        detail::transfer(detail::pointer_send<T&&>, &s), 
-                        nullptr, 
-                        -1),
-                    channel::result::success
-                };
-            case channel::request::op_e::try_send_deep:
-                return { nullptr, try_send_(*((T*)(r.value))) };
-            case channel::request::op_e::try_send_deep:
-                return { nullptr, try_send_(std::move(*((T*)(r.value)))) };
-            case channel::request::op_e::recv:
-                return {
-                    new recv_interface(
-                        *this, 
-                        static_cast<void*>(&r), 
-                        nullptr, 
-                        -1),
-                    channel::result::success
-                };
-            case channel::request::op_e::try_recv:
-                return { nullptr, try_recv_(*((T*)(r.value)))};
-            default:
-                return { nullptr, channel::operation::failure };
-        };
     }
 
     struct selector : channel::interface<T>::selector {
@@ -167,9 +144,8 @@ struct unbuffered : channel::interface {
         if(found) op->resume(nullptr);
     }
 
-private:
-    unbuffered() : select_(*this) { }
-
+protected:
+    result try_send_
     template <typename U>
     inline result try_send_(U&& s) {
         std::lock_guard<LOCK> lk(lk_);
@@ -221,6 +197,8 @@ private:
         }
         return result::failure;
     }
+
+private:
 
     struct send_interface : public detail::base_send_interface<LOCK> {
         send_interface(self_type& p, detail::transfer tx, select::group* g, int idx)
