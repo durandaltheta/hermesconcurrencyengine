@@ -91,7 +91,7 @@ struct awt : hce::awaitable::lockable<hce::spinlock, detail::select::notify> {
 } // detail
 
 
-bool select::result::ok() { return index == (int)(result::error_e::ok); }
+bool select::result::operator bool() { return index >= 0; }
 
 select::result::error_e select::result::status() { 
     return index < 0 ? (result::error_e)index : result::error_e::ok;
