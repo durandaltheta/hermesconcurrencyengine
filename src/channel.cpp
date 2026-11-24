@@ -9,6 +9,11 @@ namespace hce {
 namespace channel {
 namespace select {
 
+void group::reset() {
+    claimed = false;
+    winner = -1;
+}
+
 bool group::try_claim(int index) {
     bool expected = false;
     if(claimed.compare_exchange_strong(

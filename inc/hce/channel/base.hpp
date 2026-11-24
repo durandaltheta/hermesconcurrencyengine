@@ -25,9 +25,10 @@ namespace select {
 
 /// group used for managing selects
 struct group {
-    bool try_claim(int index);
-    bool is_claimed() const;
-    int winner_index() const;
+    bool try_claim(int index); ///< try and claim at some index
+    bool is_claimed() const; ///< see if someone won
+    int winner_index() const; ///< get the winning index
+    void reset(); ///< reset everything
 
     std::atomic<bool> claimed{false};
     std::atomic<int>  winner{-1};

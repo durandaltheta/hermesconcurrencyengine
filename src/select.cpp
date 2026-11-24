@@ -92,8 +92,10 @@ hce::awt<int> select::wait(hce::chrono::duration timeout) {
                                       hce::awt<bool> timer) 
         {
             if(co_await std::move(timer)) {
-                // we timed out, time to cancel the select 
-                sawt->cancel_losers();
+                // we timed out, try to claim the group 
+                if(sawt->group->try_claim(-1)) {
+                    sawt->cancel_losers();
+                }
             }
         }
 
@@ -126,6 +128,7 @@ hce::awt<int> select::wait(hce::chrono::duration timeout) {
         }
     };
 
+    group.reset();
     auto state = std::make_unique<state>();
     state->group = &group;
     state->clauses = &clauses;

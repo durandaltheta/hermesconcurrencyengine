@@ -89,7 +89,7 @@ struct select {
         }
 
         int idx = static_cast<int>(clauses.size());
-        channel::request r{ op, &dest, group, idx };
+        channel::request r{ op, &dest, &group, idx };
 
         auto cl = new detail::select::callback_send<T>>(ch, r);
         cl->callback = callback_impl<CALLBACK>::make(std::forward<CALLBACK>(cb))
@@ -104,7 +104,7 @@ struct select {
         channel::request r{ 
             channel::request::op_e::recv, 
             &dest, 
-            group, 
+            &group, 
             idx 
         };
 
