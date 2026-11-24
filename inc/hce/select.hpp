@@ -139,14 +139,13 @@ struct select {
     int clause(std::unique_ptr<channel::select::clause::base> cb);
 
     /**
-     returns an awaitable that parks until exactly one case wins.
+     Returns an awaitable that parks until exactly one case wins.
 
      The select object must remain alive until the awaitable completes.
-     Result is the winning case index, or -1 if every case failed.
-
-     When this returns >-1, the associated clause won and its callback executed.
+     Result is the winning case index, or a negative index on cancel or timeout.
 
      @param timeout optional timeout duration 
+     @return an awaitable to block until a clause wins, timeout or cancel
      */
     hce::awt<result> wait(hce::chrono::duration timeout = hce::chrono::duration());
 
