@@ -23,19 +23,22 @@ namespace hce {
      bool done = false;
      auto timeout = hce::chrono::milliseconds(1000);
 
-     // build our channel requests
-     select.recv(*ich, i, [&]{ 
-         std::cout << "received int: " << i << std::endl;
-     });
-
-     select.send(*sch, s, [&]{ 
-         done = true; 
-         std::cout << "sent std::string: " << s << std::endl;
-     });
-
      while(!done) {
-         if(co_await select.wait(timeout) > -1) {
-            // all clauses failed or timeout
+         // build our clauses each time
+        
+         // register a receive clause
+         select.recv(*ich, i, [&]{ 
+             std::cout << "received int: " << i << std::endl;
+         });
+
+         // register a send clause
+         select.send(*sch, s, [&]{ 
+             done = true; 
+             std::cout << "sent std::string: " << s << std::endl;
+         });
+
+         if(co_await select.wait(timeout) < 0) {
+            std::cout << "all clauses failed or timeout" << std::endl;
             co_return false;
          }
      }
@@ -46,6 +49,40 @@ namespace hce {
  */
 struct select {
     /**
+     @brief utility object for interpretting results of a wait()
+
+     Example:
+     ```
+     hce::select select;
+
+     //... do select operations
+
+     if(hce::select::result result = co_await select.wait()) {
+        // success 
+     } else {
+        // handle result.error()
+     }
+     ```
+     */
+    struct result {
+        enum struct error_e : int {
+            timeout = -3,          ///< timeout occurred 
+            user_cancelled = -2    ///< user called select::cancel()
+            channel_cancelled = -1,///< underlying channels were cancelled
+            ok = 0,
+        };
+
+        /// return true if ok, else false
+        bool operator bool();
+
+        /// get the specific status
+        error_e status();
+
+        /// underlying index value
+        int index=-1;
+    };
+
+    /**
      @brief register a send clause and return the index 
 
      WARNING: callbacks are NOT coroutines.
@@ -54,6 +91,7 @@ struct select {
      @param src the channel input to read from
      @param cb the callback to execute on success
      @param optional arguments for the callback
+     @return the index of the clause
      */
     template <typename T, typename CALLBACK, typename... As>
     int send(channel::interface<T>& ch, T&& src, CALLBACK&& cb, As&&... as) {
@@ -86,7 +124,8 @@ struct select {
      @param ch the channel to receive from 
      @param dest the channel output to write to 
      @param cb the callback to execute on success
-     @param optional arguments for the callback
+     @param optional arguments for the callback 
+     @return the index of the clause
      */
     template <typename T, typename CALLBACK, typename... As>
     int recv(channel::interface<T>& ch, T& dest, CALLBACK&& cb, As&&... as) {
@@ -109,10 +148,14 @@ struct select {
         });
     }
 
-    /// register a clause in the select
-    int clause(std::unique_ptr<channel::select::clause::base> ca);
+    /**
+     @brief register a clause in the select 
+     @param c the clause 
+     @return the index of the clause 
+     */
+    int clause(std::unique_ptr<channel::select::clause::base> c);
 
-    /*
+    /**
      returns an awaitable that parks until exactly one case wins.
 
      The select object must remain alive until the awaitable completes.
@@ -123,6 +166,14 @@ struct select {
      @param timeout optional timeout duration 
      */
     hce::awt<int> wait(hce::chrono::duration timeout = hce::chrono::duration());
+
+    /**
+     @brief cancel a running select wait()
+
+     The caller is still responsible to await the awaitable (but it will return 
+     immediately).
+     */
+    void cancel(const hce::awt<int>&);
 
 private:
     template <typename CALLBACK, typename A, typename... As>

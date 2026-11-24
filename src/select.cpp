@@ -32,7 +32,7 @@ struct awt : hce::awaitable::lockable<hce::spinlock, detail::select::notify> {
 
         st->parked = true;
 
-        if (st->group->is_claimed()) { // some clause won during activate
+        if(st->group->is_claimed()) { // some clause won during activate
             st->winner = st->group->winner_index();
             cancel_losers();
             st->completed = true;
@@ -90,6 +90,13 @@ struct awt : hce::awaitable::lockable<hce::spinlock, detail::select::notify> {
 } // select 
 } // detail
 
+
+bool select::result::ok() { return index == (int)(result::error_e::ok); }
+
+select::result::error_e select::result::status() { 
+    return index < 0 ? (result::error_e)index : result::error_e::ok;
+}
+
 int select::clause(std::unique_ptr<channel::select::clause::base> ca) {
     int idx = static_cast<int>(clauses.size());
     clauses.push_back(std::move(ca));
@@ -103,7 +110,7 @@ hce::awt<int> select::wait(hce::chrono::duration timeout) {
         {
             if(co_await std::move(timer)) {
                 // we timed out, try to claim the group 
-                if(sawt->group->try_claim(-1)) {
+                if(sawt->group->try_claim((int)(select::result::error_e::timeout))) {
                     sawt->cancel_losers();
                 }
             }
@@ -133,7 +140,9 @@ hce::awt<int> select::wait(hce::chrono::duration timeout) {
                 hce::timer::cancel(sid);
                 co_await std::move(timer_awt);
             }
-            
+   
+            // cleanup our clauses
+            parent.clauses.clear();
             co_return result;
         }
     };
@@ -148,6 +157,14 @@ hce::awt<int> select::wait(hce::chrono::duration timeout) {
                 *this,
                 std::move(state),
                 std::move(timeout)))));
+}
+
+void select::cancel(const hce::awt<int>& awt) {
+    auto intf = (detail::select::awt*)(awt.get());
+
+    if(intf->group.try_claim((int)(select::result::error_e::user_cancelled))) {
+        intf->cancel_losers();
+    }
 }
 
 } // hce

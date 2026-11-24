@@ -135,6 +135,9 @@ struct base : printable {
 
          The returned awaitable is not started. The select calls activate() to 
          register it under the channel lock.
+
+         Select awaitables can fail either due to cancel or due to race 
+         conditions.
          */
         virtual hce::awt<bool> request(const request& r) { return { }; }
 

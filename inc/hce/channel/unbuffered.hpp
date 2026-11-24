@@ -160,25 +160,28 @@ private:
         inline bool on_ready() override {
             if(parent_.closed_flag_) { return true; }
 
+            // we lost, return immediately
+            if(this->group && this->group->is_claimed()) { return true; }
+
             while(parent_.parked_recv_.size()) {
                 auto* ri = static_cast<recv_interface*>(parent_.parked_recv_.front());
 
-                if(ri->group && ri->group->is_claimed()) {
-                    parent_.parked_recv_.pop();
-                    ri->resume(nullptr);
-                    continue;
-                }
-
-                if(ri->try_claim() && this->try_claim()) {
+                // claim both sides of the operation then complete it 
+                if(ri->try_claim()) {
+                    // This must succeed because we checked our group claim 
+                    // before entering the loop, and this entire function is 
+                    // behind the lock.
+                    this->try_claim(); 
                     parent_.parked_recv_.pop();
                     parent_.complete_recv(ri, this);
                     this->success = true;
                     if(this->owner) { this->owner->on_won(this->index); }
                     return true;
+                } else {
+                    // receive lost, cancel it
+                    parent_.parked_recv_.pop();
+                    ri->resume(nullptr);
                 }
-
-                parent_.parked_recv_.pop();
-                ri->resume(nullptr);
             }
 
             parent_.parked_send_.push_back(this);
@@ -201,34 +204,24 @@ private:
         inline bool on_ready() override {
             if(parent_.closed_flag_) { return true; }
 
+            // we lost, return immediately
+            if(this->group && this->group->is_claimed()) { return true; }
+
             while(parent_.parked_send_.size()) {
                 auto* si = static_cast<send_interface*>(parent_.parked_send_.front());
-
-                if(si->group && si->group->is_claimed()) {
-                    parent_.parked_send_.pop();
-                    si->resume(nullptr);
-                    continue;
-                }
-
-                if(si->try_claim() && this->try_claim()) {
+                
+                if(si->try_claim()) {
+                    this->try_claim(); 
                     parent_.parked_send_.pop();
                     parent_.complete_send(si, this);
                     this->success = true;
                     if(this->owner) { this->owner->on_won(this->index); }
                     return true;
-                }
-
-                if(this->group && this->group->is_claimed()) {
+                } else {
                     parent_.parked_send_.pop();
                     si->resume(nullptr);
-                    return true;
                 }
-
-                parent_.parked_send_.pop();
-                si->resume(nullptr);
             }
-
-            if(this->group && this->group->is_claimed()) { return true; }
 
             parent_.parked_recv_.push_back(this);
             return false;
