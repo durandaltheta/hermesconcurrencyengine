@@ -17,6 +17,10 @@
 
 namespace hce {
 namespace channel {
+
+/// standardized channel awaitable list
+using list = hce::list<hce::awt<bool>::interface*, hce::pool_allocator<T>>;
+
 namespace select {
 
 /// group used for managing selects
@@ -41,7 +45,7 @@ struct base {
     virtual ~base() = default;
     virtual bool activate(select::notify* owner) = 0;
     virtual void cancel() = 0;
-    virtual int index() const = 0;
+    int index = -1;
 };
 
 } // clause
@@ -304,7 +308,7 @@ private:
 namespace send {
 
 struct base : hce::awt_interface<bool> {
-    base(transfer t, select::group* g, int idx, select::notify* own = nullptr);
+    base(transfer t, select::group* g, int idx, select::notify* own);
     bool try_claim();
     void on_resume(void* m) override;
     bool get_result();
@@ -368,11 +372,9 @@ struct impl : clause::base {
     impl(channel::interface<T>& c, const channel::select::request& r, int idx);
     ~impl() = default;
     void cancel() override;
-    int index() const override;
 
     hce::channel::base* ch;
     channel::select::request request;
-    int index;
     hce::awt<bool>::interface* iface = nullptr;
 };
 
@@ -393,21 +395,6 @@ struct recv : impl {
 };
 
 } // clause
-
-struct awt : hce::awaitable::lockable<hce::spinlock, detail::select::notify> {
-    explicit awt(std::unique_ptr<state> s);
-    static std::string info_name();
-    std::string name() const;
-    bool on_ready() override; 
-    void on_resume(void*) override;
-    int get_result() override;
-    void on_won(int index) override;
-
-private:
-    void cancel_losers();
-    std::unique_ptr<state> st;
-};
-
 } // detail
 } // select
 } // channel 

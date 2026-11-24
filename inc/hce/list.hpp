@@ -66,7 +66,6 @@ struct list : public printable {
         node* next;
     };
 
-
     // forward iterator (node* under the hood)
     struct iterator {
         using iterator_category = std::forward_iterator_tag;

@@ -1,12 +1,12 @@
 #pragma once
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-// c++
 
 #include <vector>
 #include <type_traits>
 
 #include "hce/channel/base.hpp"
+#include "hce/chrono.hpp"
 
 namespace hce {
 namespace detail {
@@ -74,6 +74,10 @@ struct callback_recv :
  ```
  */
 struct select {
+    /// register a clause in the select
+    select& clause(std::unique_ptr<channel::select::clause::base> ca);
+
+    /// register a send clause
     template <typename T, typename CALLBACK>
     select& send(channel::interface<T>& ch, T&& src, CALLBACK&& cb) {
         channel::request::op_e op;
@@ -87,11 +91,12 @@ struct select {
         int idx = static_cast<int>(clauses.size());
         channel::request r{ op, &dest, group, idx };
 
-        auto clause = new detail::select::callback_send<T>>(ch, r);
-        clause->callback = callback_impl<CALLBACK>::make(std::forward<CALLBACK>(cb))
-        return append(clause);
+        auto cl = new detail::select::callback_send<T>>(ch, r);
+        cl->callback = callback_impl<CALLBACK>::make(std::forward<CALLBACK>(cb))
+        return clause({ cl });
     }
 
+    /// register a receive clause
     template <typename T, typename CALLBACK>
     select& recv(channel::interface<T>& ch, T& dest, CALLBACK&& cb) {
         int idx = static_cast<int>(clauses.size());
@@ -103,9 +108,9 @@ struct select {
             idx 
         };
 
-        auto clause = new detail::select::callback_recv<T>>(ch, r);
-        clause->callback = callback_impl<CALLBACK>::make(std::forward<CALLBACK>(cb))
-        return append(clause);
+        auto cl = new detail::select::callback_recv<T>>(ch, r);
+        cl->callback = callback_impl<CALLBACK>::make(std::forward<CALLBACK>(cb))
+        return clause({ cl });
     }
 
     /*
@@ -113,37 +118,19 @@ struct select {
 
      The select object must remain alive until the awaitable completes.
      Result is the winning case index, or -1 if every case failed.
+
+     @param timeout optional timeout duration 
      */
-    inline hce::awt<int> wait() {
-        auto state = std::make_unique<state>();
-        state->group = &group;
-        state->clauses = &clauses;
-        return hce::awt<int>(new channel::select::awt(std::move(state)));
-    }
+    hce::awt<int> wait(hce::chrono::duration timeout = hce::chrono::duration());
 
     /**
-     @brief call the selected callback 
-     
-     Callbacks are cleared after every call().
+     @brief call the selected callback, if any 
+     @param idx index of the callback returned from wait() awaitable 
+     @return true on success, else false
      */
-    inline bool call(int idx) { 
-        bool result = false;
-
-        if(idx > -1 && clauses[idx]) {
-            ((detail::select::callback*)(clauses[idx].get()))->call();
-            result = true;
-        } 
-
-        callbacks.clear();
-        return result;
-    }
+    bool call(int idx);
 
 private:
-    inline select& append_(clause::base* ca) {
-        clauses.push_back(std::unique_ptr<clause::base>(ca));
-        return *this;
-    }
-
     template <typename CALLBACK>
     struct callback_impl : detail::select::callback {
         static callback_impl<CALLBACK>* make(const CALLBACK& c) { 

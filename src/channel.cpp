@@ -1,12 +1,9 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
 // c++
-#include <utility>
-#include <iterator>
-#include <mutex>
-
-#include "hce/channel.hpp"
 #include "hce/fatal.hpp"
+#include "hce/channel.hpp"
+#include "hce/channel/unbuffered.hpp"
 
 namespace hce {
 namespace channel {
@@ -115,89 +112,142 @@ bool recv::activate(select::notify* owner) {
 }
 
 } // clause 
-
-awt::awt(std::unique_ptr<state> s):
-      hce::awaitable::lockable<hce::spinlock, detail::select::notify>(
-          s->lk,
-          hce::awaitable::await::policy::defer,
-          hce::awaitable::resume::policy::no_lock),
-    st(std::move(s))
-{}
-
-std::string awt::info_name() { return "hce::channel::detail::select::awt"; }
-std::string awt::name() const { return awt::info_name(); }
-
-bool awt::on_ready() {
-    int parked_count = 0;
-
-    for(auto& c : *(st->clauses)) {
-        if(c->activate(this)) { ++parked_count; }
-    }
-
-    st->parked = true;
-
-    if(st->group->is_claimed()) {
-        st->winner = st->group->winner_index();
-        cancel_losers();
-        st->completed = true;
-        return true;
-    }
-
-    if(parked_count == 0) {
-        st->winner = -1;
-        st->completed = true;
-        return true;
-    }
-
-    return false;
-}
-
-void awt::on_resume(void*) {
-    if(st->winner < 0) { st->winner = st->group->winner_index(); }
-    cancel_losers();
-    st->completed = true;
-}
-
-int awt::get_result() { return st->winner; }
-
-void awt::on_won(int index) {
-    st->winner = index;
-    if(st->parked && !st->completed) {
-        st->completed = true;
-        this->resume(nullptr);
-    }
-}
-
-void awt::cancel_losers() {
-    int w = st->winner;
-
-    for(auto& c : *(st->clauses)) {
-        if(c->index() == w) { continue; }
-        c->cancel();
-    }
-}
-
 } // select
 
 namespace unbuffered {
 
+base::base() : selector_(*this), locker_{*this} { }
+
 channel::operation base::request(const channel::request& r) {
     switch(r.op) {
         case channel::request::op_e::send_deep:
-            return { this->send_deep_(r), channel::result::success };
+            return { this->get_send_interface(r), channel::result::success };
         case channel::request::op_e::send_shallow:
-            return { this->send_shallow_(r), channel::result::success };
+            return { this->get_send_interface(r), channel::result::success };
         case channel::request::op_e::try_send_deep:
-            return { nullptr, this->try_send_deep_(r) };
-        case channel::request::op_e::try_send_deep:
-            return { nullptr, this->try_send_shallow_(r) };
+            return { nullptr, this->try_send_(r) };
+        case channel::request::op_e::try_send_shallow:
+            return { nullptr, this->try_send_(r) };
         case channel::request::op_e::recv:
-            return { this->recv_(r), channel::result::success };
+            return { this->get_recv_interface(r), channel::result::success };
         case channel::request::op_e::try_recv:
             return { nullptr, this->try_recv_(r) };
         default:
             return { nullptr, channel::operation::failure };
     }
+}
+    
+int base::size() const { return 0; }
+int base::used() const { return 0; }
+
+bool base::closed() const {
+    std::lock_guard<locker> lk(locker_);
+    return closed_flag_;
+}
+
+void base::close() {
+    std::lock_guard<locker> lk(locker_);
+    if(closed_flag_) return;
+    closed_flag_ = true;
+
+    while(parked_send_.size()) {
+        parked_send_.front()->resume(nullptr);
+        parked_send_.pop();
+    }
+
+    while(parked_recv_.size()) {
+        parked_recv_.front()->resume(nullptr);
+        parked_recv_.pop();
+    }
+}
+    
+void base::cancel(hce::awt<bool>::interface* op) {
+    if(!op){ return; }
+
+    std::lock_guard<locker> lk(locker_);
+    bool found = false;
+
+    parked_send_.remove_if([&](hce::awt<bool>::interface* i) {
+        if(i == op) { found = true; return true; }
+        return false;
+    });
+
+    if(!found) {
+        parked_recv_.remove_if([&](hce::awt<bool>::interface* i) {
+            if(i == op) { found = true; return true; }
+            return false;
+        });
+    }
+
+    if(found) op->resume(nullptr);
+}
+
+hce::awt<bool> base::selector::request(const request& r) {
+    return hce::awt<bool>(get_send_interface(r));
+}
+
+bool base::selector::activate(hce::awt<bool>::interface* op) {
+    if(!op) { return false; }
+
+    std::lock_guard<locker> lk(parent_.locker_);
+    return !static_cast<hce::awt_interface<bool>*>(op)->on_ready();
+}
+        
+base::selector::selector(interface<T>& p) : parent(p) { }
+
+void base::locker::lock() { parent_.lock(); }
+void base::locker::unlock() { parent_.lock(); }
+    
+channel::result base::try_send_(const channel::request& r) {
+    std::lock_guard<locker> lk(locker_);
+    if(closed_flag_) { return result::closed; }
+
+    auto tx = get_send_transfer(r);
+
+    while(parked_recv_.size()) {
+        auto* rb = static_cast<detail::recv::base*>(parked_recv_.front());
+        if(rb->group && rb->group->is_claimed()) {
+            parked_recv_.pop();
+            rb->resume(nullptr);
+            continue;
+        }
+        if(rb->try_claim()) {
+            parked_recv_.pop();
+            rb->resume(static_cast<void*>(&tx));
+            return result::success;
+        }
+        parked_recv_.pop();
+        rb->resume(nullptr);
+    }
+
+    return result::failure;
+}
+
+channel::result base::try_recv_(const channel::request& r) { 
+    std::lock_guard<locker> lk(locker_);
+
+    if(closed_flag_) { return result::closed; }
+
+    while(parked_send_.size()) {
+        auto* sb = static_cast<detail::send::base*>(parked_send_.front());
+
+        if(sb->group && sb->group->is_claimed()) {
+            parked_send_.pop();
+            sb->resume(nullptr);
+            continue;
+        }
+
+        if(sb->try_claim()) {
+            parked_send_.pop();
+            sb->resume(r.value);
+            return result::success;
+        }
+
+        parked_send_.pop();
+        sb->resume(nullptr);
+    }
+
+    return result::failure;
 }
 
 } // unbuffered
