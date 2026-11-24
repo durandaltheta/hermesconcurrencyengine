@@ -37,8 +37,9 @@ int group::winner_index() const {
 namespace detail {
 namespace send {
 
-base::base(transfer t, const channel::request& r) :
-    tx(t),
+base::base(const channel::request& r) :
+    r.move ? detail::transfer(detail::pointer_send<T&&>, r.value)
+           : detail::transfer(detail::pointer_send<const T&>, r.value),
     request(r)
 { }
 
@@ -58,8 +59,8 @@ bool base::get_result() { return success; }
 
 namespace recv {
 
-base::base(void* d, const channel::request& r) :
-    destination(d),
+base::base(const channel::request& r) :
+    destination(r.value),
     request(r)
 { }
 

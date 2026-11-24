@@ -82,6 +82,9 @@ struct unbuffered : detail::unbuffered::base {
     using self_type = unbuffered<T, LOCK>;
     using value_type = T;
 
+    /// bring templates into the current object context
+    using channel::interface<T>;
+
     unbuffered() : select_(*this) { }
     unbuffered(const self_type&) = delete;
     unbuffered(self_type&&) = delete;
@@ -103,23 +106,11 @@ struct unbuffered : detail::unbuffered::base {
 
 protected:
     hce::awt<bool>::interface* get_send_interface(const channel::request& r) {
-        return hce::awt<bool>(new send_interface(
-            &parent_,
-            r.move
-                ? detail::transfer(detail::pointer_send<T&&>, r.value)
-                : detail::transfer(detail::pointer_send<const T&>, r.value),
-            r.group,
-            r.index,
-            r.owner));
+        return hce::awt<bool>(new send_interface(&parent_, r));
     }
 
     hce::awt<bool>::interface* get_recv_interface(const channel::request& r) {
-        return hce::awt<bool>(new recv_interface(
-            &parent_,
-            r.value,
-            r.group,
-            r.index,
-            r.owner));
+        return hce::awt<bool>(new recv_interface(&parent_, r));
     }
 
     detail::transfer get_send_transfer(const channel::request& r) {
@@ -149,11 +140,8 @@ private:
     }
 
     struct send_interface : public detail::send::interface<LOCK> {
-        send_interface(self_type& p, 
-                       detail::transfer tx, 
-                       select::group* g, 
-                       int idx) :
-            detail::send::interface<LOCK>(p.lk_, tx, g, idx),
+        send_interface(self_type& p, const channel::request& r) :
+            detail::send::interface<LOCK>(p.lk_, r),
             parent_(p)
         {}
 
@@ -192,12 +180,8 @@ private:
     };
 
     struct recv_interface : public detail::recv::interface<LOCK> {
-        recv_interface(self_type& p, 
-                       void* destination, 
-                       select::group* g,
-                       int idx, 
-                       select::notify* own) :
-            detail::recv::interface<LOCK>(p.lk_, destination, g, idx, own),
+        recv_interface(self_type& p, const channel::request& r) :
+            detail::recv::interface<LOCK>(p.lk_, r),
             parent_(p)
         {}
 

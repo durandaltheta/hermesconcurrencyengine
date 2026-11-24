@@ -16,7 +16,6 @@
 #include "hce/printable.hpp"
 #include "hce/type.hpp"
 #include "hce/memory.hpp"
-#include "hce/atomic.hpp"
 #include "hce/alloc.hpp"
 #include "hce/circular_buffer.hpp"
 #include "hce/coroutine.hpp"
@@ -33,24 +32,22 @@ namespace hce {
 /** 
  @brief communication object which can represent any object which implements channel::interface<T>
 
- This object is essentially a sanitized 
- `std::shared_ptr<hce::channel::interface<T>>`, with helper construction 
- functions and convenience operators. Its also convient because of its short 
- name/namespace and direct method access, allowing it to be easily used and 
- passed around in coroutines without added template complexity or memory 
- indirection considerations (no `*` or `->` operator usage). Just make copies of 
- an instantiated `hce::chan<T>` and call its methods directly.
+ This object is a sanitized `std::shared_ptr<hce::channel::interface<T>>`, with 
+ helper construction functions and convenience operators. It is easily passed 
+ around in coroutines without added template complexity or memory indirection 
+ considerations (no `*` or `->` operator usage). Just make copies of an 
+ instantiated `hce::chan<T>` and call its methods directly.
 
  It's useful to point out that implementations of `hce::channel::interface<T>` 
- can actually be used without this shim if desired. An example of using channel 
- implementations directly would be to manage their allocated memory in an 
- `std::unique_ptr<hce::channel::interface<T>>` (or even direct construction) 
- allowing for some different designs, such as global singleton channels which 
- won't allow for context sharing. 
+ can actually be used without this shim if desired. 
 */
 template <typename T>
 struct chan : public channel::interface<T> {
-    typedef T value_type;
+    using self_type = chan<T>;
+    using value_type = T;
+
+    /// bring templates into the current object context
+    using channel::interface<T>;
 
     chan() = default;
     chan(const chan<T>& rhs) = default;
@@ -110,7 +107,6 @@ struct chan : public channel::interface<T> {
      @param as optional arguments for implementation constructor
      */
     template <typename LOCK=hce::spinlock, 
-              typename ALLOCATOR=hce::pool_allocator<T>,
               typename... As>
     inline chan<T>& construct(int sz=0, As&&... as) {
 #if 0
@@ -118,16 +114,16 @@ struct chan : public channel::interface<T> {
 #endif
             context_ = std::shared_ptr<channel::interface<T>>(
                 static_cast<channel::interface<T>*>(
-                    new hce::channel::unbuffered<T,LOCK,ALLOCATOR>(std::forward<As>(as)...)));
+                    new hce::channel::unbuffered<T,LOCK>(std::forward<As>(as)...)));
 #if 0
         } else if(sz < 0) {
             context_ = std::shared_ptr<channel::interface<T>>(
                 static_cast<channel::interface<T>*>(
-                    new hce::channel::unlimited<T,LOCK,ALLOCATOR>(std::forward<As>(as)...)));
+                    new hce::channel::unlimited<T,LOCK>(std::forward<As>(as)...)));
         } else {
             context_ = std::shared_ptr<channel::interface<T>>(
                 static_cast<channel::interface<T>*>(
-                    new hce::channel::buffered<T,LOCK,ALLOCATOR>(sz, std::forward<As>(as)...)));
+                    new hce::channel::buffered<T,LOCK>(sz, std::forward<As>(as)...)));
         }
 #endif
 
@@ -139,11 +135,10 @@ struct chan : public channel::interface<T> {
      @return the constructed chan<T>
      */
     template <typename LOCK=hce::spinlock, 
-              typename ALLOCATOR=hce::pool_allocator<T>, 
               typename... As>
     inline static chan<T> make(As&&... as) {
         chan<T> ch;
-        ch.construct<LOCK,ALLOCATOR>(std::forward<As>(as)...);
+        ch.construct<LOCK>(std::forward<As>(as)...);
         return ch;
     }
        
@@ -166,29 +161,17 @@ struct chan : public channel::interface<T> {
     inline void close() {
         return context_->close(); 
     }
-
-    inline hce::awt<bool> send(T&& s) {
-        return context_->send(std::move(s)); 
+    
+    inline hce::channel::operation request(const request& r) {
+        return context_->request(r); 
     }
-
-    inline hce::awt<bool> send(const T& s) {
-        return context_->send(s); 
+    
+    inline hce::channel::interace<T>::selector& select() {
+        return context_->select();
     }
-
-    inline hce::awt<bool> recv(T& r) {
-        return context_->recv(r); 
-    }
-
-    inline hce::yield<channel::result> try_send(const T& s) {
-        return context_->try_send(s);
-    }
-
-    inline hce::yield<channel::result> try_send(T&& s) {
-        return context_->try_send(std::move(s));
-    }
-
-    inline hce::yield<channel::result> try_recv(T& r) {
-        return context_->try_recv(r);
+   
+    inline void cancel(hce::awt<bool>::interface* op) { 
+        context_->cancel(op);
     }
 
 private:
