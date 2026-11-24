@@ -58,6 +58,8 @@ protected:
 
     virtual void lock() = 0;
     virtual void unlock() = 0;
+    virtual void complete_recv(void* resumed, void* opposite) = 0;
+    virtual void complete_send(void* resumed, void* opposite) = 0;
     virtual hce::awt<bool>::interface* get_send_interface(const channel::request& r) = 0;
     virtual hce::awt<bool>::interface* get_recv_interface(const channel::request& r) = 0;
     virtual detail::transfer get_send_transfer(const channel::request& r) = 0;
@@ -136,6 +138,16 @@ protected:
     }
 
 private:
+    void complete_recv(void* resumed, void* opposite) {
+        ((recv_interface*)resume)->resume(static_cast<void*>(
+            &(((send_interface)opposite)->tx)));
+    }
+
+    void complete_send(void* resumed, void* opposite) {
+        ((send_interface*)resumed)->resume(
+            ((recv_interface*)opposite)->destination);
+    }
+
     struct send_interface : public detail::send::interface<LOCK> {
         send_interface(self_type& p, 
                        detail::transfer tx, 
@@ -159,11 +171,12 @@ private:
 
                 if(ri->try_claim() && this->try_claim()) {
                     parent_.parked_recv_.pop();
-                    ri->resume(static_cast<void*>(&this->tx));
+                    parent_.complete_recv(ri, this);
                     this->success = true;
                     if(this->owner) { this->owner->on_won(this->index); }
                     return true;
                 }
+
                 parent_.parked_recv_.pop();
                 ri->resume(nullptr);
             }
@@ -190,6 +203,7 @@ private:
 
             while(parent_.parked_send_.size()) {
                 auto* si = static_cast<send_interface*>(parent_.parked_send_.front());
+
                 if(si->group && si->group->is_claimed()) {
                     parent_.parked_send_.pop();
                     si->resume(nullptr);
@@ -198,7 +212,7 @@ private:
 
                 if(si->try_claim() && this->try_claim()) {
                     parent_.parked_send_.pop();
-                    si->resume(this->destination);
+                    parent_.complete_send(si, this);
                     this->success = true;
                     if(this->owner) { this->owner->on_won(this->index); }
                     return true;
@@ -209,6 +223,7 @@ private:
                     si->resume(nullptr);
                     return true;
                 }
+
                 parent_.parked_send_.pop();
                 si->resume(nullptr);
             }
