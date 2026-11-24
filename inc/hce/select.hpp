@@ -46,7 +46,7 @@ namespace hce {
  ```
 
  Because the above example uses a switch statement, each case remains as part 
- of the coroutine, and allows the user to `co_await` further operations.
+ of the coroutine, and allows the user to use coroutine keywords.
 
  In trivial cases a small switch statement is easy to read. However, select 
  send()/recv() methods allow for callbacks to be assigned. This is useful for 
