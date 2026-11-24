@@ -69,6 +69,7 @@ set(HCE_HEADER_FILES
     #${HCE_INCLUDE_DIR}/hce/channel/buffered.hpp
     #${HCE_INCLUDE_DIR}/hce/channel/unlimited.hpp
     ${HCE_INCLUDE_DIR}/hce/channel.hpp
+    ${HCE_INCLUDE_DIR}/hce/select.hpp
     ${HCE_INCLUDE_DIR}/hce/threadpool/config.hpp
     ${HCE_INCLUDE_DIR}/hce/threadpool.hpp
     ${HCE_INCLUDE_DIR}/hce/thread_key_map.hpp
