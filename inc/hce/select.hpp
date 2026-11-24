@@ -89,11 +89,12 @@ struct select {
         }
 
         int idx = static_cast<int>(clauses.size());
-        channel::request r{ op, &dest, &group, idx };
+        channel::request r{ op, &src, &group, idx };
 
-        auto cl = new detail::select::callback_send<T>>(ch, r);
-        cl->callback = callback_impl<CALLBACK>::make(std::forward<CALLBACK>(cb))
-        return clause({ cl });
+        return clause({ 
+            new callback_send<unqualified<CALLBACK>>>(
+                std::forward<CALLBACK>(cb), ch, r);
+        });
     }
 
     /// register a receive clause
@@ -108,9 +109,10 @@ struct select {
             idx 
         };
 
-        auto cl = new detail::select::callback_recv<T>>(ch, r);
-        cl->callback = callback_impl<CALLBACK>::make(std::forward<CALLBACK>(cb))
-        return clause({ cl });
+        return clause({ 
+            new callback_recv<unqualified<CALLBACK>>>(
+                std::forward<CALLBACK>(cb), ch, r);
+        });
     }
 
     /*
@@ -132,16 +134,28 @@ struct select {
 
 private:
     template <typename CALLBACK>
-    struct callback_impl : detail::select::callback {
-        static callback_impl<CALLBACK>* make(const CALLBACK& c) { 
-            return new callback_impl<CALLBACK>( c );
-        }
+    struct callback_send : channel::detail::select::clause::send {
+        template<typename CALLBACK_SHADOW, typename... As>
+        callback_send(CALLBACK_SHADOW&& c, As&&... as) :
+            channel::detail::select::clause::send(std::forward<As>(as)...),
+            cb(std::forward<CALLBACK_SHADOW>(c))
+        { }
 
-        static callback_impl<CALLBACK>* make(CALLBACK&& c) { 
-            return new callback_impl<CALLBACK>( std::move(c) );
-        }
+        ~callback_send(){}
+        inline void call() { cb(); }
 
-        ~callback_impl(){}
+        CALLBACK cb;
+    };
+
+    template <typename CALLBACK>
+    struct callback_recv : channel::detail::select::clause::recv {
+        template<typename CALLBACK_SHADOW, typename... As>
+        callback_recv(CALLBACK_SHADOW&& c, As&&... as) :
+            channel::detail::select::clause::recv(std::forward<As>(as)...),
+            cb(std::forward<CALLBACK_SHADOW>(c))
+        { }
+
+        ~callback_recv(){}
         inline void call() { cb(); }
 
         CALLBACK cb;

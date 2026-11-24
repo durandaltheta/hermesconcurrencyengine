@@ -44,9 +44,10 @@ namespace clause {
 
 struct base {
     virtual ~base() = default;
-    virtual bool activate(select::notify* owner) = 0;
-    virtual void cancel() = 0;
-    int index = -1;
+    virtual bool activate(select::notify* owner) = 0; ///< activate the clause
+    virtual void cancel() = 0; ///< cancel the clause
+    virtual void call() = 0; ///< call the clause callback
+    int index = -1; ///< associated clause index
 };
 
 } // clause
@@ -369,9 +370,9 @@ struct interface :
 namespace select {
 namespace clause {
 
-struct impl : clause::base {
-    impl(channel::interface<T>& c, const channel::select::request& r, int idx);
-    ~impl() = default;
+struct partial : clause::base {
+    partial(channel::interface<T>& c, const channel::select::request& r, int idx);
+    ~partial() = default;
     void cancel() override;
 
     hce::channel::base* ch;
@@ -379,17 +380,17 @@ struct impl : clause::base {
     hce::awt<bool>::interface* iface = nullptr;
 };
 
-struct send : impl {
+struct send : partial {
     template<typename... As>
-    send(As&&... as) : impl(std::forward<As>(as)...) { }
+    send(As&&... as) : partial(std::forward<As>(as)...) { }
 
     ~send() = default;
     bool activate(select::notify* owner) override;
 };
 
-struct recv : impl {
+struct recv : partial {
     template<typename... As>
-    recv(As&&... as) : impl(std::forward<As>(as)...) { }
+    recv(As&&... as) : partial(std::forward<As>(as)...) { }
 
     ~recv() = default;
     bool activate(select::notify* owner) override;
