@@ -60,7 +60,7 @@ struct select {
      if(hce::select::result result = co_await select.wait()) {
         // success 
      } else {
-        // handle result.error()
+        // handle result.status()
      }
      ```
      */
