@@ -3,8 +3,7 @@
 #include <memory>
 #include <unordered_set>
 
-#include "hce/utility.hpp"
-#include "hce/logging.hpp"
+#include "hce/utility/logging.hpp"
 #include "hce/thread.hpp"
 #include "hce/scheduler.hpp"
 #include "hce/thread_key_map.hpp"

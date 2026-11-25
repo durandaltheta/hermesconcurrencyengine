@@ -5,10 +5,10 @@
 #include <mutex>
 #include <condition_variable>
 
+#include "hce/utility/list.hpp"
+#include "hce/utility/type.hpp"
 #include "hce/printable.hpp"
-#include "hce/type.hpp"
 #include "hce/atomic.hpp"
-#include "hce/list.hpp"
 
 namespace hce {
 

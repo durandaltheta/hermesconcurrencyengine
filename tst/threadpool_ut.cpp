@@ -1,5 +1,5 @@
+#include "hce/utility/logging.hpp"
 #include "hce/threadpool.hpp"
-#include "hce/logging.hpp"
 
 #include <gtest/gtest.h> 
 #include "test_helpers.hpp"

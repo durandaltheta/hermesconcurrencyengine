@@ -7,8 +7,8 @@
 #include <sstream>
 
 // local
+#include "hce/utility/type.hpp"
 #include "hce/printable.hpp"
-#include "hce/type.hpp"
 #include "hce/alloc.hpp"
 
 namespace hce {

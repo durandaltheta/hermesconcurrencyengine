@@ -1,5 +1,5 @@
 #include <new>
-#include "hce/cleanup.hpp"
+#include "hce/utility/cleanup.hpp"
 
 hce::cleanup::cleanup() : list_(nullptr) { }
 hce::cleanup::~cleanup(){}

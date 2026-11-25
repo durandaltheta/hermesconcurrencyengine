@@ -2,8 +2,8 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
 
+#include "hce/utility/logging.hpp"
 #include "hce/printable.hpp"
-#include "hce/logging.hpp"
 #include "hce/service.hpp"
 #include "hce/scheduler.hpp"
 #include "hce/threadpool.hpp"

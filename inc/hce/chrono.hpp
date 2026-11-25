@@ -8,13 +8,23 @@
  */
 #include <chrono>
 
-#include "hce/type.hpp"
+#include "hce/utility/type.hpp"
 
 namespace hce {
 namespace chrono {
 
-typedef std::chrono::steady_clock::duration duration;
-typedef std::chrono::steady_clock::time_point time_point;
+using duration = std::chrono::steady_clock::duration;
+using time_point = std::chrono::steady_clock::time_point;
+using nanoseconds = std::chrono::nanoseconds;
+using microseconds = std::chrono::microseconds;
+using milliseconds = std::chrono::milliseconds;
+using seconds = std::chrono::seconds;
+using minutes = std::chrono::minutes;
+using hours = std::chrono::hours;
+using days = std::chrono::days;
+using weeks = std::chrono::weeks;
+using months = std::chrono::months;
+using years = std::chrono::years;
 
 /// acquire the current time using the library designated clock 
 static inline std::chrono::steady_clock::time_point now() {

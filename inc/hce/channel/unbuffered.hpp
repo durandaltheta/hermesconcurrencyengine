@@ -8,207 +8,214 @@
 #include <utility>
 #include <vector>
 #include <atomic>
+#include <optional>
 
 // local
-#include "hce/utility.hpp"
+#include "hce/utility/type.hpp"
+#include "hce/utility/list.hpp"
 #include "hce/printable.hpp"
-#include "hce/type.hpp"
 #include "hce/atomic.hpp"
 #include "hce/alloc.hpp"
-#include "hce/list.hpp"
 #include "hce/coroutine.hpp"
 #include "hce/channel/base.hpp"
 
 namespace hce {
 namespace channel {
+namespace detail {
+namespace unbuffered {
 
-/// unbuffered interface implementation
-template <typename T, typename LOCK=hce::spinlock, typename ALLOCATOR=hce::pool_allocator<T>>
-struct unbuffered : public interface<T> {
-    typedef T value_type;
+struct base : channel::interface {
+    base();
+    virtual ~base() = default;
+    int size() const;
+    int used() const;
+    bool closed() const;
+    void close();
+    channel::operation request(const channel::request& r);
+    void cancel(hce::awt<bool>::interface* op);
 
-    unbuffered() {
-    }
+    struct selector : channel::base::selector {
+        hce::awt<bool> request(const request& r);
+        bool activate(hce::awt<bool>::interface* op);
 
-    unbuffered(const ALLOCATOR& allocator) :
-        parked_send_(allocator),
-        parked_recv_(allocator)
-    {
-    }
+    private:
+        selector(interface<T>& p);
+        interface<T>& parent;
+        friend struct base;
+    };
 
-    unbuffered(const unbuffered<T,LOCK,ALLOCATOR>&) = delete;
-    unbuffered(unbuffered<T,LOCK,ALLOCATOR>&&) = delete;
+    channel::interface<T>::selector& select() { return selector_; }
 
-    inline virtual ~unbuffered(){ }
+protected:
+    struct locker {
+        void lock();
+        void unlock();
 
-    unbuffered<T,LOCK,ALLOCATOR>& operator=(const unbuffered<T,LOCK,ALLOCATOR>&) = delete;
-    unbuffered<T,LOCK,ALLOCATOR>& operator=(unbuffered<T,LOCK,ALLOCATOR>&&) = delete;
+        base& parent;
+        friend struct base;
+    };
+
+    virtual void lock() = 0;
+    virtual void unlock() = 0;
+    virtual void complete_recv(void* resumed, void* opposite) = 0;
+    virtual void complete_send(void* resumed, void* opposite) = 0;
+    virtual hce::awt<bool>::interface* get_send_interface(const channel::request& r) = 0;
+    virtual hce::awt<bool>::interface* get_recv_interface(const channel::request& r) = 0;
+    virtual detail::transfer get_send_transfer(const channel::request& r) = 0;
+    result try_send_(const channel::request& r);
+    result try_recv_(const channel::request& r);
+
+    bool closed_flag_ = false;
+    hce::channel::list parked_send_;
+    hce::channel::list parked_recv_;
+    selector selector_;
+    locker locker_;
+    friend struct locker;
+};
+
+} // unbuffered
+} // detail
+
+template <typename T, typename LOCK = hce::spinlock>
+struct unbuffered : detail::unbuffered::base {
+    using self_type = unbuffered<T, LOCK>;
+    using value_type = T;
+
+    /// bring templates into the current object context
+    using channel::interface<T>;
+
+    unbuffered() : select_(*this) { }
+    unbuffered(const self_type&) = delete;
+    unbuffered(self_type&&) = delete;
+    virtual ~unbuffered() = default;
+
+    self_type& operator=(const self_type&) = delete;
+    self_type& operator=(self_type&&) = delete;
 
     static inline std::string info_name() {
-        return type::templatize<T,LOCK,ALLOCATOR>("hce::channel::unbuffered");
+        return type::templatize<T, LOCK, ALLOCATOR>("hce::channel::unbuffered");
     }
 
-    inline std::string name() const {
-        return unbuffered<T,LOCK,ALLOCATOR>::info_name();
+    inline std::string name() const { return self_type::info_name(); }
+
+    inline const std::type_info& type_info() const { return typeid(self_type); }
+
+    inline void lock() { lk_.lock(); }
+    inline void unlock() { lk_.unlock(); }
+
+protected:
+    hce::awt<bool>::interface* get_send_interface(const channel::request& r) {
+        return hce::awt<bool>(new send_interface(&parent_, r));
     }
 
-    inline const std::type_info& type_info() const {
-        return typeid(unbuffered<T,LOCK,ALLOCATOR>);
+    hce::awt<bool>::interface* get_recv_interface(const channel::request& r) {
+        return hce::awt<bool>(new recv_interface(&parent_, r));
     }
 
-    inline int size() const {
-        return 0;
-    }
-
-    inline int used() const {
-        return 0;
-    }
-
-    inline bool closed() const {
-
-        std::lock_guard<LOCK> lk(lk_);
-        return closed_flag_;
-    }
-
-    inline void close() {
-        std::lock_guard<LOCK> lk(lk_);
-        if(!closed_flag_) [[likely]] {
-            closed_flag_ = true;
-
-            while(parked_send_.size()) {
-                parked_send_.front()->resume(nullptr);
-                parked_send_.pop();
-            }
-
-            while(parked_recv_.size()) {
-                parked_recv_.front()->resume(nullptr);
-                parked_recv_.pop();
-            }
+    detail::transfer get_send_transfer(const channel::request& r) {
+        switch(r.op) {
+            case channel::request::op_e::send_deep:
+                return { detail::pointer_send<const T&>, r.value };
+            case channel::request::op_e::send_shallow:
+                return { detail::pointer_send<T&&>, r.value };
+            case channel::request::op_e::try_send_deep:
+                return { detail::pointer_send<const T&>, r.value };
+            case channel::request::op_e::try_send_shallow:
+                return { detail::pointer_send<T&&>, r.value };
+            default: 
+                return { };
         }
-    }
-
-    inline awt<bool> send(const T& s) {
-        return hce::awt<bool>(new send_interface(
-            *this, detail::transfer(detail::pointer_send<const T&>,&s)));
-    }
-
-    inline awt<bool> send(T&& s) {
-        return hce::awt<bool>(new send_interface(
-            *this, detail::transfer(detail::pointer_send<T&&>,&s)));
-    }
-
-    inline awt<bool> recv(T& r) {
-        return hce::awt<bool>(new recv_interface(*this, (void*)&r));
-    }
-
-    inline hce::yield<result> try_send(const T& s) {
-        return try_send_(s);
-    }
-
-    inline hce::yield<result> try_send(T&& s) {
-        return try_send_(std::move(s));
-    }
-
-    inline hce::yield<result> try_recv(T& r) {
-        std::lock_guard<LOCK> lk(lk_);
-
-        if(closed_flag_) [[unlikely]] {
-            return { result::closed };
-        } else if(parked_send_.size()) [[likely]] {
-            parked_send_.front()->resume((void*)&r);
-
-            // return an awaitable which immediately returns true
-            return { result::success };
-        } else [[unlikely]] { return { result::failure }; }
     }
 
 private:
-    typedef unbuffered<T,LOCK,ALLOCATOR> PARENT;
-
-    struct send_interface :
-        public detail::base_send_interface<LOCK>
-    {
-        send_interface(PARENT& p, detail::transfer tx) :
-            detail::base_send_interface<LOCK>(p.lk_, tx),
-            parent_(p)
-        { }
-
-        static inline std::string info_name() {
-            return unbuffered<T,LOCK,ALLOCATOR>::info_name() +
-                   "::send_interface";
-        };
-
-        inline std::string name() const { return send_interface::info_name(); }
-
-        inline bool on_ready() {
-            if(parent_.closed_flag_) [[unlikely]] {
-                return true;
-            } else if(parent_.parked_recv_.size()) [[likely]] {
-                parent_.parked_recv_.front()->resume((void*)&(this->tx));
-                parent_.parked_recv_.pop();
-                this->success = true;
-                return true;
-            } else [[unlikely]] {
-                parent_.parked_send_.push_back(this);
-                return false;
-            }
-        }
-
-    private:
-        PARENT& parent_;
-    };
-
-    struct recv_interface : public detail::base_recv_interface<LOCK> {
-        recv_interface(PARENT& p, void* destination) :
-            detail::base_recv_interface<LOCK>(p.lk_, destination),
-            parent_(p)
-        { }
-
-        static inline std::string info_name() {
-            return unbuffered<T,LOCK,ALLOCATOR>::info_name() +
-                   "::recv_interface";
-        };
-
-        inline std::string name() const { return recv_interface::info_name(); }
-
-        inline bool on_ready() {
-            if(parent_.closed_flag_) [[unlikely]] {
-                return true;
-            } else if(parent_.parked_send_.size()) [[likely]] {
-                parent_.parked_send_.front()->resume(this->destination);
-                parent_.parked_send_.pop();
-                this->success = true;
-                return true;
-            } else [[unlikely]] {
-                parent_.parked_recv_.push_back(this);
-                return false;
-            }
-        }
-
-    private:
-        PARENT& parent_;
-    };
-
-    template <typename U>
-    inline hce::yield<result> try_send_(U&& s) {
-        std::lock_guard<LOCK> lk(lk_);
-
-        if(closed_flag_) [[unlikely]] {
-            return { result::closed };
-        } else if(parked_recv_.size()) [[likely]] {
-            detail::transfer tx(detail::pointer_send<U>,&s);
-            parked_recv_.front()->resume((void*)(&tx));
-            parked_recv_.pop();
-
-            return { result::success };
-        } else [[unlikely]] { return { result::failure }; }
+    void complete_recv(void* resumed, void* opposite) {
+        ((recv_interface*)resume)->resume(static_cast<void*>(
+            &(((send_interface)opposite)->tx)));
     }
 
+    void complete_send(void* resumed, void* opposite) {
+        ((send_interface*)resumed)->resume(
+            ((recv_interface*)opposite)->destination);
+    }
+
+    struct send_interface : public detail::send::interface<LOCK> {
+        send_interface(self_type& p, const channel::request& r) :
+            detail::send::interface<LOCK>(p.lk_, r),
+            parent_(p)
+        {}
+
+        inline bool on_ready() override {
+            if(parent_.closed_flag_) { return true; }
+
+            // we lost, return immediately
+            if(this->group && this->group->is_claimed()) { return true; }
+
+            while(parent_.parked_recv_.size()) {
+                auto* ri = static_cast<recv_interface*>(parent_.parked_recv_.front());
+
+                // claim both sides of the operation then complete it 
+                if(ri->try_claim()) {
+                    // This must succeed because we checked our group claim 
+                    // before entering the loop, and this entire function is 
+                    // behind the lock.
+                    this->try_claim(); 
+                    parent_.parked_recv_.pop();
+                    parent_.complete_recv(ri, this);
+                    this->success = true;
+                    if(this->owner) { this->owner->on_won(this->index); }
+                    return true;
+                } else {
+                    // receive lost, cancel it
+                    parent_.parked_recv_.pop();
+                    ri->resume(nullptr);
+                }
+            }
+
+            parent_.parked_send_.push_back(this);
+            return false;
+        }
+    private:
+        self_type& parent_;
+    };
+
+    struct recv_interface : public detail::recv::interface<LOCK> {
+        recv_interface(self_type& p, const channel::request& r) :
+            detail::recv::interface<LOCK>(p.lk_, r),
+            parent_(p)
+        {}
+
+        inline bool on_ready() override {
+            if(parent_.closed_flag_) { return true; }
+
+            // we lost, return immediately
+            if(this->group && this->group->is_claimed()) { return true; }
+
+            while(parent_.parked_send_.size()) {
+                auto* si = static_cast<send_interface*>(parent_.parked_send_.front());
+                
+                if(si->try_claim()) {
+                    this->try_claim(); 
+                    parent_.parked_send_.pop();
+                    parent_.complete_send(si, this);
+                    this->success = true;
+                    if(this->owner) { this->owner->on_won(this->index); }
+                    return true;
+                } else {
+                    parent_.parked_send_.pop();
+                    si->resume(nullptr);
+                }
+            }
+
+            parent_.parked_recv_.push_back(this);
+            return false;
+        }
+
+    private:
+        self_type& parent_;
+    };
+
     mutable LOCK lk_;
-    bool closed_flag_ = false;
-    hce::list<awt<bool>::interface*,ALLOCATOR> parked_send_;
-    hce::list<awt<bool>::interface*,ALLOCATOR> parked_recv_;
 };
 
-} // channel 
+} // channel
 } // hce

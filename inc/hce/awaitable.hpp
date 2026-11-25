@@ -4,10 +4,9 @@
 
 #include <coroutine>
 
+#include "hce/utility/type.hpp"
 #include "hce/printable.hpp"
-#include "hce/type.hpp"
 #include "hce/alloc.hpp"
-#include "hce/fatal.hpp"
 
 namespace hce {
 
@@ -259,6 +258,9 @@ struct awaitable : public printable {
      @return true if the awaitable manages an implementation, else false
      */
     bool valid() const;
+
+    /// return the pointer to underlying implementation
+    interface* get() const;
 
     /// return the underlying implementation
     interface& implementation();

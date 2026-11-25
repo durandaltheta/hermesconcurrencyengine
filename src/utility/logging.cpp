@@ -1,6 +1,6 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
-#include "hce/logging.hpp"
+#include "hce/utility/logging.hpp"
 #include "hce/thread.hpp"
 #include "hce/thread_key_map.hpp"
 

@@ -9,7 +9,7 @@
 #include <mutex>
 #include <condition_variable>
 
-#include "hce/utility.hpp"
+#include "hce/utility/traits.hpp"
 
 namespace hce {
 

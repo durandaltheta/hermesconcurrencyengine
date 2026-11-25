@@ -5,16 +5,16 @@
 #include <type_traits>
 #include <thread>
 
+#include "hce/utility/type.hpp"
+#include "hce/utility/synchronized_list.hpp"
+#include "hce/utility/traits.hpp"
 #include "hce/base.hpp"
 #include "hce/owner.hpp"
-#include "hce/utility.hpp"
 #include "hce/service.hpp"
 #include "hce/alloc.hpp"
 #include "hce/printable.hpp"
-#include "hce/type.hpp"
 #include "hce/atomic.hpp"
 #include "hce/circular_buffer.hpp"
-#include "hce/synchronized_list.hpp"
 #include "hce/coroutine.hpp"
 #include "hce/scheduler.hpp"
 #include "hce/blocking/config.hpp"

@@ -7,10 +7,10 @@
 #include <vector>
 #include <sstream>
 
+#include "hce/utility/logging.hpp"
 #include "hce/atomic.hpp"
 #include "hce/chrono.hpp"
 #include "hce/timer.hpp"
-#include "hce/logging.hpp"
 
 #include <gtest/gtest.h> 
 #include "test_helpers.hpp"

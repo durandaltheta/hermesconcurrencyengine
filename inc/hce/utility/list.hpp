@@ -6,9 +6,8 @@
 #include <iterator>
 #include <tuple>
 
-#include "hce/utility.hpp"
+#include "hce/utility/type.hpp"
 #include "hce/printable.hpp"
-#include "hce/type.hpp"
 #include "hce/alloc.hpp"
 
 namespace hce {
@@ -19,8 +18,9 @@ namespace hce {
  This object is optimized for the needs of this project without all the features
  of a more broad-use list. 
 
- This object is used in performance critical code of the coroutine scheduler, 
- design choices and optimizations are made with that in mind.
+ This object is used in performance critical code of the coroutine scheduler 
+ (and other locations), design choices and optimizations are made with that in 
+ mind.
 
  Design Aims:
  - singly linked (faster manipulation than doubly linked)
@@ -36,7 +36,7 @@ namespace hce {
  - singly linked (not a block of contiguous memory)
  - no support for sorting capabilities
  - arbitrary erasure is O(n) (singly linked); intended for non-hot paths
-   such as multiplex cleanup
+   such as select cleanup
 
  This is preferred by this project over `std::deque<T>` because that object 
  doesn't have fast concatenation which directly impacts the processing loop of 
@@ -65,7 +65,6 @@ struct list : public printable {
         T value;
         node* next;
     };
-
 
     // forward iterator (node* under the hood)
     struct iterator {
