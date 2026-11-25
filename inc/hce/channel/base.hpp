@@ -28,18 +28,31 @@ namespace group {
 /// group used for managing selects
 struct interface {
     virtual ~interface();
+    
+    virtual void lock() = 0; ///< acquire the lock
+    virtual void unlock() = 0; ///< release the lock
 
-    //-------------------------------------------------------------------------
-    // threadsafe operations
     bool is_claimed() const; ///< see if someone won
     int winner_index() const; ///< get the winning index
     void reset(); ///< reset everything
-    virtual void lock() = 0; ///< ac
-    virtual void unlock() = 0;
+    
+    /**
+     @brief try and claim all groups at some index while synchronizing *all* 
+     groups.
 
-    //-------------------------------------------------------------------------
-    // NON threadsafe operations (requires lock(), followed by unlock())
-    bool try_claim(int index) = 0; ///< try and claim at some index
+     WARNING: The group array *must* include this group.
+
+     WARNING: The group array must be pre-sorted in a consistent way to prevent 
+     deadlock.
+     */
+    static bool try_claim(group** groups, std::size_t count, int index);
+
+private:
+    /// implement compare_exchange_strong without use of atomic
+    bool compare_exchange_strong(bool& expected, bool desired) noexcept;
+
+    bool claimed = false;
+    int winner = -1;
 };
 
 } // group
@@ -323,17 +336,23 @@ private:
 };
 
 namespace awt {
+
+struct base : : hce::awt_interface<bool> {
+    base( const channel::request& r);
+    virtual ~base();
+    channel::request request;
+};
+
 namespace send {
 
-struct base : hce::awt_interface<bool> {
-    base(transfer t, const channel::request& r);
-    bool try_claim();
+struct base : awt::base {
+    base(const channel::request& r);
+    virtual ~base();
     void on_resume(void* m) override;
     bool get_result();
 
     bool success = false;
     transfer tx;
-    channel::request request;
 };
 
 template <typename LOCK>
@@ -352,15 +371,13 @@ struct interface : hce::awaitable::lockable<LOCK, base> {
 
 namespace recv {
 
-struct base : hce::awt_interface<bool> {
-    base(void* d, const channel::request& r);
-    bool try_claim();
+struct base : awt::base {
+    base(const channel::request& r);
     void on_resume(void* m) override;
     bool get_result();
 
     bool success = false;
     void* destination = nullptr;
-    channel::request request;
 };
 
 template <typename LOCK>
@@ -385,10 +402,11 @@ namespace group {
 
 template <typename LOCK>
 struct impl : group::interface {
+    ~impl(){}
+    void lock() { lk_.lock(); }
+    void unlock() { lk_.unlock(); }
 
-
-    std::atomic<bool> claimed{false};
-    std::atomic<int>  winner{-1};
+    LOCK lk_;
 };
 
 } // group

@@ -15,5 +15,11 @@ void cmp_swap(void*& a, void*& b);
 // falls back to std::sort for larger N.
 void pointers(void** arr, std::size_t n);
 
+// Compacts unique non-null pointers to the front of the array.
+// Returns the number of unique non-null pointers (the new logical size).
+// The remainder of the array is set to nullptr.
+// Safe to call with n == 0.
+std::size_t unique_non_null(void** arr, std::size_t n) noexcept;
+
 } // sort 
 } // hce

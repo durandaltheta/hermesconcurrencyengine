@@ -74,5 +74,31 @@ void pointers(void** arr, std::size_t n) {
     }
 }
 
+std::size_t unique_non_null(void** arr, std::size_t n) noexcept {
+    std::size_t unique = 0;
+    for (std::size_t i = 0; i < n; ++i) {
+        void* p = arr[i];
+        if (p == nullptr)
+            continue;
+
+        // Linear scan of the already-accepted uniques (tiny for N < 8)
+        bool seen = false;
+        for (std::size_t j = 0; j < unique; ++j) {
+            if (arr[j] == p) {
+                seen = true;
+                break;
+            }
+        }
+        if (!seen)
+            arr[unique++] = p;
+    }
+
+    // Clear the tail so later code can rely on nulls
+    for (std::size_t i = unique; i < n; ++i)
+        arr[i] = nullptr;
+
+    return unique;
+}
+
 } // sort 
 } // hce

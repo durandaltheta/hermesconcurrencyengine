@@ -1,13 +1,13 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
 #include <mutex>
+#include <cstdint>
 
 #include "hce/channel/base.hpp"
 
 namespace hce {
 namespace channel {
 namespace select {
-
 namespace group {
 
 void interface::~interface() { }
@@ -17,42 +17,73 @@ void interface::reset() {
     winner = -1;
 }
 
-bool interface::try_claim(int index) {
-    std::lock_guard<interface> lk(*this);
-
-    bool expected = false;
-    if(claimed.compare_exchange_strong(
-            expected, true,
-            std::memory_order_acq_rel,
-            std::memory_order_acquire)) {
-        winner.store(index, std::memory_order_release);
-        return true;
-    }
-
-    return false;
-}
-
 bool interface::is_claimed() const {
     std::lock_guard<interface> lk(*this);
     return claimed;
 }
 
 int interface::winner_index() const {
+    std::lock_guard<interface> lk(*this);
     return winner;
 }
+    
+bool try_claim(group** groups, std::size_t count, int index) {
+    bool result = false;
+    std::size_t i=0;
 
+    // lock left to right
+    for(; i<count; ++i) {
+        groups[i]->lock();
+    }
+
+    bool expected = false;
+
+    // attempt to claim 
+    if(compare_exchange_strong(expected, true) {
+        winner = index;
+        result = true;
+    }
+
+    // unlock right to left
+    for(; i>=0; --i) {
+        groups[i]->unlock();
+    }
+
+    return result;
 }
 
+bool compare_exchange_strong(bool& expected, bool desired) noexcept {
+    if(claimed == expected) {
+        claimed = desired;
+        return true;
+    }
+
+    expected = claimed;
+    return false;
+}
+
+} // group
 } // select
 
 namespace detail {
+
+namespace awt {
+
+base::base(const channel::request& r) :
+    request(r) 
+{ }
+
+base::~base() { }
+
 namespace send {
 
 base::base(const channel::request& r) :
+    awt::base(r),
     r.move ? detail::transfer(detail::pointer_send<T&&>, r.value)
-           : detail::transfer(detail::pointer_send<const T&>, r.value),
-    request(r)
+           : detail::transfer(detail::pointer_send<const T&>, r.value)
 { }
+
+base::~base() { }
 
 bool base::try_claim() { return group ? group->try_claim(index) : true; }
 
@@ -71,9 +102,11 @@ bool base::get_result() { return success; }
 namespace recv {
 
 base::base(const channel::request& r) :
-    destination(r.value),
-    request(r)
+    awt::base(r),
+    destination(r.value)
 { }
+
+base::~base() { }
 
 bool base::try_claim() { return group ? group->try_claim(index) : true; }
 
@@ -88,6 +121,7 @@ void base::on_resume(void* m) {
 bool base::get_result() { return success; }
 
 } // recv
+} // awt
 
 namespace select {
 namespace clause {
