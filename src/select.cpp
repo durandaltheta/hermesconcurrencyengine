@@ -2,6 +2,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
 
+#include "hce/utility/round_robin.hpp"
 #include "hce/select.hpp"
 #include "hce/timer.hpp"
 

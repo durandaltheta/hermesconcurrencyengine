@@ -8,7 +8,7 @@
  */
 #include <chrono>
 
-#include "hce/type.hpp"
+#include "hce/utility/type.hpp"
 
 namespace hce {
 namespace chrono {

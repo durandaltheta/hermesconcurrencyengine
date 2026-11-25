@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
+#include "hce/utility/logging.hpp"
 #include "hce/timer.hpp"
-#include "hce/logging.hpp"
 #include "hce/lifecycle.hpp"
 
 hce::chrono::time_point hce::timer::default_timeout_algorithm(

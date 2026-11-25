@@ -2,7 +2,7 @@ project(hce_ut)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(HCE_UT_BIN_DIR "${CMAKE_CURRENT_LIST_DIR}/ut_bin")
+set(HCE_UT_BIN_DIR "${CMAKE_CURRENT_LIST_DIR}")
 
 add_subdirectory(googletest)
 
@@ -12,6 +12,7 @@ set(HCE_UT_SOURCES
     #${CMAKE_CURRENT_LIST_DIR}/test_blocking_helpers.hpp
     #${CMAKE_CURRENT_LIST_DIR}/test_module_helpers.hpp
     #${CMAKE_CURRENT_LIST_DIR}/lifecycle_ut.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/sort_ut.cpp
     #${CMAKE_CURRENT_LIST_DIR}/atomic_ut.cpp 
     #${CMAKE_CURRENT_LIST_DIR}/memory_alloc_ut.cpp
     #${CMAKE_CURRENT_LIST_DIR}/allocator_ut.cpp 

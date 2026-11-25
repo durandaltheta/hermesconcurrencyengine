@@ -11,12 +11,11 @@
 #include <optional>
 
 // local
-#include "hce/utility.hpp"
+#include "hce/utility/type.hpp"
+#include "hce/utility/list.hpp"
 #include "hce/printable.hpp"
-#include "hce/type.hpp"
 #include "hce/atomic.hpp"
 #include "hce/alloc.hpp"
-#include "hce/list.hpp"
 #include "hce/coroutine.hpp"
 #include "hce/channel/base.hpp"
 

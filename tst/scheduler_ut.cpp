@@ -6,7 +6,7 @@
 #include <chrono>
 #include <vector>
 
-#include "hce/logging.hpp"
+#include "hce/utility/logging.hpp"
 #include "hce/atomic.hpp"
 #include "hce/scheduler.hpp"
 

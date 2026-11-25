@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: Apache-2.0
 //Author: Blayne Dennis 
 #include <gtest/gtest.h> 
-#include "hce/logging.hpp"
+#include "hce/utility/logging.hpp"
 #include "test_helpers.hpp"
 #include "test_blocking_helpers.hpp"
 

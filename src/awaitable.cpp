@@ -4,7 +4,7 @@
 #include <string>
 #include <sstream>
 
-#include "hce/logging.hpp"
+#include "hce/utility/logging.hpp"
 #include "hce/coroutine.hpp"
 #include "hce/awaitable.hpp"
 #include "hce/scheduler.hpp"

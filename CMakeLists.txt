@@ -33,14 +33,19 @@ endfunction()
 set(HCE_HEADER_FILES 
     ${LOGURU_DIR}/loguru.hpp
     ${HCE_INCLUDE_DIR}/hce/base.hpp
+    ${HCE_INCLUDE_DIR}/hce/utility/sort.hpp
     ${HCE_INCLUDE_DIR}/hce/utility/round_robin.hpp
-    ${HCE_INCLUDE_DIR}/hce/utility.hpp
+    ${HCE_INCLUDE_DIR}/hce/utility/type.hpp
+    ${HCE_INCLUDE_DIR}/hce/utility/export.hpp
+    ${HCE_INCLUDE_DIR}/hce/utility/fatal.hpp
+    ${HCE_INCLUDE_DIR}/hce/utility/logging.hpp
+    ${HCE_INCLUDE_DIR}/hce/utility/circular_buffer.hpp
+    ${HCE_INCLUDE_DIR}/hce/utility/synchronized_list.hpp
+    ${HCE_INCLUDE_DIR}/hce/utility/list.hpp
+    ${HCE_INCLUDE_DIR}/hce/utility/traits.hpp
     ${HCE_INCLUDE_DIR}/hce/expected.hpp
     ${HCE_INCLUDE_DIR}/hce/cleanup.hpp
     ${HCE_INCLUDE_DIR}/hce/printable.hpp
-    ${HCE_INCLUDE_DIR}/hce/type.hpp
-    ${HCE_INCLUDE_DIR}/hce/logging.hpp
-    ${HCE_INCLUDE_DIR}/hce/fatal.hpp
     ${HCE_INCLUDE_DIR}/hce/memory.hpp
     ${HCE_INCLUDE_DIR}/hce/alloc.hpp
     ${HCE_INCLUDE_DIR}/hce/service.hpp
@@ -49,8 +54,6 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/hce/atomic.hpp
     ${HCE_INCLUDE_DIR}/hce/id.hpp
     ${HCE_INCLUDE_DIR}/hce/chrono.hpp
-    ${HCE_INCLUDE_DIR}/hce/circular_buffer.hpp
-    ${HCE_INCLUDE_DIR}/hce/list.hpp
     ${HCE_INCLUDE_DIR}/hce/timer/config.hpp 
     ${HCE_INCLUDE_DIR}/hce/timer.hpp 
     ${HCE_INCLUDE_DIR}/hce/transmit.hpp 
@@ -59,7 +62,6 @@ set(HCE_HEADER_FILES
     ${HCE_INCLUDE_DIR}/hce/network/epoll_backend.hpp
     ${HCE_INCLUDE_DIR}/hce/network/socket.hpp
     ${HCE_INCLUDE_DIR}/hce/network.hpp
-    ${HCE_INCLUDE_DIR}/hce/synchronized_list.hpp
     ${HCE_INCLUDE_DIR}/hce/coroutine.hpp
     ${HCE_INCLUDE_DIR}/hce/awaitable.hpp
     ${HCE_INCLUDE_DIR}/hce/scheduler/config.hpp
@@ -81,10 +83,11 @@ set(HCE_HEADER_FILES
 
 set(HCE_SOURCE_FILES
     ${LOGURU_DIR}/loguru.cpp
-    ${HCE_SOURCE_DIR}/logging.cpp
-    ${HCE_SOURCE_DIR}/cleanup.cpp
+    ${HCE_SOURCE_DIR}/utility/sort.cpp
+    ${HCE_SOURCE_DIR}/utility/cleanup.cpp
+    ${HCE_SOURCE_DIR}/utility/fatal.cpp
+    ${HCE_SOURCE_DIR}/utility/logging.cpp
     ${HCE_SOURCE_DIR}/printable.cpp
-    ${HCE_SOURCE_DIR}/fatal.cpp
     ${HCE_SOURCE_DIR}/coroutine.cpp
     ${HCE_SOURCE_DIR}/awaitable.cpp
     ${HCE_SOURCE_DIR}/scheduler.cpp

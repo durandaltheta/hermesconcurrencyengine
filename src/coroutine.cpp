@@ -4,8 +4,8 @@
 #include <string>
 #include <sstream>
 
+#include "hce/utility/logging.hpp"
 #include "hce/atomic.hpp"
-#include "hce/logging.hpp"
 #include "hce/thread.hpp"
 #include "hce/memory.hpp"
 #include "hce/coroutine.hpp"

@@ -15,9 +15,9 @@
 #include <sstream>
 #include <vector>
 
-#include "hce/utility.hpp"
+#include "hce/utility/type.hpp"
+#include "hce/utility/traits.hpp"
 #include "hce/printable.hpp"
-#include "hce/type.hpp"
 #include "hce/memory.hpp"
 
 namespace hce {

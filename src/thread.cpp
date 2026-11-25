@@ -1,5 +1,5 @@
+#include "hce/utility/logging.hpp"
 #include "hce/thread.hpp"
-#include "hce/logging.hpp"
 
 hce::thread::local::table_t::table_t() : use_count(0) {
     lookup.fill(0);

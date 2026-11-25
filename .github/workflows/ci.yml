@@ -76,7 +76,7 @@ jobs:
       - name: Build and run unit tests
         run: |
           cmake --build build --target hce_ut --parallel $(nproc)
-          ./tst/ut_bin/hce_ut --gtest_color=yes
+          ./tst/hce_ut --gtest_color=yes
           cmake --build build --target hce_ex --parallel $(nproc)
 
       - name: Upload test logs on failure
@@ -145,7 +145,8 @@ jobs:
         run: |
           cmake --build build --target hce_ut --parallel $(nproc)
           ASAN_OPTIONS=detect_leaks=1:abort_on_error=1 \
-            ./tst/ut_bin/hce_ut --gtest_color=yes
+            ./tst/hce_ut --gtest_color=yes
+          cmake --build build --target hce_ex --parallel $(nproc)
 
   validate-basic:
     name: Validate script (basic)

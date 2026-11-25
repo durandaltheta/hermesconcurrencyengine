@@ -15,18 +15,17 @@
 #include <thread>
 
 // local 
+#include "hce/utility/type.hpp"
+#include "hce/utility/list.hpp"
 #include "hce/base.hpp"
 #include "hce/owner.hpp"
 #include "hce/printable.hpp"
-#include "hce/type.hpp"
-#include "hce/utility.hpp"
 #include "hce/service.hpp"
 #include "hce/atomic.hpp"
 #include "hce/memory.hpp"
 #include "hce/alloc.hpp"
 #include "hce/owner.hpp"
 #include "hce/thread.hpp"
-#include "hce/list.hpp"
 #include "hce/coroutine.hpp"
 #include "hce/awaitable.hpp"
 #include "hce/scheduler/config.hpp"

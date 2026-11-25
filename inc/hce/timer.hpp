@@ -11,7 +11,6 @@
 
 #include "hce/base.hpp"
 #include "hce/owner.hpp"
-#include "hce/utility.hpp"
 #include "hce/alloc.hpp"
 #include "hce/printable.hpp"
 #include "hce/thread.hpp"

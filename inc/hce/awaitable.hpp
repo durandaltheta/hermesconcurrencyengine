@@ -4,10 +4,9 @@
 
 #include <coroutine>
 
+#include "hce/utility/type.hpp"
 #include "hce/printable.hpp"
-#include "hce/type.hpp"
 #include "hce/alloc.hpp"
-#include "hce/fatal.hpp"
 
 namespace hce {
 

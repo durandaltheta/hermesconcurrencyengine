@@ -1,17 +1,25 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
+#include <mutex>
+
 #include "hce/channel/base.hpp"
 
 namespace hce {
 namespace channel {
 namespace select {
 
-void group::reset() {
+namespace group {
+
+void interface::~interface() { }
+
+void interface::reset() {
     claimed = false;
     winner = -1;
 }
 
-bool group::try_claim(int index) {
+bool interface::try_claim(int index) {
+    std::lock_guard<interface> lk(*this);
+
     bool expected = false;
     if(claimed.compare_exchange_strong(
             expected, true,
@@ -24,12 +32,15 @@ bool group::try_claim(int index) {
     return false;
 }
 
-bool group::is_claimed() const {
-    return claimed.load(std::memory_order_acquire);
+bool interface::is_claimed() const {
+    std::lock_guard<interface> lk(*this);
+    return claimed;
 }
 
-int group::winner_index() const {
-    return winner.load(std::memory_order_acquire);
+int interface::winner_index() const {
+    return winner;
+}
+
 }
 
 } // select

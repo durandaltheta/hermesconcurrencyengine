@@ -8,9 +8,8 @@
 #include <ostream>
 
 #include "loguru.hpp"
-#include "hce/utility.hpp"
+#include "hce/utility/type.hpp"
 #include "hce/printable.hpp"
-#include "hce/type.hpp"
 
 /**
  User source code compile time macro determining compiled log code. Keeping this 

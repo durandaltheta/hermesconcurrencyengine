@@ -3,9 +3,9 @@
 #include <mutex>
 #include <functional>
 
+#include "hce/utility/logging.hpp"
 #include "hce/atomic.hpp"
 #include "hce/core.hpp"
-#include "hce/logging.hpp"
 #include "hce/channel.hpp"
 
 #include <gtest/gtest.h>  

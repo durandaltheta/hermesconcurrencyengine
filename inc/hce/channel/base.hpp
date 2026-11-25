@@ -7,11 +7,11 @@
 #include <vector>
 
 // local
-#include "hce/utility.hpp"
+#include "hce/utility/list.hpp"
+#include "hce/utility/traits.hpp"
 #include "hce/atomic.hpp"
 #include "hce/printable.hpp"
-#include "hce/fatal.hpp"
-#include "hce/list.hpp"
+#include "hce/utility/fatal.hpp"
 #include "hce/circular_buffer.hpp"
 #include "hce/scheduler.hpp"
 
@@ -23,16 +23,26 @@ using list = hce::list<hce::awt<bool>::interface*, hce::pool_allocator<T>>;
 
 namespace select {
 
+namespace group {
+
 /// group used for managing selects
-struct group {
-    bool try_claim(int index); ///< try and claim at some index
+struct interface {
+    virtual ~interface();
+
+    //-------------------------------------------------------------------------
+    // threadsafe operations
     bool is_claimed() const; ///< see if someone won
     int winner_index() const; ///< get the winning index
     void reset(); ///< reset everything
+    virtual void lock() = 0; ///< ac
+    virtual void unlock() = 0;
 
-    std::atomic<bool> claimed{false};
-    std::atomic<int>  winner{-1};
+    //-------------------------------------------------------------------------
+    // NON threadsafe operations (requires lock(), followed by unlock())
+    bool try_claim(int index) = 0; ///< try and claim at some index
 };
+
+} // group
 
 // Implemented by the select awaitable. A winning case calls on_won.
 struct notify : hce::awt_interface<int> {
@@ -53,7 +63,7 @@ struct base {
 
 struct state {
     hce::spinlock lk;
-    select::group* group = nullptr; // owned by the select object
+    select::group::interface* group = nullptr; // owned by the select object
     std::vector<std::unique_ptr<clause::base>>* clauses = nullptr;
     int winner = -1;
     bool parked = false;
@@ -76,7 +86,7 @@ struct request {
 
     op_e op = op_e::unknown;
     void* value = nullptr; /// type erased value under operation
-    select::group* group = nullptr;
+    select::group::interface* group = nullptr;
     int index = -1;
     select::notify* notify = nullptr;
 };
@@ -371,6 +381,18 @@ struct interface :
 } // awt
 
 namespace select {
+namespace group {
+
+template <typename LOCK>
+struct impl : group::interface {
+
+
+    std::atomic<bool> claimed{false};
+    std::atomic<int>  winner{-1};
+};
+
+} // group
+
 namespace clause {
 
 struct partial : clause::base {

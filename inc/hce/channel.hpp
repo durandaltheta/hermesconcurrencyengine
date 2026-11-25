@@ -12,9 +12,8 @@
 #include <memory>
 
 // local
-#include "hce/utility.hpp"
+#include "hce/utility/type.hpp"
 #include "hce/printable.hpp"
-#include "hce/type.hpp"
 #include "hce/memory.hpp"
 #include "hce/alloc.hpp"
 #include "hce/circular_buffer.hpp"

@@ -1,8 +1,8 @@
 #include <string>
 #include <exception>
 
-#include "hce/fatal.hpp"
-#include "hce/logging.hpp"
+#include "hce/utility/fatal.hpp"
+#include "hce/utility/logging.hpp"
 
 namespace hce {
 namespace detail {

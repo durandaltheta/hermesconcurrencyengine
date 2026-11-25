@@ -7,10 +7,10 @@
 #include <coroutine>
 
 #include "hce/printable.hpp"
-#include "hce/type.hpp"
-#include "hce/cleanup.hpp"
-#include "hce/alloc.hpp"
-#include "hce/fatal.hpp"
+#include "hce/utility/cleanup.hpp"
+#include "hce/utility/alloc.hpp"
+#include "hce/utility/fatal.hpp"
+#include "hce/utility/type.hpp"
 
 namespace hce {
 
@@ -22,9 +22,8 @@ namespace coroutine {
 // always points to the coroutine running on this thread
 hce::coroutine*& tl_this_coroutine();
 
-}
-}
-
+} // detail
+} // coroutine
 
 /** 
  @brief interface coroutine type 

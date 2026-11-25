@@ -17,7 +17,6 @@
 #include <vector>
 #include <stdexcept>
 
-#include "hce/utility.hpp"
 #include "hce/chrono.hpp"
 #include "hce/thread.hpp"
 #include "hce/memory.hpp"

@@ -5,8 +5,8 @@
 #include <mutex>
 #include <sstream>
 #include "test_helpers.hpp"
+#include "hce/utility/logging.hpp"
 #include "hce/core.hpp"
-#include "hce/logging.hpp"
 #include "hce/channel.hpp"
 #include "hce/timer.hpp"
 #include "hce/blocking.hpp"
