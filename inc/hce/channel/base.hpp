@@ -22,7 +22,6 @@ namespace channel {
 using list = hce::list<hce::awt<bool>::interface*, hce::pool_allocator<T>>;
 
 namespace select {
-
 namespace group {
 
 /// group used for managing selects
@@ -35,55 +34,34 @@ struct interface {
     bool is_claimed() const; ///< see if someone won
     int winner_index() const; ///< get the winning index
     void reset(); ///< reset everything
-    
-    /**
-     @brief try and claim all groups at some index while synchronizing *all* 
-     groups.
-
-     WARNING: The group array *must* include this group.
-
-     WARNING: The group array must be pre-sorted in a consistent way to prevent 
-     deadlock.
-     */
-    static bool try_claim(group** groups, std::size_t count, int index);
 
 private:
-    /// implement compare_exchange_strong without use of atomic
-    bool compare_exchange_strong(bool& expected, bool desired) noexcept;
 
     bool claimed = false;
     int winner = -1;
 };
 
+/// implement compare_exchange_strong without use of atomic
+bool compare_exchange_strong(bool& expected, bool desired) noexcept;
+    
+/**
+ @brief try and claim all groups at some index while synchronizing *all* 
+ groups.
+ */
+static bool try_claim(interface** groups, std::size_t count, int index);
+
 } // group
 
+namespace notify {
+
 // Implemented by the select awaitable. A winning case calls on_won.
-struct notify : hce::awt_interface<int> {
+struct interface : hce::awt_interface<int> {
     virtual ~notify() = default;
     virtual void on_won(int index) = 0;
 };
 
-namespace clause {
-
-struct base {
-    virtual ~base() = default;
-    virtual bool activate(select::notify* owner) = 0; ///< activate the clause
-    virtual void cancel() = 0; ///< cancel the clause
-    int index = -1; ///< associated clause index
-};
-
-} // clause
-
-struct state {
-    hce::spinlock lk;
-    select::group::interface* group = nullptr; // owned by the select object
-    std::vector<std::unique_ptr<clause::base>>* clauses = nullptr;
-    int winner = -1;
-    bool parked = false;
-    bool completed = false;
-};
-
-} // select
+} // notify
+} // select 
 
 /// a request for a channel to do some operation
 struct request {
@@ -97,11 +75,10 @@ struct request {
         try_recv
     };
 
-    op_e op = op_e::unknown;
-    void* value = nullptr; /// type erased value under operation
-    select::group::interface* group = nullptr;
-    int index = -1;
-    select::notify* notify = nullptr;
+    op_e op = op_e::unknown; ///< what the operation wants to do
+    void* value = nullptr; ///< type erased value under operation
+    select::group::interface* group = nullptr; ///< group the request is part of
+    int index = -1; ///< group internal index
 };
 
 /// result of a channel try operation
@@ -118,6 +95,35 @@ struct operation {
     /// the immediate result, must be ignored in a blocking operation
     channel::result result = channel::result::closed; 
 };
+
+namespace select {
+namespace clause {
+
+struct base {
+    base(channel::base& c, const channel::request& r);
+    virtual ~base() = default;
+    bool activate(select::notify::interface* owner); ///< activate the clause
+    void cancel() override; ///< cancel the clause 
+    virtual bool is_send() = 0; ///< return if this is a send or receive
+    
+    int index = -1; ///< associated clause index
+    hce::channel::base* ch; ///< associated channel pointer 
+    channel::request request; ///< associated request 
+    hce::awt<bool> awt;
+};
+
+} // clause
+
+struct state {
+    hce::spinlock lk;
+    select::group::interface* group = nullptr; // owned by the select object
+    std::vector<std::unique_ptr<clause::base>>* clauses = nullptr;
+    int winner = -1;
+    bool parked = false;
+    bool completed = false;
+};
+
+} // select
 
 /// base channel interface
 struct base : printable {
@@ -341,6 +347,7 @@ struct base : : hce::awt_interface<bool> {
     base( const channel::request& r);
     virtual ~base();
     channel::request request;
+    select::notify::interface* owner = nullptr; ///< owner of this awaitable
 };
 
 namespace send {
@@ -409,35 +416,28 @@ struct impl : group::interface {
     LOCK lk_;
 };
 
+template <>
+struct impl<hce::spinlock> : group::interface {
+    ~impl(){}
+    void lock();
+    void unlock();
+
+    hce::spinlock lk_;
+};
+
 } // group
 
 namespace clause {
 
-struct partial : clause::base {
-    partial(channel::interface<T>& c, const channel::request& r);
-    ~partial() = default;
-    void cancel() override;
-    hce::awt<bool> complete();
-    virtual bool is_send() = 0;
-
-    hce::channel::base* ch;
-    channel::request request;
-
-    // pointer to the channel allocated awaitable
-    hce::awt<bool>::interface* iface = nullptr;
-};
-
-struct send : partial {
+struct send : clause::base {
     send(channel::interface<T>& c, const channel::request& r);
     ~send() = default;
-    bool activate(select::notify* owner) override;
     bool is_send() const;
 };
 
-struct recv : partial {
+struct recv : clause::base {
     recv(channel::interface<T>& c, const channel::request& r);
     ~recv() = default;
-    bool activate(select::notify* owner) override;
     bool is_send() const;
 };
 

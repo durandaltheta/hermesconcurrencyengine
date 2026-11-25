@@ -13,6 +13,7 @@ namespace group {
 void interface::~interface() { }
 
 void interface::reset() {
+    std::lock_guard<interface> lk(*this);
     claimed = false;
     winner = -1;
 }
@@ -27,16 +28,31 @@ int interface::winner_index() const {
     return winner;
 }
     
-bool try_claim(group** groups, std::size_t count, int index) {
-    bool result = false;
-    std::size_t i=0;
-
-    // lock left to right
-    for(; i<count; ++i) {
-        groups[i]->lock();
+bool compare_exchange_strong(bool& expected, bool desired) noexcept {
+    if(claimed == expected) {
+        claimed = desired;
+        return true;
     }
 
+    expected = claimed;
+    return false;
+}
+
+bool try_claim(group::interface** groups, std::size_t count, int index) {
+    bool result = false;
     bool expected = false;
+    std::size_t i=0; 
+
+    // filter out non-unique groups, the new sz may be smaller than cout
+    auto sz = hce::sort::unique_non_null(groups, count);
+
+    // sort the pointers smallest to largest
+    hce::sort::pointers(groups, sz);
+
+    // lock left to right
+    for(; i<sz; ++i) {
+        groups[i]->lock();
+    }
 
     // attempt to claim 
     if(compare_exchange_strong(expected, true) {
@@ -52,21 +68,11 @@ bool try_claim(group** groups, std::size_t count, int index) {
     return result;
 }
 
-bool compare_exchange_strong(bool& expected, bool desired) noexcept {
-    if(claimed == expected) {
-        claimed = desired;
-        return true;
-    }
-
-    expected = claimed;
-    return false;
-}
 
 } // group
 } // select
 
 namespace detail {
-
 namespace awt {
 
 base::base(const channel::request& r) :
@@ -84,8 +90,6 @@ base::base(const channel::request& r) :
 { }
 
 base::~base() { }
-
-bool base::try_claim() { return group ? group->try_claim(index) : true; }
 
 void base::on_resume(void* m) {
     if(m) {
@@ -108,8 +112,6 @@ base::base(const channel::request& r) :
 
 base::~base() { }
 
-bool base::try_claim() { return group ? group->try_claim(index) : true; }
-
 void base::on_resume(void* m) {
     if(m) {
         static_cast<transfer*>(m)->send(destination);
@@ -123,62 +125,45 @@ bool base::get_result() { return success; }
 } // recv
 } // awt
 
+namespace group {
+
+impl<hce::spinlock>::~impl(){}
+void impl<hce::spinlock>::lock() { lk_.lock(); }
+void impl<hce::spinlock>::unlock() { lk_.unlock(); }
+
+} // group
+
 namespace select {
 namespace clause {
 
-partial::partial(channel::interface<T>& c, const channel::select::request& r) :
+base::base(channel::interface<T>& c, const channel::select::request& r) :
     ch(&c), 
-    request(r),
-    iface(ch.select().request(r))
-{
-}
-
-void ~partial::partial() {
-    if(iface) {
-        // if this is a non-coroutine, it will block, otherwise it will become 
-        // a fatal error
-        hce::awt<bool>(iface);
-    }
-}
-
-void partial::cancel() {
-    if(iface && ch){ 
-        ch->cancel(iface); 
-        iface = nullptr;
-    }
-}
-    
-hce::awt<bool> complete() {
-    auto i = iface;
-    iface = nullptr;
-    return { i };
-}
-
-int partial::index() const { return idx; }
-
-send::send(channel::interface<T>& c, const channel::request& r) :
-    partial(c, r)
+    request(r)
 { }
 
-bool send::activate(select::notify* owner) {
-    request.owner = owner;
-    op = ch->select().send(request);
-    iface = dynamic_cast<hce::awt<bool>::interface*>(op.get());
-    return ch->select().activate(iface);
+void ~base::base() { }
+
+bool base::activate(select::notify::interface* owner) {
+    awt = ch->select().request(request);
+    dynamic_cast<channel::detail::awt::base>(awt.get())->owner = owner;
+    return ch->select().activate(awt.get());
 }
+
+void base::cancel() {
+    if(ch && awt.valid()){ 
+        ch->cancel(awt.get()); 
+    }
+}
+
+send::send(channel::interface<T>& c, const channel::request& r) :
+    base(c, r)
+{ }
     
 bool send::is_send() const { return true; }
 
 recv::recv(channel::interface<T>& c, const channel::request& r) :
-    partial(c, r)
+    base(c, r)
 { }
-
-bool recv::activate(select::notify* owner) {
-    request.owner = owner;
-    op = ch->select().recv(request);
-    iface = dynamic_cast<hce::awt<bool>::interface*>(op.get());
-    return ch->select().activate(iface);
-}
     
 bool recv::is_send() const { return false; }
 

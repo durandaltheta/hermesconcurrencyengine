@@ -6,6 +6,7 @@
 #include <type_traits>
 
 #include "hce/channel/base.hpp"
+#include "hce/atomic.hpp"
 #include "hce/chrono.hpp"
 
 namespace hce {
@@ -82,6 +83,21 @@ struct select {
         int index=-1;
     };
 
+    template <typename LOCK=hce::spinlock>
+    struct hint { 
+        using value_type = LOCK;
+    };
+    
+    select();
+
+    /**
+     @brief construct a select with a specific lock type
+     */
+    template <typename LOCK>
+    select(hint<LOCK>) :
+        group(new channel::detail::select::group::impl<LOCK>)
+    { }
+
     /// return the current count of clauses
     int size();
 
@@ -105,7 +121,7 @@ struct select {
         }
 
         int idx = static_cast<int>(clauses.size());
-        channel::request r{ op, &src, &group, idx };
+        channel::request r{ op, &src, group.get(), idx };
 
         return clause({ make_send(ch, r) });
     }
@@ -126,7 +142,7 @@ struct select {
         channel::request r{ 
             channel::request::op_e::recv, 
             &dest, 
-            &group, 
+            group.get(), 
             idx 
         };
 
@@ -164,8 +180,8 @@ private:
     std::unique_ptr<channel::select::clause::base> make_recv(
             channel::base& ch, const channel::request& r);
 
+    std::unique_ptr<channel::select::group::interface> group;
     std::size_t activate_index = 0;
-    channel::select::group group;
     std::vector<std::unique_ptr<clause::base>> clauses;
 };
 

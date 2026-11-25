@@ -10,9 +10,9 @@ namespace hce {
 namespace detail {
 namespace select {
 
-struct awt : hce::awaitable::lockable<hce::spinlock, detail::select::notify> {
+struct awt : hce::awaitable::lockable<hce::spinlock, select::notify::interface> {
     explicit awt(select& p, std::unique_ptr<state> s, hce::chrono::duration t):
-        hce::awaitable::lockable<hce::spinlock, detail::select::notify>(
+        hce::awaitable::lockable<hce::spinlock, select::notify::interface>(
             s->lk,
             hce::awaitable::await::policy::defer,
             hce::awaitable::resume::policy::no_lock),
@@ -101,6 +101,9 @@ struct awt : hce::awaitable::lockable<hce::spinlock, detail::select::notify> {
 } // select 
 } // detail
 
+select::select() : 
+    group(new channel::detail::select::group::impl<hce::spinlock>)
+{ }
 
 bool select::result::operator bool() { return index >= 0; }
 
@@ -156,9 +159,8 @@ hce::awt<hce::select::result> select::wait(hce::chrono::duration timeout) {
 
             // cleanup all our memory
             for(auto& c : sawt->parent.clauses) {
-                auto partial = (channel::detail::select::clause::partial*)(c.get());
                 // properly deallocate internal awaitable
-                co_await partial->complete();
+                co_await std::move(c->awt);
             }
    
             parent.clauses.clear();
