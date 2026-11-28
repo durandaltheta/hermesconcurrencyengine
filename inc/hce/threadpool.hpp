@@ -7,6 +7,7 @@
 #include <memory>
 
 // local
+#include "hcec/hcec_scheduler.h"
 #include "hce/base.hpp"
 #include "hce/owner.hpp"
 #include "hce/service.hpp"
@@ -75,7 +76,7 @@ struct threadpool : public hce::service<threadpool>, public hce::printable {
 
      @return a `scheduler`
      */
-    static hce::scheduler& lightest(); 
+    static hce_scheduler_t* lightest(); 
 
     /**
      @brief call schedule() on a threadpool scheduler
@@ -84,7 +85,8 @@ struct threadpool : public hce::service<threadpool>, public hce::printable {
      */
     template <typename... As>
     static inline auto schedule(As&&... as) {
-        return hce::service<threadpool>::get().algorithm().schedule(std::forward<As>(as)...);
+        return hce::service<threadpool>::get().algorithm().schedule(
+                std::forward<As>(as)...);
     }
 
 private:

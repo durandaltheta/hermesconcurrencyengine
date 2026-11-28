@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 
+#include "hcec/hcec.h"
 #include "hce/printable.hpp"
 #include "hce/scheduler/config.hpp"
 #include "hce/threadpool/config.hpp"
@@ -18,7 +19,7 @@ namespace hce {
  The instance of this object configures the framework and constructs, allocates 
  and maintains all singleton services.
  */
-struct lifecycle : public service<lifecycle>, public hce::printable {
+struct lifecycle : service<lifecycle>, hce::printable, hce_lifecycle_t {
     /**
      @brief configuration for the framework 
 
@@ -28,158 +29,16 @@ struct lifecycle : public service<lifecycle>, public hce::printable {
 
      Default values are determined by compiler defines (see below). 
      */
-    struct config {
-        struct logging {
-            logging();
+    struct config : hce_lifecycle_config_t {
+        config();
 
-            /**
-             @brief runtime default log level
-
-             Defaults set by compiler define(s):
-             HCELOGLEVEL
-             */
-            int loglevel; 
-        };
-
-        struct allocator {
-            allocator();
-
-            /**
-             @brief pool_allocator's default block limit 
-
-             This value sets the default limit for pool allocator's reusable 
-             cached memory count.
-
-             Defaults set by compiler define(s):
-             HCEPOOLALLOCATORDEFAULTBLOCKLIMIT
-             */
-            size_t pool_allocator_default_block_limit; 
-        };
-
-        struct scheduler {
-            scheduler();
-
-            /**
-             @brief global scheduler config
-
-             This is defaulted to a valid implementation.
-
-             Defaults set by compiler define(s):
-             HCEGLOBALSCHEDULERCOROUTINERESOURCELIMIT
-             */
-            hce::config::scheduler::config global_config; 
-        };
-
-        struct threadpool {
-            threadpool();
-
-            /**
-             @brief count of worker schedulers in the threadpool 
-
-             0: attempt to match scheduler count to the count of runtime detected CPU cores
-             n: launch n-1 additional schedulers (the first index is always the global scheduler)
-
-             The actual count of schedulers in the threadpool is guaranteed to be >=1.
-
-             Defaults set by compiler define(s):
-             HCETHREADPOOLSCHEDULERCOUNT
-             */
-            size_t count; 
-
-            /**
-             @brief threadpool scheduler config
-
-             This is defaulted to a valid implementation.
-
-             Defaults set by compiler define(s):
-             HCETHREADPOOLCOROUTINERESOURCELIMIT
-             */
-            hce::config::scheduler::config worker_config; 
-
-            /**
-             @brief threadpool worker selector algorithm
-
-             This is defaulted to a valid implementation if none is provided.
-             */
-            hce::config::threadpool::algorithm_function_ptr algorithm; 
-        };
-
-        struct blocking {
-            blocking();
-
-            /**
-             @brief reusable block workers count shared by the process
-
-             Defaults set by compiler define(s):
-             HCEPROCESSREUSABLEBLOCKWORKERPROCESSLIMIT
-             */
-            size_t reusable_block_worker_cache_size;
-        };
-
-        struct timer {
-            timer();
-
-            int priority;
-
-            /**
-             @brief threshold used by default timeout algorithm for when to busy-wait 
-
-             This value is in microseconds.
-
-             If the difference between the current time and the nearest timer 
-             timeout is under this threshold, the timer thread will busy-wait 
-             until timeout for increased precision.
-
-             Defaults set by compiler define(s):
-             HCETIMERBUSYWAITMICROSECONDTHRESHOLD
-             */
-            size_t busy_wait_threshold;
-
-            /**
-             @brief threshold used by default timeout algorithm for the early-wakeup duration
-
-             This value is in microseconds.
-
-             How this value is used is determined by the timeout algorithm.
-
-             Defaults set by compiler define(s):
-             HCETIMEREARLYWAKEUPMICROSECONDTHRESHOLD
-             */
-            size_t early_wakeup_threshold;
-
-            /**
-             @brief threshold used by default timeout algorithm for when to begin early-wakeups for long running timers
-
-             This value is in microseconds.
-
-             How this value is used is determined by the timeout algorithm.
-
-             Defaults set by compiler define(s):
-             HCETIMEREARLYWAKEUPMICROSECONDLONGTHRESHOLD
-             */
-            size_t early_wakeup_long_threshold;
-        };
-
-        struct network {
-            network();
-
-            /**
-             @brief count of worker threads 
-
-             If 0, count is set to hardware concurrency
-             */
-            size_t thread_count;
-        };
-
-        config(){}
-
-        logging log;
-        allocator alloc;
-        scheduler sch;
-        threadpool tp;
-        blocking blk;
-        timer tmr;
-        network net;
+        using logging = hce_lifecycle_config_logging_t;
+        using allocator = hce_lifecycle_allocator_config_t;
+        using scheduler = hce_lifecycle_scheduler_config_t;
+        using threadpool = hce_threadpool_config_t;
+        using blocking = hce_lifecycle_blocking_config_t;
+        using timer = hce_lifecycle_timer_config_t;
+        using network = hce_lifecycle_network_config_t;
     };
 
     // don't expose all the includes to the users of this core header

@@ -15,6 +15,7 @@
 #include <thread>
 
 // local 
+#include "hcec/hcec_scheduler.h"
 #include "hce/base.hpp"
 #include "hce/owner.hpp"
 #include "hce/printable.hpp"
@@ -210,7 +211,7 @@ private:
  schedulers properly halted when the process exits, taking into account 
  non-deterministic runtime behavior of scheduled coroutines.
 */
-struct scheduler : public printable {
+struct scheduler : printable, hce_scheduler_t {
     /// an enumeration which represents the scheduler's current state
     enum state {
         executing, /// scheduler is executing coroutines
@@ -312,11 +313,11 @@ struct scheduler : public printable {
     /**
      @brief object controlling the lifecycle of a scheduler
      */
-    struct lifecycle : public printable {
+    struct lifecycle : printable, hce_scheduler_lifecycle_t {
         /**
          @brief process-wide object responsible for managing scheduler lifecycles
          */
-        struct manager : public hce::service<manager>, public hce::printable {
+        struct manager : hce::service<manager>, hce::printable {
             manager();
             virtual ~manager();
             static std::string info_name();

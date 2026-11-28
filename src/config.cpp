@@ -17,6 +17,7 @@
 #include <vector>
 #include <stdexcept>
 
+#include "hcec/hcec.h"
 #include "hce/utility.hpp"
 #include "hce/chrono.hpp"
 #include "hce/thread.hpp"
@@ -29,6 +30,14 @@
 #include "hce/network/config.hpp"
 #include "hce/thread_key_map.hpp"
 #include "hce/lifecycle.hpp"
+
+int hce::config::logging::default_log_level() { 
+    return hce_default_log_level(); 
+}
+
+hce::config::scheduler::config::config() {
+    hce_scheduler_config_initialize(this);
+}
 
 size_t hce::config::pool_allocator::default_block_limit() {
     return hce::service<hce::lifecycle>::get().get_config().alloc.pool_allocator_default_block_limit;

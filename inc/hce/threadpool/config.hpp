@@ -36,7 +36,7 @@ size_t count();
 hce::config::scheduler::config config();
 
 // Define a function pointer type that matches your function pointer
-using algorithm_function_ptr = hce::scheduler& (*)();
+using algorithm_function_ptr = hce_threadpool_algorithm_function_ptr_t;
 
 /**
  @return an algorithm to be called by `hce::threadpool::algorithm()`
