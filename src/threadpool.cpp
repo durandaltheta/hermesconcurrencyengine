@@ -32,9 +32,11 @@ const std::vector<std::shared_ptr<hce::scheduler>>& hce::threadpool::schedulers(
     return schedulers_;
 }
 
-hce::scheduler& hce::threadpool::algorithm() const { return *algorithm_(); }
+hce::scheduler& hce::threadpool::algorithm() const { 
+    return *((hce::scheduler*)algorithm_()); 
+}
     
-hce::scheduler* hce::threadpool::lightest() {
+hce_scheduler_t* hce::threadpool::lightest() {
     /*
      A thread_local index is used to determine which scheduler to check first 
      during scheduler() selection. This value rotates through available indexes 

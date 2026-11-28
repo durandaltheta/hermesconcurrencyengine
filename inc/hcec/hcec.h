@@ -10,31 +10,13 @@
  */
 
 #include <stddef.h>
+#include "hcec/hcec_scheduler.h"
 
-struct hce_scheduler_config_t {
-    /**
-     Set the log level of the thread the scheduler is installed on.
+/// used to tag hce::lifecycle instances
+struct hce_lifecycle_t { };
 
-     Maximum value: 9
-     Minimum value: -9
-     */
-    int loglevel;
-
-    /**
-     The count of coroutine handles the scheduler can pool for reuse 
-     without deallocating. A sane value (roughly equal or above the median count 
-     of executing coroutines during busy periods) allows avoiding unnecessary 
-     re-allocation of handles during normal operation. 
-
-     This only potentially affects the scheduler's throughput processing 
-     efficiency, it has no effect on the underlying coroutine execution.
-
-     Handles are very small allocations (pointer sized).
-     */
-    size_t reusable_coroutine_handle_limit;
-};
-
-typedef hce_scheduler_config_t* (*hce_threadpool_algorithm_function_ptr_t)();
+/// used for threadpool algorithm abstraction
+typedef hce_scheduler_t* (*hce_threadpool_algorithm_function_ptr_t)();
 
 struct hce_lifecycle_config_logging_t {
     /**
@@ -187,24 +169,49 @@ void hce_lifecycle_config_initialize(hce_lifecycle_config_t*);
  @param cfg the configuration to initialize with
  @return a pointer to the initialized lifecycle
  */
-void hce_lifecycle_initialize(hce_lifecycle_config_t* cfg);
+hce_lifecycle_t* hce_lifecycle_initialize(hce_lifecycle_config_t* cfg);
 
 /**
  @brief shutdown and destroy the framework lifecycle 
  @param lifecycle the lifecycle pointer returned form hce_lifecycle_initialize()
  */
-void hce_lifecycle_destroy(void* lifecycle);
+void hce_lifecycle_destroy(hce_lifecycle_t* lifecycle);
+
+/// return the default global scheduler
+hce_scheduler_t* hce_global_scheduler();
+
+/// return the count of threadpool schedulers
+size_t hce_threadpool_scheduler_count();
+
+/**
+ @param the index of the scheduler 
+ @return the scheduler pointer
+ */
+hce_scheduler_t* hce_threadpool_scheduler(size_t idx);
 
 /**
  @brief import and start an HCE module .so library  
  @param context the pointer to some implementation defined context 
- @param the threadpool scheduler index to schedule on, 0 is the default scheduler
+ @param sch scheduler to schedule on
  @return the awaitable context to pass to hce_module_join, nullptr on error
  */
-void* hce_module_import(const char* filepath, void* context, size_t index);
+void* hce_module_import(const char* filepath, void* context, hce_scheduler_t* sch);
+
+/**
+ @brief import and start an HCE module .so library  
+
+ This variant automatically selects the hce_global_scheduler().
+
+ @param context the pointer to some implementation defined context 
+ @return the awaitable context to pass to hce_module_join, nullptr on error
+ */
+void* hce_module_import(const char* filepath, void* context);
 
 /**
  @brief join with and destroy an imported module
+
+ This is a blocking operation.
+
  @param await the value returned from hce_module_import 
  @return the return code of the module
  */

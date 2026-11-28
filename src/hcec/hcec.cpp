@@ -13,6 +13,24 @@
 #include "hce/network.hpp"
 #include "hce/module.h"
 
+#ifndef HCELOGLEVEL
+/*
+ Library compile time macro determining default printing log level. Default to 
+ loguru::Verbosity_WARNING.
+ */
+#define HCELOGLEVEL -1
+#endif 
+
+// force a loglevel of loguru::Verbosity_OFF or higher
+#if HCELOGLEVEL < -10 
+#define HCELOGLEVEL loguru::Verbosity_OFF
+#endif 
+
+// force a loglevel of 9 or lower
+#if HCELOGLEVEL > 9
+#define HCELOGLEVEL 9
+#endif 
+
 // the default block limit in a pool_allocator
 #ifndef HCEPOOLALLOCATORDEFAULTBLOCKLIMIT
 #define HCEPOOLALLOCATORDEFAULTBLOCKLIMIT 64
@@ -70,19 +88,27 @@
 #define HCETIMEREARLYWAKEUPMICROSECONDLONGTHRESHOLD 250000
 #endif 
 
-void hce_default_log_level() { return HCELOGLEVEL; }
+// called once at process start
+struct hce_log_initializer {
+    hce_log_initializer() {
+        int loglevel = HCELOGLEVEL;
+        std::stringstream ss;
+        ss << "-v" << loglevel;
+        std::string process("hce");
+        std::string verbosity = ss.str();
 
-void hce_scheduler_config_initialize(hce_scheduler_config_t* cfg) {
-    if(!cfg) { return; }
-    auto& c = *cfg;
+        // Create raw char pointers for argc/argv
+        const char* argv[] = {process.c_str(), verbosity.c_str(), nullptr};
+        int argc = 2; // Number of actual arguments (excluding the nullptr)
 
-    // scheduler
-    {
-        c.sch.loglevel = hce_default_log_level();
-        c.sch.reusable_coroutine_handle_limit = 
-            HCEREUSABLECOROUTINEHANDLEDEFAULTSCHEDULERLIMIT;
+        loguru::Options opt;
+        opt.main_thread_name = nullptr;
+        opt.signal_options = loguru::SignalOptions::none();
+        loguru::init(argc, const_cast<char**>(argv), opt);
     }
-}
+} g_hce_log_initializer; 
+
+void hce_default_log_level() { return HCELOGLEVEL; }
 
 void hce_lifecycle_config_initialize(hce_lifecycle_config_t* cfg) {
     if(!cfg) { return; }
@@ -148,26 +174,47 @@ void hce_lifecycle_config_initialize(hce_lifecycle_config_t* cfg) {
         c.tmr.early_wakeup_long_threshold = 
                 HCETIMEREARLYWAKEUPMICROSECONDLONGTHRESHOLD;
     }
+
+    // network
+    {
+        c.tmr.thread_count = 1;
+    }
 }
 
-void* hce_lifecycle_initialize(hce_lifecycle_config_t* cfg) {
+hce_lifecycle_t* hce_lifecycle_initialize(hce_lifecycle_config_t* cfg) {
     return cfg 
         ? hce::lifecycle::initialize(*cfg).release()
         : hce::lifecycle::initialize().release();
 }
 
-void hce_lifecycle_destroy(void* lifecycle) { 
+void hce_lifecycle_destroy(hce_lifecycle_t* lifecycle) { 
     std::unique_ptr<hce::lifecycle> lf((hce::lifecycle*)v);
-    lf.reset();
 }
 
-void* hce_module_import(const char* filepath, void* context, size_t index) {
+hce_scheduler_t* hce_global_scheduler() {
+    return (hce_scheduler_t*)
+        &(hce::service<hce::scheduler::global>::get().get_scheduler());
+}
+
+size_t hce_threadpool_scheduler_count() {
+    return hce::service<hce::threadpool>::get().schedulers()size();
+}
+
+hce_scheduler_t* hce_threadpool_scheduler(size_t idx) {
+    return (hce_scheduler_t*)
+        hce::service<hce::threadpool>::get().schedulers()[idx].get();
+}
+
+void* hce_module_import(const char* filepath, void* context, hce_scheduler_t* sch) {
     return (void*)
         (hce::module::import(
             filepath, 
             context, 
-            *(hce::service<hce::threadpool>::get().schedulers()[index])
-        ).release());
+            *((hce::scheduler*)sch)).release();
+}
+
+void* hce_module_import(const char* filepath, void* context) {
+    return hce_module_import(filepath, context, hce_global_scheduler());
 }
 
 int hce_module_join(void* await) {

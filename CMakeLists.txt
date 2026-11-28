@@ -32,6 +32,8 @@ endfunction()
 
 set(HCE_HEADER_FILES 
     ${LOGURU_DIR}/loguru.hpp
+    ${HCE_INCLUDE_DIR}/hcec/hcec_scheduler.h
+    ${HCE_INCLUDE_DIR}/hcec/hcec.h
     ${HCE_INCLUDE_DIR}/hce/base.hpp
     ${HCE_INCLUDE_DIR}/hce/utility.hpp
     ${HCE_INCLUDE_DIR}/hce/expected.hpp
@@ -74,7 +76,6 @@ set(HCE_HEADER_FILES
 )
 
 set(HCE_SOURCE_FILES
-    ${HCE_HEADER_FILES}/hcec/hcec.h
     ${LOGURU_DIR}/loguru.cpp
     ${HCE_SOURCE_DIR}/logging.cpp
     ${HCE_SOURCE_DIR}/cleanup.cpp
@@ -237,8 +238,13 @@ foreach(item IN LISTS PRETTY_HCE_COMPILE_DEFINES)
 endforeach()
 
 # add c frontend library
-add_library(hcec STATIC ${HCE_SOURCE_DIR}/hcec/hcec.cpp)
-target_include_directories(${HCE_HEADER_FILES}/hcec/hcec.h)
+add_library(hcec 
+    STATIC 
+    ${HCE_HEADER_FILES}/hcec/hcec.h
+    ${HCE_HEADER_FILES}/hcec/hcec_scheduler.h
+    ${HCE_SOURCE_DIR}/hcec/hcec_scheduler.cpp 
+    ${HCE_SOURCE_DIR}/hcec/hcec.cpp 
+)
 target_link_libraries(hcec PUBLIC hce)
 
 add_subdirectory(tst EXCLUDE_FROM_ALL)

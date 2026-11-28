@@ -19,7 +19,7 @@ namespace hce {
  The instance of this object configures the framework and constructs, allocates 
  and maintains all singleton services.
  */
-struct lifecycle : public service<lifecycle>, public hce::printable {
+struct lifecycle : service<lifecycle>, hce::printable, hce_lifecycle_t {
     /**
      @brief configuration for the framework 
 

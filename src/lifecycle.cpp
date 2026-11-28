@@ -4,51 +4,9 @@
 #include "hce/logging.hpp"
 #include "hce/lifecycle.hpp"
 
-#ifndef HCELOGLEVEL
-/*
- Library compile time macro determining default printing log level. Default to 
- loguru::Verbosity_WARNING.
- */
-#define HCELOGLEVEL -1
-#endif 
-
-// force a loglevel of loguru::Verbosity_OFF or higher
-#if HCELOGLEVEL < -10 
-#define HCELOGLEVEL loguru::Verbosity_OFF
-#endif 
-
-// force a loglevel of 9 or lower
-#if HCELOGLEVEL > 9
-#define HCELOGLEVEL 9
-#endif 
-
-// called once at process start
-struct hce_log_initializer {
-    hce_log_initializer() {
-        int loglevel = HCELOGLEVEL;
-        std::stringstream ss;
-        ss << "-v" << loglevel;
-        std::string process("hce");
-        std::string verbosity = ss.str();
-
-        // Create raw char pointers for argc/argv
-        const char* argv[] = {process.c_str(), verbosity.c_str(), nullptr};
-        int argc = 2; // Number of actual arguments (excluding the nullptr)
-
-        loguru::Options opt;
-        opt.main_thread_name = nullptr;
-        opt.signal_options = loguru::SignalOptions::none();
-        loguru::init(argc, const_cast<char**>(argv), opt);
-    }
-} g_hce_log_initializer; 
-
-
-hce::lifecycle::config::timer::timer() :
-{ }
-
-hce::lifecycle::config::network::network() :
-    thread_count(1)
-{ }
+hce::lifecycle::config::config() {
+    hce_lifecycle_config_initialize(this);
+}
 
 struct erased_impl : hce::lifecycle::erased {
     erased_impl(std::unique_ptr<hce::thread::local>&& l) : local_(std::move(l)) { 
