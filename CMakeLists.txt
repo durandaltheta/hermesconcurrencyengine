@@ -74,6 +74,7 @@ set(HCE_HEADER_FILES
 )
 
 set(HCE_SOURCE_FILES
+    ${HCE_HEADER_FILES}/hcec/hcec.h
     ${LOGURU_DIR}/loguru.cpp
     ${HCE_SOURCE_DIR}/logging.cpp
     ${HCE_SOURCE_DIR}/cleanup.cpp
@@ -234,6 +235,11 @@ message("-- HCE LIBRARY COMPILE DEFINES -- ")
 foreach(item IN LISTS PRETTY_HCE_COMPILE_DEFINES)
     message("${item}")
 endforeach()
+
+# add c frontend library
+add_library(hcec STATIC ${HCE_SOURCE_DIR}/hcec/hcec.cpp)
+target_include_directories(${HCE_HEADER_FILES}/hcec/hcec.h)
+target_link_libraries(hcec PUBLIC hce)
 
 add_subdirectory(tst EXCLUDE_FROM_ALL)
 add_subdirectory(ex EXCLUDE_FROM_ALL) 

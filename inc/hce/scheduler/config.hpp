@@ -2,7 +2,7 @@
 //SPDX-License-Identifier: MIT
 //Author: Blayne Dennis 
 
-#include <cstddef>
+#include "hcec/hcec.h"
 
 namespace hce {
 namespace config {
@@ -22,29 +22,8 @@ namespace scheduler {
  overridden if `cmake` is configured with the `HCECUSTOMCONFIG` definition, 
  requiring the user to link their own implementation.
  */
-struct config {
+struct config : hce_scheduler_config_t {
     config();
-
-    /**
-     Set the log level of the thread the scheduler is installed on.
-
-     Maximum value: 9
-     Minimum value: -9
-     */
-    int loglevel;
-
-    /**
-     The count of coroutine handles the scheduler can pool for reuse 
-     without deallocating. A sane value (roughly equal or above the median count 
-     of executing coroutines during busy periods) allows avoiding unnecessary 
-     re-allocation of handles during normal operation. 
-
-     This only potentially affects the scheduler's throughput processing 
-     efficiency, it has no effect on the underlying coroutine execution.
-
-     Handles are very small allocations (pointer sized).
-     */
-    size_t reusable_coroutine_handle_limit;
 };
 
 namespace global {

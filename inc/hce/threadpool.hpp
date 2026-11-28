@@ -75,7 +75,7 @@ struct threadpool : public hce::service<threadpool>, public hce::printable {
 
      @return a `scheduler`
      */
-    static hce::scheduler& lightest(); 
+    static hce::scheduler* lightest(); 
 
     /**
      @brief call schedule() on a threadpool scheduler
